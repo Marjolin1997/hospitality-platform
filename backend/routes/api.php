@@ -29,6 +29,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/cash-registers', [PaymentController::class, 'registers'])->middleware('permission:payments.collect');
             Route::get('/cash-sessions/current', [PaymentController::class, 'currentSession'])->middleware('permission:payments.collect');
             Route::post('/cash-sessions', [PaymentController::class, 'openSession'])->middleware('permission:cash_sessions.open');
+            Route::post('/cash-sessions/{session}/movements', [PaymentController::class, 'movement'])->middleware('permission:payments.collect');
+            Route::post('/cash-sessions/{session}/close', [PaymentController::class, 'closeSession'])->middleware('permission:cash_sessions.close');
             Route::post('/orders/{order}/payments', [PaymentController::class, 'collect'])->middleware('permission:payments.collect');
         });
     });
