@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BusinessController;
 use App\Http\Controllers\Api\V1\CatalogController;
+use App\Http\Controllers\Api\V1\ExchangeRateController;
 use App\Http\Controllers\Api\V1\OrderController;
 use Illuminate\Support\Facades\Route;
 
@@ -20,6 +21,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/orders', [OrderController::class, 'index'])->middleware('permission:orders.view');
             Route::post('/orders', [OrderController::class, 'store'])->middleware('permission:orders.create');
             Route::get('/orders/{order}', [OrderController::class, 'show'])->middleware('permission:orders.view');
+            Route::get('/exchange-rates', [ExchangeRateController::class, 'index'])->middleware('permission:finance.view');
+            Route::post('/exchange-rates/convert', [ExchangeRateController::class, 'convert'])->middleware('permission:finance.view');
         });
     });
 });
