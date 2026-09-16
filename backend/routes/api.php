@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BusinessController;
+use App\Http\Controllers\Api\V1\CatalogController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -14,7 +15,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/businesses', [BusinessController::class, 'index']);
 
         Route::middleware('tenant')->group(function (): void {
-            // Tenant-scoped domain routes are added module by module.
+            Route::get('/catalog', [CatalogController::class, 'index'])->middleware('permission:products.view');
         });
     });
 });
