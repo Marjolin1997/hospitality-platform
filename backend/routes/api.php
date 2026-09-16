@@ -22,16 +22,15 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/orders', [OrderController::class, 'index'])->middleware('permission:orders.view');
             Route::post('/orders', [OrderController::class, 'store'])->middleware('permission:orders.create');
             Route::get('/orders/{order}', [OrderController::class, 'show'])->middleware('permission:orders.view');
-
             Route::get('/exchange-rates', [ExchangeRateController::class, 'index'])->middleware('permission:finance.view');
             Route::post('/exchange-rates/convert', [ExchangeRateController::class, 'convert'])->middleware('permission:finance.view');
-
             Route::get('/cash-registers', [PaymentController::class, 'registers'])->middleware('permission:payments.collect');
             Route::get('/cash-sessions/current', [PaymentController::class, 'currentSession'])->middleware('permission:payments.collect');
             Route::post('/cash-sessions', [PaymentController::class, 'openSession'])->middleware('permission:cash_sessions.open');
             Route::post('/cash-sessions/{session}/movements', [PaymentController::class, 'movement'])->middleware('permission:payments.collect');
             Route::post('/cash-sessions/{session}/close', [PaymentController::class, 'closeSession'])->middleware('permission:cash_sessions.close');
             Route::post('/orders/{order}/payments', [PaymentController::class, 'collect'])->middleware('permission:payments.collect');
+            Route::post('/payments/{payment}/refunds', [PaymentController::class, 'refund'])->middleware('permission:payments.refund');
         });
     });
 });
