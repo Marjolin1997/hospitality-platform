@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { Product } from '../catalog/types';
+import type { CreateOrderItemInput } from '../orders/types';
 
-type CartLine = { product: Product; quantity: number };
+export type CartLine = { product: Product; quantity: number; note: string };
 
 export function useOrderCart() {
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -10,12 +11,16 @@ export function useOrderCart() {
     const existing = current.find((line) => line.product.id === product.id);
     return existing
       ? current.map((line) => line.product.id === product.id ? { ...line, quantity: line.quantity + 1 } : line)
-      : [...current, { product, quantity: 1 }];
+      : [...current, { product, quantity: 1, note: '' }];
   });
 
   const changeQuantity = (productId: string, delta: number) => setLines((current) => current
     .map((line) => line.product.id === productId ? { ...line, quantity: line.quantity + delta } : line)
     .filter((line) => line.quantity > 0));
+
+  const setNote = (productId: string, note: string) => setLines((current) => current.map(
+    (line) => line.product.id === productId ? { ...line, note } : line,
+  ));
 
   const clear = () => setLines([]);
 
@@ -24,5 +29,11 @@ export function useOrderCart() {
     0,
   ), [lines]);
 
-  return { lines, add, changeQuantity, clear, total };
+  const toOrderItems = (): CreateOrderItemInput[] => lines.map((line) => ({
+    product_id: line.product.id,
+    quantity: line.quantity,
+    ...(line.note.trim() ? { note: line.note.trim() } : {}),
+  }));
+
+  return { lines, add, changeQuantity, setNote, clear, total, toOrderItems };
 }
