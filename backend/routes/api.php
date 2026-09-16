@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BusinessController;
 use App\Http\Controllers\Api\V1\CatalogController;
+use App\Http\Controllers\Api\V1\OrderController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -16,6 +17,9 @@ Route::prefix('v1')->group(function (): void {
 
         Route::middleware('tenant')->group(function (): void {
             Route::get('/catalog', [CatalogController::class, 'index'])->middleware('permission:products.view');
+            Route::get('/orders', [OrderController::class, 'index'])->middleware('permission:orders.view');
+            Route::post('/orders', [OrderController::class, 'store'])->middleware('permission:orders.create');
+            Route::get('/orders/{order}', [OrderController::class, 'show'])->middleware('permission:orders.view');
         });
     });
 });
