@@ -1,0 +1,40 @@
+export type CreateOrderItemInput = {
+  product_id: string;
+  quantity: number;
+  note?: string;
+};
+
+export type CreateOrderInput = {
+  location_id: string;
+  venue_table_id?: string | null;
+  type: 'table' | 'takeaway' | 'counter';
+  items: CreateOrderItemInput[];
+};
+
+export type OrderItem = {
+  id: string;
+  product_id: string | null;
+  product_name_snapshot: string;
+  quantity: string;
+  unit_price: string;
+  tax_rate: string;
+  line_total: string;
+  preparation_station: string | null;
+  preparation_status: string;
+  note: string | null;
+};
+
+export type Order = {
+  id: string;
+  number: string;
+  location_id: string;
+  venue_table_id: string | null;
+  type: string;
+  status: string;
+  currency: string;
+  subtotal: string;
+  tax_total: string;
+  grand_total: string;
+  opened_at: string;
+  items: OrderItem[];
+};
