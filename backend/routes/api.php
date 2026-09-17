@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\BarQueueController;
 use App\Http\Controllers\Api\V1\BusinessController;
 use App\Http\Controllers\Api\V1\CatalogController;
 use App\Http\Controllers\Api\V1\ExchangeRateController;
+use App\Http\Controllers\Api\V1\OperationsController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\VenueController;
@@ -13,15 +14,47 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function (): void {
     Route::get('/health', fn () => response()->json(['status' => 'ok', 'service' => 'hospitality-api']));
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
+
     Route::middleware('auth:sanctum')->group(function (): void {
-        Route::get('/auth/me', [AuthController::class, 'me']); Route::post('/auth/logout', [AuthController::class, 'logout']); Route::get('/businesses', [BusinessController::class, 'index']);
+        Route::get('/auth/me', [AuthController::class, 'me']);
+        Route::post('/auth/logout', [AuthController::class, 'logout']);
+        Route::get('/businesses', [BusinessController::class, 'index']);
+
         Route::middleware('tenant')->group(function (): void {
             Route::get('/catalog', [CatalogController::class, 'index'])->middleware('permission:products.view');
             Route::get('/venue', [VenueController::class, 'index'])->middleware('permission:orders.view');
-            Route::get('/orders', [OrderController::class, 'index'])->middleware('permission:orders.view'); Route::post('/orders', [OrderController::class, 'store'])->middleware('permission:orders.create'); Route::get('/orders/{order}', [OrderController::class, 'show'])->middleware('permission:orders.view'); Route::post('/orders/{order}/send', [OrderController::class, 'send'])->middleware('permission:orders.send_to_station');
-            Route::get('/bar-queue', [BarQueueController::class, 'index'])->middleware('permission:orders.view'); Route::patch('/bar-queue/{item}/status', [BarQueueController::class, 'transition'])->middleware('permission:orders.send_to_station');
-            Route::get('/exchange-rates', [ExchangeRateController::class, 'index'])->middleware('permission:finance.view'); Route::post('/exchange-rates/convert', [ExchangeRateController::class, 'convert'])->middleware('permission:finance.view');
-            Route::get('/cash-registers', [PaymentController::class, 'registers'])->middleware('permission:payments.collect'); Route::get('/cash-sessions/current', [PaymentController::class, 'currentSession'])->middleware('permission:payments.collect'); Route::post('/cash-sessions', [PaymentController::class, 'openSession'])->middleware('permission:cash_sessions.open'); Route::post('/cash-sessions/{session}/movements', [PaymentController::class, 'movement'])->middleware('permission:payments.collect'); Route::post('/cash-sessions/{session}/close', [PaymentController::class, 'closeSession'])->middleware('permission:cash_sessions.close'); Route::post('/orders/{order}/payments', [PaymentController::class, 'collect'])->middleware('permission:payments.collect'); Route::post('/payments/{payment}/refunds', [PaymentController::class, 'refund'])->middleware('permission:payments.refund');
+
+            Route::get('/orders', [OrderController::class, 'index'])->middleware('permission:orders.view');
+            Route::post('/orders', [OrderController::class, 'store'])->middleware('permission:orders.create');
+            Route::get('/orders/{order}', [OrderController::class, 'show'])->middleware('permission:orders.view');
+            Route::post('/orders/{order}/send', [OrderController::class, 'send'])->middleware('permission:orders.send_to_station');
+
+            Route::get('/bar-queue', [BarQueueController::class, 'index'])->middleware('permission:orders.view');
+            Route::patch('/bar-queue/{item}/status', [BarQueueController::class, 'transition'])->middleware('permission:orders.send_to_station');
+
+            Route::get('/exchange-rates', [ExchangeRateController::class, 'index'])->middleware('permission:finance.view');
+            Route::post('/exchange-rates/convert', [ExchangeRateController::class, 'convert'])->middleware('permission:finance.view');
+
+            Route::get('/cash-registers', [PaymentController::class, 'registers'])->middleware('permission:payments.collect');
+            Route::get('/cash-sessions/current', [PaymentController::class, 'currentSession'])->middleware('permission:payments.collect');
+            Route::post('/cash-sessions', [PaymentController::class, 'openSession'])->middleware('permission:cash_sessions.open');
+            Route::post('/cash-sessions/{session}/movements', [PaymentController::class, 'movement'])->middleware('permission:cash_movements.create');
+            Route::post('/cash-sessions/{session}/close', [PaymentController::class, 'closeSession'])->middleware('permission:cash_sessions.close');
+            Route::post('/orders/{order}/payments', [PaymentController::class, 'collect'])->middleware('permission:payments.collect');
+            Route::post('/payments/{payment}/refunds', [PaymentController::class, 'refund'])->middleware('permission:payments.refund');
+
+            Route::get('/management/products', [OperationsController::class, 'products'])->middleware('permission:products.view');
+            Route::post('/management/products', [OperationsController::class, 'saveProduct'])->middleware('permission:products.manage');
+            Route::get('/inventory', [OperationsController::class, 'inventory'])->middleware('permission:inventory.view');
+            Route::post('/inventory/adjustments', [OperationsController::class, 'adjustInventory'])->middleware('permission:inventory.adjust');
+            Route::get('/finance/overview', [OperationsController::class, 'finance'])->middleware('permission:finance.view');
+            Route::post('/expenses', [OperationsController::class, 'createExpense'])->middleware('permission:expenses.create');
+            Route::get('/invoices', [OperationsController::class, 'invoices'])->middleware('permission:invoices.view');
+            Route::post('/invoices', [OperationsController::class, 'issueInvoice'])->middleware('permission:invoices.issue');
+            Route::get('/staff', [OperationsController::class, 'staff'])->middleware('permission:users.view');
+            Route::patch('/staff/{user}', [OperationsController::class, 'updateStaff'])->middleware('permission:users.manage');
+            Route::get('/settings', [OperationsController::class, 'settings'])->middleware('permission:business.settings.manage');
+            Route::put('/settings', [OperationsController::class, 'saveSettings'])->middleware('permission:business.settings.manage');
         });
     });
 });
