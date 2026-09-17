@@ -8,6 +8,7 @@ use Brick\Math\RoundingMode;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 final class OperationsService
 {
@@ -53,12 +54,8 @@ final class OperationsService
         abort_unless($query->exists(), 404);
         $query->update(['is_active' => $isActive, 'updated_at' => now()]);
         $product = $query->first();
-
-        // Query builder returns MySQL tinyint booleans as 0/1. Normalize the API
-        // contract so clients always receive a real JSON boolean for status fields.
         $product->is_active = (bool) $product->is_active;
         $product->tracks_stock = (bool) $product->tracks_stock;
-
         return $product;
     }
 
@@ -80,6 +77,12 @@ final class OperationsService
             $delta = BigDecimal::of((string) $data['quantity_delta'])->toScale(self::SCALE, RoundingMode::HALF_UP);
             abort_if($delta->isZero(), 422, 'Quantity adjustment cannot be zero.');
             $next = $current->plus($delta)->toScale(self::SCALE, RoundingMode::HALF_UP);
+
+            if ($next->isNegative()) {
+                throw ValidationException::withMessages([
+                    'quantity_delta' => 'This adjustment would make stock negative. Count the item and enter the verified correction instead.',
+                ]);
+            }
 
             if ($stock) {
                 DB::table('inventory_stocks')->where('id', $stock->id)->update(['quantity_on_hand' => (string) $next, 'updated_at' => now()]);
@@ -127,9 +130,7 @@ final class OperationsService
                 abort_if($order->status === 'cancelled', 422, 'Cancelled orders cannot be invoiced.');
 
                 $existing = DB::table('invoices')->where('business_id', $business->id)->where('order_id', $order->id)->first();
-                if ($existing) {
-                    return $existing;
-                }
+                if ($existing) return $existing;
 
                 $id = (string) Str::ulid();
                 $number = 'INV-'.now($business->timezone)->format('Ymd').'-'.strtoupper(substr($id, -8));
@@ -140,14 +141,11 @@ final class OperationsService
                     'customer_name' => $data['customer_name'] ?? null, 'customer_tax_number' => $data['customer_tax_number'] ?? null,
                     'issued_at' => now(), 'created_at' => now(), 'updated_at' => now(),
                 ]);
-
                 return DB::table('invoices')->where('business_id', $business->id)->where('id', $id)->first();
             });
         } catch (QueryException $exception) {
             $existing = DB::table('invoices')->where('business_id', $business->id)->where('order_id', $data['order_id'])->first();
-            if ($existing) {
-                return $existing;
-            }
+            if ($existing) return $existing;
             throw $exception;
         }
     }
