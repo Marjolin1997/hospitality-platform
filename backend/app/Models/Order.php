@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToBusiness;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Order extends Model
@@ -13,8 +14,9 @@ class Order extends Model
 
     protected $fillable = [
         'business_id', 'location_id', 'venue_table_id', 'opened_by_user_id',
-        'number', 'type', 'status', 'currency', 'subtotal', 'discount_total',
-        'tax_total', 'grand_total', 'opened_at', 'closed_at',
+        'cancelled_by_user_id', 'number', 'type', 'status', 'cancel_reason',
+        'currency', 'subtotal', 'discount_total', 'tax_total', 'grand_total',
+        'opened_at', 'closed_at', 'cancelled_at',
     ];
 
     protected function casts(): array
@@ -26,6 +28,7 @@ class Order extends Model
             'grand_total' => 'decimal:4',
             'opened_at' => 'datetime',
             'closed_at' => 'datetime',
+            'cancelled_at' => 'datetime',
         ];
     }
 
@@ -37,5 +40,10 @@ class Order extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    public function cancelledBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by_user_id');
     }
 }
