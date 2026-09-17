@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\ExchangeRateController;
 use App\Http\Controllers\Api\V1\OperationsController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\OrderLifecycleController;
+use App\Http\Controllers\Api\V1\OrderOperationsController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\VenueController;
 use Illuminate\Support\Facades\Route;
@@ -30,6 +31,12 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/orders/{order}', [OrderController::class, 'show'])->middleware('permission:orders.view');
             Route::post('/orders/{order}/send', [OrderController::class, 'send'])->middleware('permission:orders.send_to_station');
             Route::post('/orders/{order}/cancel', [OrderLifecycleController::class, 'cancelOrder'])->middleware('permission:orders.cancel');
+            Route::post('/orders/{order}/items', [OrderOperationsController::class, 'addItem'])->middleware('permission:orders.update');
+            Route::put('/orders/{order}/discount', [OrderOperationsController::class, 'discount'])->middleware('permission:orders.apply_discount');
+            Route::post('/orders/{order}/move-table', [OrderOperationsController::class, 'moveTable'])->middleware('permission:orders.update');
+            Route::patch('/order-items/{item}', [OrderOperationsController::class, 'updateItem'])->middleware('permission:orders.update');
+            Route::delete('/order-items/{item}', [OrderOperationsController::class, 'removeItem'])->middleware('permission:orders.update');
+            Route::put('/order-items/{item}/price', [OrderOperationsController::class, 'overridePrice'])->middleware('permission:orders.override_price');
             Route::patch('/order-items/{item}/preparation', [OrderLifecycleController::class, 'transition'])->middleware('permission:orders.send_to_station');
             Route::post('/order-items/{item}/cancel', [OrderLifecycleController::class, 'cancelItem'])->middleware('permission:orders.cancel');
 
