@@ -16,12 +16,14 @@ final class ResolveBusinessContext
 
         $business = Business::query()
             ->whereKey($businessId)
-            ->whereHas('users', fn ($query) => $query->whereKey($request->user()->getKey()))
+            ->where('status', 'active')
+            ->whereHas('users', fn ($query) => $query
+                ->whereKey($request->user()->getKey())
+                ->wherePivot('status', 'active'))
             ->firstOrFail();
 
         app()->instance(Business::class, $business);
         $request->attributes->set('business', $business);
-
         return $next($request);
     }
 }
