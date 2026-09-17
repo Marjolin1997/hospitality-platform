@@ -66,6 +66,7 @@ return new class extends Migration {
             $table->timestamp('issued_at')->nullable();
             $table->timestamps();
             $table->unique(['business_id','number']);
+            $table->unique(['business_id','order_id'], 'invoice_business_order_unique');
             $table->index(['business_id','location_id','status','created_at']);
         });
 
