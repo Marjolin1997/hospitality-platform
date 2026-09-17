@@ -8,6 +8,7 @@ use App\Models\CashSession;
 use App\Models\ExchangeRate;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\PaymentRefund;
 use App\Models\User;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
@@ -22,8 +23,14 @@ final class CollectPayment
     {
         return DB::transaction(function () use ($business, $user, $order, $payload): Payment {
             $existing = Payment::query()->forBusiness($business)
-                ->where('idempotency_key', $payload['idempotency_key'])->first();
-            if ($existing) return $existing;
+                ->where('idempotency_key', $payload['idempotency_key'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing) {
+                $this->assertIdempotentReplay($existing, $order, $payload);
+                return $existing;
+            }
 
             $order = Order::query()->forBusiness($business)->whereKey($order->getKey())->lockForUpdate()->firstOrFail();
             if (in_array($order->status, ['cancelled', 'closed'], true)) {
@@ -41,17 +48,16 @@ final class CollectPayment
             }
 
             [$rate, $rateSnapshot] = $this->resolveRate($business, $payload['currency']);
-            $amount = BigDecimal::of((string) $payload['amount']);
+            $amount = BigDecimal::of((string) $payload['amount'])->toScale(self::SCALE, RoundingMode::HALF_UP);
             $amountBase = $amount->multipliedBy($rate)->toScale(self::SCALE, RoundingMode::HALF_UP);
 
-            $paidBase = BigDecimal::of((string) Payment::query()->forBusiness($business)
-                ->where('order_id', $order->getKey())->where('status', 'completed')->sum('amount_base'));
+            $paidBase = $this->netPaidBase($business, $order);
             $remaining = BigDecimal::of((string) $order->grand_total)->minus($paidBase);
             if ($amountBase->isGreaterThan($remaining)) {
                 throw ValidationException::withMessages(['amount' => 'Payment exceeds the remaining order balance.']);
             }
 
-            $tendered = isset($payload['tendered_amount']) ? BigDecimal::of((string) $payload['tendered_amount']) : null;
+            $tendered = isset($payload['tendered_amount']) ? BigDecimal::of((string) $payload['tendered_amount'])->toScale(self::SCALE, RoundingMode::HALF_UP) : null;
             $change = null;
             if ($payload['method'] === 'cash' && $tendered) {
                 if ($tendered->isLessThan($amount)) {
@@ -85,10 +91,41 @@ final class CollectPayment
             $newPaid = $paidBase->plus($amountBase);
             if ($newPaid->isGreaterThanOrEqualTo(BigDecimal::of((string) $order->grand_total))) {
                 $order->forceFill(['status' => 'paid'])->save();
+            } elseif ($newPaid->isPositive()) {
+                $order->forceFill(['status' => 'payment_due'])->save();
             }
 
             return $payment;
         }, attempts: 3);
+    }
+
+    private function assertIdempotentReplay(Payment $existing, Order $order, array $payload): void
+    {
+        $same = (string) $existing->order_id === (string) $order->getKey()
+            && $existing->method === $payload['method']
+            && $existing->currency === $payload['currency']
+            && BigDecimal::of((string) $existing->amount)->compareTo(BigDecimal::of((string) $payload['amount'])) === 0
+            && (string) ($existing->cash_session_id ?? '') === (string) ($payload['cash_session_id'] ?? '')
+            && (string) ($existing->external_reference ?? '') === (string) ($payload['external_reference'] ?? '');
+
+        if (! $same) {
+            throw ValidationException::withMessages([
+                'idempotency_key' => 'This idempotency key was already used for a different payment request.',
+            ]);
+        }
+    }
+
+    private function netPaidBase(Business $business, Order $order): BigDecimal
+    {
+        $paid = BigDecimal::of((string) Payment::query()->forBusiness($business)
+            ->where('order_id', $order->getKey())->where('status', 'completed')->sum('amount_base'));
+
+        $refunded = BigDecimal::of((string) PaymentRefund::query()->forBusiness($business)
+            ->where('status', 'completed')
+            ->whereHas('payment', fn ($query) => $query->where('order_id', $order->getKey()))
+            ->sum('amount_base'));
+
+        return $paid->minus($refunded);
     }
 
     private function resolveRate(Business $business, string $currency): array
