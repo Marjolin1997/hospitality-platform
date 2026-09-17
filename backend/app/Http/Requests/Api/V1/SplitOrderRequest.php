@@ -10,6 +10,7 @@ class SplitOrderRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'idempotency_key' => ['required', 'string', 'min:8', 'max:100'],
             'item_ids' => ['required', 'array', 'min:1', 'max:100'],
             'item_ids.*' => ['required', 'string', 'distinct'],
             'venue_table_id' => ['nullable', 'string'],
