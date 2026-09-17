@@ -6,7 +6,6 @@ use App\Models\Business;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use Illuminate\Database\QueryException;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -17,14 +16,14 @@ final class OperationsService
     public function saveProduct(Business $business, array $data): object
     {
         if (! empty($data['category_id'])) {
-            abort_unless(DB::table('product_categories')->where('business_id', $business->id)->where('id', $data['category_id'])->exists(), 422, 'Invalid category.');
+            abort_unless(DB::table('product_categories')->where('business_id', $business->id)->where('id', $data['category_id'])->where('is_active', true)->exists(), 422, 'Invalid category.');
         }
 
         $payload = [
             'business_id' => $business->id,
             'product_category_id' => $data['category_id'] ?? null,
-            'name' => $data['name'],
-            'sku' => $data['sku'] ?? null,
+            'name' => trim($data['name']),
+            'sku' => isset($data['sku']) && trim((string)$data['sku']) !== '' ? trim((string)$data['sku']) : null,
             'sale_price' => $this->decimal($data['sale_price']),
             'tax_rate' => $this->decimal($data['tax_rate']),
             'preparation_station' => $data['preparation_station'] ?? null,
@@ -46,6 +45,14 @@ final class OperationsService
         }
 
         return DB::table('products')->where('business_id', $business->id)->where('id', $id)->first();
+    }
+
+    public function setProductStatus(Business $business, string $productId, bool $isActive): object
+    {
+        $query = DB::table('products')->where('business_id', $business->id)->where('id', $productId);
+        abort_unless($query->exists(), 404);
+        $query->update(['is_active' => $isActive, 'updated_at' => now()]);
+        return $query->first();
     }
 
     public function adjustInventory(Business $business, string $locationId, array $data, int $userId): void
@@ -155,7 +162,7 @@ final class OperationsService
         });
     }
 
-    private function decimal(string|int|float|BigDecimal $value): string
+    private function decimal(string|int|BigDecimal $value): string
     {
         return (string) BigDecimal::of((string) $value)->toScale(self::SCALE, RoundingMode::HALF_UP);
     }
