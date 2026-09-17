@@ -1,0 +1,120 @@
+<?php
+
+use App\Models\Business;
+use App\Models\Location;
+use App\Models\Permission;
+use App\Models\Role;
+use App\Models\User;
+use Database\Seeders\PermissionSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
+
+uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    $this->seed(PermissionSeeder::class);
+});
+
+function omtBusiness(string $name): Business
+{
+    return Business::query()->create(['name'=>$name,'currency'=>'EUR','timezone'=>'Europe/Berlin','status'=>'active']);
+}
+
+function omtLocation(Business $business, string $code): Location
+{
+    return Location::query()->create(['business_id'=>$business->id,'name'=>$code,'code'=>$code,'type'=>'bar','is_active'=>true]);
+}
+
+function omtUser(Business $business): User
+{
+    $user=User::query()->create(['name'=>'Operations Owner','email'=>Str::lower(Str::random(10)).'@example.test','password'=>bcrypt('password')]);
+    $role=Role::query()->create(['business_id'=>$business->id,'name'=>'Owner','slug'=>'owner-'.Str::lower(Str::random(6)),'is_system'=>false]);
+    $role->permissions()->sync(Permission::query()->pluck('id'));
+    $user->businesses()->attach($business->id,['role_id'=>$role->id,'status'=>'active']);
+    return $user;
+}
+
+function omtHeaders(User $user, Business $business): array
+{
+    Sanctum::actingAs($user);
+    return ['X-Business-Id'=>$business->id];
+}
+
+function omtProduct(Business $business, bool $tracksStock=true): string
+{
+    $id=(string)Str::ulid();
+    DB::table('products')->insert(['id'=>$id,'business_id'=>$business->id,'name'=>'Product '.Str::random(5),'sale_price'=>'5.0000','tax_rate'=>'0.0000','is_active'=>true,'tracks_stock'=>$tracksStock,'created_at'=>now(),'updated_at'=>now()]);
+    return $id;
+}
+
+function omtOrder(Business $business, Location $location, User $user, string $status='paid'): string
+{
+    $id=(string)Str::ulid();
+    DB::table('orders')->insert(['id'=>$id,'business_id'=>$business->id,'location_id'=>$location->id,'opened_by_user_id'=>$user->id,'number'=>'ORD-'.Str::random(8),'type'=>'takeaway','status'=>$status,'currency'=>'EUR','subtotal'=>'10.0000','discount_total'=>'0.0000','tax_total'=>'2.0000','grand_total'=>'12.0000','opened_at'=>now(),'created_at'=>now(),'updated_at'=>now()]);
+    return $id;
+}
+
+test('inventory adjustment is tenant and stock tracking safe', function (): void {
+    $a=omtBusiness('A'); $b=omtBusiness('B'); $la=omtLocation($a,'A1'); $lb=omtLocation($b,'B1'); $user=omtUser($a); $headers=omtHeaders($user,$a);
+    $productA=omtProduct($a,true); $productB=omtProduct($b,true); $nonStock=omtProduct($a,false);
+
+    $this->postJson('/api/v1/inventory/adjustments',['location_id'=>$la->id,'product_id'=>$productA,'quantity_delta'=>'2.1250','note'=>'Opening stock'],$headers)->assertOk();
+    expect((string)DB::table('inventory_stocks')->where('business_id',$a->id)->where('product_id',$productA)->value('quantity_on_hand'))->toBe('2.1250');
+    expect(DB::table('inventory_movements')->where('business_id',$a->id)->where('product_id',$productA)->count())->toBe(1);
+
+    $this->postJson('/api/v1/inventory/adjustments',['location_id'=>$lb->id,'product_id'=>$productA,'quantity_delta'=>1],$headers)->assertStatus(422);
+    $this->postJson('/api/v1/inventory/adjustments',['location_id'=>$la->id,'product_id'=>$productB,'quantity_delta'=>1],$headers)->assertStatus(422);
+    $this->postJson('/api/v1/inventory/adjustments',['location_id'=>$la->id,'product_id'=>$nonStock,'quantity_delta'=>1],$headers)->assertStatus(422);
+});
+
+test('product management cannot attach a category from another business', function (): void {
+    $a=omtBusiness('A'); $b=omtBusiness('B'); $user=omtUser($a); $headers=omtHeaders($user,$a);
+    $category=(string)Str::ulid();
+    DB::table('product_categories')->insert(['id'=>$category,'business_id'=>$b->id,'name'=>'Foreign','sort_order'=>0,'is_active'=>true,'created_at'=>now(),'updated_at'=>now()]);
+
+    $this->postJson('/api/v1/management/products',['name'=>'Coffee','category_id'=>$category,'sale_price'=>'3.50','tax_rate'=>'20','tracks_stock'=>false,'is_active'=>true],$headers)->assertStatus(422);
+    expect(DB::table('products')->where('business_id',$a->id)->where('name','Coffee')->exists())->toBeFalse();
+});
+
+test('finance overview subtracts completed refunds and posted expenses', function (): void {
+    $business=omtBusiness('Finance'); $location=omtLocation($business,'F1'); $user=omtUser($business); $headers=omtHeaders($user,$business); $order=omtOrder($business,$location,$user);
+    $payment=(string)Str::ulid();
+    DB::table('payments')->insert(['id'=>$payment,'business_id'=>$business->id,'order_id'=>$order,'location_id'=>$location->id,'method'=>'card','status'=>'completed','currency'=>'EUR','amount'=>'100.0000','exchange_rate'=>'1.00000000','amount_base'=>'100.0000','idempotency_key'=>'p-'.Str::uuid(),'paid_at'=>now(),'created_at'=>now(),'updated_at'=>now()]);
+    DB::table('payment_refunds')->insert(['id'=>(string)Str::ulid(),'business_id'=>$business->id,'payment_id'=>$payment,'status'=>'completed','currency'=>'EUR','amount'=>'15.0000','exchange_rate'=>'1.00000000','amount_base'=>'15.0000','idempotency_key'=>'r-'.Str::uuid(),'refunded_at'=>now(),'created_at'=>now(),'updated_at'=>now()]);
+    DB::table('expenses')->insert(['id'=>(string)Str::ulid(),'business_id'=>$business->id,'created_by_user_id'=>$user->id,'category'=>'supplies','description'=>'Coffee beans','amount'=>'20.0000','currency'=>'EUR','expense_date'=>now()->toDateString(),'status'=>'posted','created_at'=>now(),'updated_at'=>now()]);
+
+    $this->getJson('/api/v1/finance/overview',$headers)->assertOk()->assertJsonPath('data.gross_sales','100.0000')->assertJsonPath('data.refunds','15.0000')->assertJsonPath('data.sales','85.0000')->assertJsonPath('data.expenses','20.0000')->assertJsonPath('data.net','65.0000');
+});
+
+test('invoice issuance is idempotent per order and uses order totals', function (): void {
+    $business=omtBusiness('Invoices'); $location=omtLocation($business,'I1'); $user=omtUser($business); $headers=omtHeaders($user,$business); $order=omtOrder($business,$location,$user);
+
+    $first=$this->postJson('/api/v1/invoices',['order_id'=>$order,'customer_name'=>'Customer'],$headers)->assertOk();
+    $second=$this->postJson('/api/v1/invoices',['order_id'=>$order,'customer_name'=>'Changed'],$headers)->assertOk();
+    expect($second->json('data.id'))->toBe($first->json('data.id'));
+    expect(DB::table('invoices')->where('business_id',$business->id)->where('order_id',$order)->count())->toBe(1);
+    $first->assertJsonPath('data.grand_total','12.0000')->assertJsonPath('data.currency','EUR')->assertJsonPath('data.status','issued');
+});
+
+test('invoice cannot be issued for another business order or a cancelled order', function (): void {
+    $a=omtBusiness('A'); $b=omtBusiness('B'); $la=omtLocation($a,'A1'); $lb=omtLocation($b,'B1'); $userA=omtUser($a); $userB=omtUser($b); $headers=omtHeaders($userA,$a);
+    $foreign=omtOrder($b,$lb,$userB); $cancelled=omtOrder($a,$la,$userA,'cancelled');
+    $this->postJson('/api/v1/invoices',['order_id'=>$foreign],$headers)->assertNotFound();
+    $this->postJson('/api/v1/invoices',['order_id'=>$cancelled],$headers)->assertStatus(422);
+});
+
+test('staff update rejects roles and memberships from another business', function (): void {
+    $a=omtBusiness('A'); $b=omtBusiness('B'); $owner=omtUser($a); $foreignUser=omtUser($b); $headers=omtHeaders($owner,$a);
+    $foreignRole=DB::table('business_user')->where('business_id',$b->id)->where('user_id',$foreignUser->id)->value('role_id');
+    $this->patchJson('/api/v1/staff/'.$owner->id,['role_id'=>$foreignRole,'status'=>'active'],$headers)->assertStatus(422);
+    $this->patchJson('/api/v1/staff/'.$foreignUser->id,['role_id'=>DB::table('business_user')->where('business_id',$a->id)->where('user_id',$owner->id)->value('role_id'),'status'=>'active'],$headers)->assertNotFound();
+});
+
+test('settings remain isolated by business', function (): void {
+    $a=omtBusiness('A'); $b=omtBusiness('B'); $userA=omtUser($a); $userB=omtUser($b);
+    $this->putJson('/api/v1/settings',['receipt_footer'=>'A footer','service_charge_enabled'=>true,'low_stock_alerts'=>true],omtHeaders($userA,$a))->assertOk();
+    $this->putJson('/api/v1/settings',['receipt_footer'=>'B footer','service_charge_enabled'=>false,'low_stock_alerts'=>false],omtHeaders($userB,$b))->assertOk();
+    $this->getJson('/api/v1/settings',omtHeaders($userA,$a))->assertOk()->assertJsonPath('data.settings.receipt_footer','A footer')->assertJsonPath('data.settings.service_charge_enabled',true);
+});
