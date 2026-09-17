@@ -2,11 +2,11 @@
 
 namespace Database\Seeders;
 
-use App\Actions\Tenancy\ProvisionBusinessRoles;
 use App\Models\Business;
 use App\Models\Location;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Authorization\ProvisionBusinessRoles;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
