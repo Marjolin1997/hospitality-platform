@@ -18,6 +18,7 @@ use Illuminate\Validation\ValidationException;
 final class CollectPayment
 {
     private const SCALE = 4;
+    private const PAYABLE_ORDER_STATES = ['open', 'payment_due'];
 
     public function execute(Business $business, User $user, Order $order, array $payload): Payment
     {
@@ -33,8 +34,10 @@ final class CollectPayment
             }
 
             $order = Order::query()->forBusiness($business)->whereKey($order->getKey())->lockForUpdate()->firstOrFail();
-            if (in_array($order->status, ['cancelled', 'closed'], true)) {
-                throw ValidationException::withMessages(['order' => 'This order can no longer accept payments.']);
+            if (! in_array($order->status, self::PAYABLE_ORDER_STATES, true)) {
+                throw ValidationException::withMessages([
+                    'order' => "Orders in '{$order->status}' status cannot accept a new payment.",
+                ]);
             }
 
             $session = null;
@@ -53,6 +56,9 @@ final class CollectPayment
 
             $paidBase = $this->netPaidBase($business, $order);
             $remaining = BigDecimal::of((string) $order->grand_total)->minus($paidBase);
+            if (! $remaining->isPositive()) {
+                throw ValidationException::withMessages(['order' => 'This order has no outstanding balance.']);
+            }
             if ($amountBase->isGreaterThan($remaining)) {
                 throw ValidationException::withMessages(['amount' => 'Payment exceeds the remaining order balance.']);
             }
