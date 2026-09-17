@@ -9,6 +9,7 @@ return new class extends Migration {
     {
         Schema::table('order_transfer_audits', function (Blueprint $table): void {
             $table->string('idempotency_key', 100)->after('operation');
+            $table->json('request_snapshot')->after('item_ids');
             $table->unique(['business_id', 'idempotency_key'], 'order_transfer_business_idempotency_unique');
         });
     }
@@ -17,7 +18,7 @@ return new class extends Migration {
     {
         Schema::table('order_transfer_audits', function (Blueprint $table): void {
             $table->dropUnique('order_transfer_business_idempotency_unique');
-            $table->dropColumn('idempotency_key');
+            $table->dropColumn(['idempotency_key', 'request_snapshot']);
         });
     }
 };
