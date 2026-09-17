@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\VenueTable;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -45,43 +46,64 @@ final class CreateOrder
             if ($payload['type'] === 'table' && ! $table) {
                 throw ValidationException::withMessages(['venue_table_id' => 'A table is required for table orders.']);
             }
+            if ($payload['type'] !== 'table' && $table) {
+                throw ValidationException::withMessages(['venue_table_id' => 'A table can only be assigned to a table order.']);
+            }
 
-            $requestedItems = collect($payload['items'])->keyBy('product_id');
+            $items = collect($payload['items'])->values();
+            $productIds = $items->pluck('product_id');
+            if ($productIds->unique()->count() !== $productIds->count()) {
+                throw ValidationException::withMessages([
+                    'items' => 'Each product may appear only once in a new order. Increase its quantity instead of sending duplicate lines.',
+                ]);
+            }
+
             $products = Product::query()
                 ->forBusiness($business)
-                ->whereIn('id', $requestedItems->keys())
+                ->whereIn('id', $productIds->all())
                 ->where('is_active', true)
                 ->lockForUpdate()
                 ->get()
                 ->keyBy('id');
 
-            if ($products->count() !== $requestedItems->count()) {
+            if ($products->count() !== $productIds->count()) {
                 throw ValidationException::withMessages(['items' => 'One or more products are unavailable. Refresh the catalog and try again.']);
             }
 
-            $calculationItems = $requestedItems->map(function (array $item, string $productId) use ($products): array {
-                $product = $products->get($productId);
-                return ['quantity' => (string) $item['quantity'], 'unit_price' => (string) $product->sale_price, 'tax_rate' => (string) $product->tax_rate];
-            })->values()->all();
+            $calculationItems = $items->map(function (array $item) use ($products): array {
+                $product = $products->get($item['product_id']);
+                return [
+                    'quantity' => (string) $item['quantity'],
+                    'unit_price' => (string) $product->sale_price,
+                    'tax_rate' => (string) $product->tax_rate,
+                ];
+            })->all();
 
             $totals = $this->totals->calculate($calculationItems);
+            $businessNow = CarbonImmutable::now($business->timezone);
 
             $order = Order::query()->create([
                 'business_id' => $business->getKey(),
                 'location_id' => $location->getKey(),
                 'venue_table_id' => $table?->getKey(),
                 'opened_by_user_id' => $user->getKey(),
-                'number' => $this->nextNumber($business),
+                'number' => $this->nextNumber($business, $businessNow),
                 'type' => $payload['type'],
                 'status' => 'open',
                 'currency' => $business->currency,
                 ...$totals,
-                'opened_at' => now(),
+                // Database timestamps are UTC. The business-local clock is used only
+                // to determine the operational business date and order-number prefix.
+                'opened_at' => $businessNow->utc(),
             ]);
 
-            foreach ($requestedItems as $productId => $item) {
-                $product = $products->get($productId);
-                $line = $this->totals->calculate([['quantity' => (string) $item['quantity'], 'unit_price' => (string) $product->sale_price, 'tax_rate' => (string) $product->tax_rate]]);
+            foreach ($items as $item) {
+                $product = $products->get($item['product_id']);
+                $line = $this->totals->calculate([[
+                    'quantity' => (string) $item['quantity'],
+                    'unit_price' => (string) $product->sale_price,
+                    'tax_rate' => (string) $product->tax_rate,
+                ]]);
 
                 $order->items()->create([
                     'business_id' => $business->getKey(),
@@ -104,11 +126,22 @@ final class CreateOrder
         }, attempts: 3);
     }
 
-    private function nextNumber(Business $business): string
+    private function nextNumber(Business $business, CarbonImmutable $businessNow): string
     {
-        $prefix = now()->format('Ymd');
-        $count = Order::query()->forBusiness($business)->whereDate('opened_at', today())->lockForUpdate()->count() + 1;
+        $businessDate = $businessNow->toDateString();
 
-        return sprintf('%s-%04d', $prefix, $count);
+        // MySQL LAST_INSERT_ID(expr) is connection-local and atomic. The composite
+        // primary key serializes increments for one business/day without count()+1
+        // races, while allowing different businesses/days to progress independently.
+        DB::statement(
+            'INSERT INTO business_order_counters (business_id, business_date, last_number, created_at, updated_at)
+             VALUES (?, ?, LAST_INSERT_ID(1), UTC_TIMESTAMP(), UTC_TIMESTAMP())
+             ON DUPLICATE KEY UPDATE last_number = LAST_INSERT_ID(last_number + 1), updated_at = UTC_TIMESTAMP()',
+            [$business->getKey(), $businessDate],
+        );
+
+        $sequence = (int) DB::selectOne('SELECT LAST_INSERT_ID() AS sequence')->sequence;
+
+        return sprintf('%s-%04d', $businessNow->format('Ymd'), $sequence);
     }
 }
