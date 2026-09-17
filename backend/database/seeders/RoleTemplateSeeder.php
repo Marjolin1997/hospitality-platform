@@ -1,0 +1,16 @@
+<?php
+namespace Database\Seeders;
+use App\Models\Permission;use App\Models\Role;use Illuminate\Database\Seeder;
+class RoleTemplateSeeder extends Seeder{
+ public function run():void{
+  $templates=[
+   'owner'=>['*'],'manager'=>['orders.*','payments.*','cash_sessions.*','cash_movements.create','products.*','inventory.*','finance.view','expenses.*','invoices.*','reports.*','users.view'],
+   'waiter'=>['orders.view','orders.create','orders.update','orders.send_to_station','payments.collect','products.view'],
+   'bartender'=>['orders.view','products.view'],
+   'cashier'=>['orders.view','payments.collect','payments.refund','cash_sessions.view','cash_sessions.open','cash_sessions.close','cash_movements.create','invoices.view'],
+   'inventory'=>['products.view','inventory.*'],'finance'=>['orders.view','finance.view','expenses.*','invoices.*','reports.financial.view'],
+  ];
+  $all=Permission::all();
+  foreach($templates as $slug=>$patterns){$role=Role::query()->firstOrCreate(['business_id'=>null,'slug'=>$slug],['name'=>ucfirst($slug),'is_system'=>true]);$ids=$all->filter(function($p)use($patterns){foreach($patterns as $pattern){if($pattern==='*'||($pattern.endsWith('*')&&str_starts_with($p->key,substr($pattern,0,-1)))||$p->key===$pattern)return true;}return false;})->pluck('id');$role->permissions()->sync($ids);}
+ }
+}
