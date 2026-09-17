@@ -23,6 +23,14 @@ final class CollectPayment
     public function execute(Business $business, User $user, Order $order, array $payload): Payment
     {
         return DB::transaction(function () use ($business, $user, $order, $payload): Payment {
+            // Every commercial mutation locks the order first. This makes payment vs
+            // split/merge/item mutations serialize on one canonical row and also turns
+            // same-order idempotency-key races into deterministic replays.
+            $order = Order::query()->forBusiness($business)
+                ->whereKey($order->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
             $existing = Payment::query()->forBusiness($business)
                 ->where('idempotency_key', $payload['idempotency_key'])
                 ->lockForUpdate()
@@ -33,7 +41,6 @@ final class CollectPayment
                 return $existing;
             }
 
-            $order = Order::query()->forBusiness($business)->whereKey($order->getKey())->lockForUpdate()->firstOrFail();
             if (! in_array($order->status, self::PAYABLE_ORDER_STATES, true)) {
                 throw ValidationException::withMessages([
                     'order' => "Orders in '{$order->status}' status cannot accept a new payment.",
@@ -125,26 +132,20 @@ final class CollectPayment
     {
         $paid = BigDecimal::of((string) Payment::query()->forBusiness($business)
             ->where('order_id', $order->getKey())->where('status', 'completed')->sum('amount_base'));
-
         $refunded = BigDecimal::of((string) PaymentRefund::query()->forBusiness($business)
             ->where('status', 'completed')
             ->whereHas('payment', fn ($query) => $query->where('order_id', $order->getKey()))
             ->sum('amount_base'));
-
         return $paid->minus($refunded);
     }
 
     private function resolveRate(Business $business, string $currency): array
     {
         if ($currency === $business->currency) return [BigDecimal::one(), ['source' => 'base_currency', 'rate' => '1']];
-
         $rate = ExchangeRate::query()->forBusiness($business)
             ->where('base_currency', $currency)->where('quote_currency', $business->currency)
             ->where('effective_at', '<=', now())->latest('effective_at')->first();
-        if (! $rate) {
-            throw ValidationException::withMessages(['currency' => 'No current exchange rate is configured for this currency.']);
-        }
-
+        if (! $rate) throw ValidationException::withMessages(['currency' => 'No current exchange rate is configured for this currency.']);
         return [BigDecimal::of((string) $rate->rate), [
             'exchange_rate_id' => $rate->getKey(), 'base_currency' => $rate->base_currency,
             'quote_currency' => $rate->quote_currency, 'rate' => (string) $rate->rate,
