@@ -24,17 +24,17 @@ export function AppShell(){
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark">H</div><div><strong>Hospitality</strong><span>Bar & Café OS</span></div></div>
-      <nav className="nav-list" aria-label="Main navigation">{visibleNavigation.map(({label,to,icon:Icon})=><NavLink key={to} to={to} className={({isActive})=>`nav-item ${isActive?'active':''}`}><Icon size={19}/><span>{label}</span></NavLink>)}</nav>
+      <nav className="nav-list" aria-label="Main navigation">{visibleNavigation.map(({label,to,icon:Icon})=><NavLink key={to} to={to} title={label} className={({isActive})=>`nav-item ${isActive?'active':''}`}><Icon size={19}/><span>{label}</span></NavLink>)}</nav>
       <div className="sidebar-footer"><div className="location-chip"><span className="status-dot"/>{activeLocation?.name??'Choose location'}</div><small>{activeBusiness?.role?.name??activeBusiness?.name??'Operational workspace'}</small></div>
     </aside>
     <main className="main-content">
       <header className="topbar">
         <div className="workspace-switchers">
-          <label><span>Business</span><select value={activeBusiness?.id??''} onChange={e=>selectBusiness(e.target.value)}>{user?.businesses.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
-          <label><span>Location</span><select value={activeLocation?.id??''} onChange={e=>selectLocation(e.target.value)}>{activeBusiness?.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+          <label><span>Business</span><select aria-label="Active business" value={activeBusiness?.id??''} onChange={e=>selectBusiness(e.target.value)}>{user?.businesses.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+          <label><span>Location</span><select aria-label="Active location" value={activeLocation?.id??''} onChange={e=>selectLocation(e.target.value)}>{activeBusiness?.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
         </div>
         <div className="topbar-actions">
-          {canUseCashRegister&&<button className="ghost-button" onClick={()=>navigate('/cash-register')}>Cash register</button>}
+          {canUseCashRegister&&<button className="ghost-button" onClick={()=>navigate('/cash-register')}><WalletCards size={16}/> Cash register</button>}
           <div className="account-chip"><div className="avatar">{user?.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div><div><strong>{user?.name}</strong><span>{activeBusiness?.role?.name??user?.email}</span></div></div>
           <button className="icon-button" title="Sign out" aria-label="Sign out" onClick={()=>logout()}><LogOut size={18}/></button>
         </div>
