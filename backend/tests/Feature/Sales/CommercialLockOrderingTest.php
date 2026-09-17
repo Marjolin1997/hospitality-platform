@@ -18,12 +18,15 @@ function cloPosition(string $source, string $needle): int
 test('payment acquires the order lock before idempotency and dependent row locks', function (): void {
     $source = cloSource('Services/Payments/CollectPayment.php');
 
-    $orderLock = cloPosition($source, '->whereKey($order->getKey())\n                ->lockForUpdate()');
+    // Assert semantic ordering without coupling the guard to whitespace/formatter output.
+    $orderQuery = cloPosition($source, 'Order::query()->forBusiness($business)');
+    $orderLock = cloPosition($source, '->lockForUpdate()');
     $idempotency = cloPosition($source, "->where('idempotency_key', \$payload['idempotency_key'])");
     $cashSession = cloPosition($source, 'CashSession::query()->forBusiness($business)');
     $paymentCreate = cloPosition($source, '$payment = Payment::query()->create([');
 
-    expect($orderLock)->toBeLessThan($idempotency)
+    expect($orderQuery)->toBeLessThan($orderLock)
+        ->and($orderLock)->toBeLessThan($idempotency)
         ->and($idempotency)->toBeLessThan($cashSession)
         ->and($cashSession)->toBeLessThan($paymentCreate);
 });
