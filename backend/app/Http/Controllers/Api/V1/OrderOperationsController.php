@@ -21,23 +21,13 @@ use Illuminate\Http\JsonResponse;
 class OrderOperationsController extends Controller
 {
     public function __construct(private readonly OrderOperationsService $operations, private readonly OrderTransferService $transfers) {}
-
-    public function addItem(AddOrderItemRequest $request, Order $order): JsonResponse { return $this->response($this->operations->addItem(app(Business::class), $order, $request->validated())); }
-    public function updateItem(UpdateOrderItemRequest $request, OrderItem $item): JsonResponse { return $this->response($this->operations->updateItem(app(Business::class), $item, $request->validated())); }
-    public function removeItem(OrderReasonRequest $request, OrderItem $item): JsonResponse { return $this->response($this->operations->removeItem(app(Business::class), $request->user(), $item, $request->validated('reason'))); }
-    public function overridePrice(OverrideOrderItemPriceRequest $request, OrderItem $item): JsonResponse { return $this->response($this->operations->overridePrice(app(Business::class), $request->user(), $item, (string)$request->validated('unit_price'), $request->validated('reason'))); }
-    public function discount(ApplyOrderDiscountRequest $request, Order $order): JsonResponse { return $this->response($this->operations->applyDiscount(app(Business::class), $request->user(), $order, (string)$request->validated('amount'), $request->validated('reason'))); }
-    public function moveTable(MoveOrderTableRequest $request, Order $order): JsonResponse { return $this->response($this->operations->moveTable(app(Business::class), $request->user(), $order, $request->validated('venue_table_id'), $request->validated('reason'))); }
-
-    public function split(SplitOrderRequest $request, Order $order): JsonResponse
-    {
-        return response()->json(['data' => $this->transfers->split(app(Business::class), $request->user(), $order, $request->validated())], 201);
-    }
-
-    public function merge(MergeOrderRequest $request, Order $order): JsonResponse
-    {
-        return $this->response($this->transfers->merge(app(Business::class), $request->user(), $order, $request->validated('source_order_id'), $request->validated('reason')));
-    }
-
-    private function response(Order $order): JsonResponse { return response()->json(['data' => $order]); }
+    public function addItem(AddOrderItemRequest $r,Order $o):JsonResponse{return $this->response($this->operations->addItem(app(Business::class),$o,$r->validated()));}
+    public function updateItem(UpdateOrderItemRequest $r,OrderItem $i):JsonResponse{return $this->response($this->operations->updateItem(app(Business::class),$i,$r->validated()));}
+    public function removeItem(OrderReasonRequest $r,OrderItem $i):JsonResponse{return $this->response($this->operations->removeItem(app(Business::class),$r->user(),$i,$r->validated('reason')));}
+    public function overridePrice(OverrideOrderItemPriceRequest $r,OrderItem $i):JsonResponse{return $this->response($this->operations->overridePrice(app(Business::class),$r->user(),$i,(string)$r->validated('unit_price'),$r->validated('reason')));}
+    public function discount(ApplyOrderDiscountRequest $r,Order $o):JsonResponse{return $this->response($this->operations->applyDiscount(app(Business::class),$r->user(),$o,(string)$r->validated('amount'),$r->validated('reason')));}
+    public function moveTable(MoveOrderTableRequest $r,Order $o):JsonResponse{return $this->response($this->operations->moveTable(app(Business::class),$r->user(),$o,$r->validated('venue_table_id'),$r->validated('reason')));}
+    public function split(SplitOrderRequest $r,Order $o):JsonResponse{return response()->json(['data'=>$this->transfers->split(app(Business::class),$r->user(),$o,$r->validated())],201);}
+    public function merge(MergeOrderRequest $r,Order $o):JsonResponse{return $this->response($this->transfers->merge(app(Business::class),$r->user(),$o,$r->validated()));}
+    private function response(Order $o):JsonResponse{return response()->json(['data'=>$o]);}
 }
