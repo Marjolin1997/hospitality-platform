@@ -43,7 +43,7 @@ function inventorySafetyContext(): array
         'slug' => 'inventory-'.Str::lower(Str::random(6)),
         'is_system' => false,
     ]);
-    $role->permissions()->sync(Permission::query()->whereIn('name', ['inventory.view', 'inventory.adjust'])->pluck('id'));
+    $role->permissions()->sync(Permission::query()->whereIn('key', ['inventory.view', 'inventory.adjust'])->pluck('id'));
     $user->businesses()->attach($business->id, ['role_id' => $role->id, 'status' => 'active']);
     $product = (string) Str::ulid();
     DB::table('products')->insert([
