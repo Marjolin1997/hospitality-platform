@@ -17,6 +17,7 @@ class CatalogController extends Controller
             ->forBusiness($business)
             ->where('is_active', true)
             ->with(['products' => fn ($query) => $query
+                ->forBusiness($business)
                 ->where('is_active', true)
                 ->orderBy('name')])
             ->orderBy('sort_order')

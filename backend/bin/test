@@ -1,0 +1,35 @@
+#!/bin/sh
+
+set -eu
+
+export APP_ENV=testing
+
+export DB_CONNECTION=mysql
+export DB_HOST=mysql
+export DB_PORT=3306
+export DB_DATABASE=hospitality_test
+export DB_USERNAME=hospitality
+export DB_PASSWORD=hospitality
+
+export CACHE_STORE=array
+export SESSION_DRIVER=array
+export QUEUE_CONNECTION=sync
+
+if [ "$APP_ENV" != "testing" ]; then
+    echo "ERROR: refusing to run tests outside APP_ENV=testing" >&2
+    exit 1
+fi
+
+case "$DB_DATABASE" in
+    *_test)
+        ;;
+    *)
+        echo "ERROR: refusing to run tests against database: $DB_DATABASE" >&2
+        exit 1
+        ;;
+esac
+
+echo "Test environment: $APP_ENV"
+echo "Test database:    $DB_DATABASE"
+
+exec php artisan test "$@"

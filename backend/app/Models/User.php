@@ -32,13 +32,22 @@ class User extends Authenticatable
 
     public function hasPermissionInBusiness(Business $business, string $permission): bool
     {
+        $membership = $this->businesses()
+            ->whereKey($business->getKey())
+            ->wherePivot('status', 'active')
+            ->first();
+
+        if (! $membership || ! $membership->pivot->role_id) {
+            return false;
+        }
+
         return Role::query()
+            ->whereKey($membership->pivot->role_id)
             ->where('business_id', $business->getKey())
-            ->whereHas('permissions', fn ($query) => $query->where('key', $permission))
-            ->whereHas('users', fn ($query) => $query
-                ->whereKey($this->getKey())
-                ->wherePivot('business_id', $business->getKey())
-                ->wherePivot('status', 'active'))
+            ->whereHas(
+                'permissions',
+                fn ($query) => $query->where('key', $permission)
+            )
             ->exists();
     }
 }

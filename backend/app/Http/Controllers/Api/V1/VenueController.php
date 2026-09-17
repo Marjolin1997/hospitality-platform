@@ -17,7 +17,10 @@ class VenueController extends Controller
 
         $areas = VenueArea::query()->forBusiness($business)
             ->when($locationId !== '', fn ($query) => $query->where('location_id', $locationId))
-            ->with(['tables' => fn ($query) => $query->where('is_active', true)])
+            ->with(['tables' => fn ($query) => $query
+                ->forBusiness($business)
+                ->where('location_id', $locationId)
+                ->where('is_active', true)])
             ->orderBy('sort_order')->orderBy('name')->get();
 
         return response()->json(['data' => $areas]);

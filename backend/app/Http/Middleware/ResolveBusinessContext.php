@@ -19,7 +19,7 @@ final class ResolveBusinessContext
             ->where('status', 'active')
             ->whereHas('users', fn ($query) => $query
                 ->whereKey($request->user()->getKey())
-                ->wherePivot('status', 'active'))
+                ->where('business_user.status', 'active'))
             ->firstOrFail();
 
         app()->instance(Business::class, $business);

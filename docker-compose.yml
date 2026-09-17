@@ -36,7 +36,7 @@ services:
       MYSQL_USER: hospitality
       MYSQL_PASSWORD: hospitality
       MYSQL_ROOT_PASSWORD: root
-    ports: ["3307:3306"]
+    ports: ["3310:3306"]
     volumes: ["mysql_data:/var/lib/mysql"]
     healthcheck: { test: ["CMD", "mysqladmin", "ping", "-h", "localhost"], interval: 5s, timeout: 5s, retries: 20 }
     networks: [hospitality]
