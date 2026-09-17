@@ -11,6 +11,6 @@ class RoleTemplateSeeder extends Seeder{
    'inventory'=>['products.view','inventory.*'],'finance'=>['orders.view','finance.view','expenses.*','invoices.*','reports.financial.view'],
   ];
   $all=Permission::all();
-  foreach($templates as $slug=>$patterns){$role=Role::query()->firstOrCreate(['business_id'=>null,'slug'=>$slug],['name'=>ucfirst($slug),'is_system'=>true]);$ids=$all->filter(function($p)use($patterns){foreach($patterns as $pattern){if($pattern==='*'||($pattern.endsWith('*')&&str_starts_with($p->key,substr($pattern,0,-1)))||$p->key===$pattern)return true;}return false;})->pluck('id');$role->permissions()->sync($ids);}
+  foreach($templates as $slug=>$patterns){$role=Role::query()->firstOrCreate(['business_id'=>null,'slug'=>$slug],['name'=>ucfirst($slug),'is_system'=>true]);$ids=$all->filter(function($permission)use($patterns){foreach($patterns as $pattern){if($pattern==='*'||(str_ends_with($pattern,'*')&&str_starts_with($permission->key,substr($pattern,0,-1)))||$permission->key===$pattern)return true;}return false;})->pluck('id');$role->permissions()->sync($ids);}
  }
 }
