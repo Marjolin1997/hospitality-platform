@@ -19,7 +19,7 @@ function ooContext(): array {
     $l=Location::query()->create(['business_id'=>$b->id,'name'=>'Main','code'=>'MAIN','type'=>'bar','is_active'=>true]);
     $u=User::query()->create(['name'=>'Manager','email'=>Str::lower(Str::random(10)).'@example.test','password'=>bcrypt('password')]);
     $r=Role::query()->create(['business_id'=>$b->id,'name'=>'Manager','slug'=>'ops-'.Str::lower(Str::random(5)),'is_system'=>false]);
-    $r->permissions()->sync(Permission::query()->whereIn('key',['orders.view','orders.create','orders.update','orders.apply_discount','orders.override_price'])->pluck('id'));
+    $r->permissions()->sync(Permission::query()->whereIn('key',['orders.view','orders.create','orders.update','orders.send_to_station','orders.apply_discount','orders.override_price'])->pluck('id'));
     $u->businesses()->attach($b->id,['role_id'=>$r->id,'status'=>'active']); Sanctum::actingAs($u);
     return [$b,$l,$u,['X-Business-Id'=>$b->id]];
 }
@@ -35,4 +35,17 @@ test('price override and order discount are permission separated audited and exa
 
 test('table move is tenant location occupancy and audit safe', function(){ [$b,$l,$u,$h]=ooContext();$p=ooProduct($b);$from=ooTable($b,$l,'T1');$to=ooTable($b,$l,'T2');[$o]=ooOrder($b,$l,$u,$p,'open',$from); $this->postJson("/api/v1/orders/$o/move-table",['venue_table_id'=>$to,'reason'=>'Guest requested another table'],$h)->assertOk()->assertJsonPath('data.venue_table_id',$to); $row=DB::table('orders')->where('id',$o)->first(); expect($row->previous_venue_table_id)->toBe($from)->and((int)$row->table_moved_by_user_id)->toBe((int)$u->id); $foreign=Business::query()->create(['name'=>'Foreign','currency'=>'EUR','timezone'=>'UTC','status'=>'active']);$fl=Location::query()->create(['business_id'=>$foreign->id,'name'=>'F','code'=>'F','type'=>'bar','is_active'=>true]);$ft=ooTable($foreign,$fl,'X'); $this->postJson("/api/v1/orders/$o/move-table",['venue_table_id'=>$ft,'reason'=>'Invalid cross tenant move'],$h)->assertNotFound(); });
 
-test('completed payment freezes mutable commercial order operations', function(){ [$b,$l,$u,$h]=ooContext();$p=ooProduct($b);[$o,$i]=ooOrder($b,$l,$u,$p,'payment_due'); DB::table('payments')->insert(['id'=>(string)Str::ulid(),'business_id'=>$b->id,'order_id'=>$o,'collected_by_user_id'=>$u->id,'method'=>'card','status'=>'completed','amount'=>'1.0000','currency'=>'EUR','amount_base'=>'1.0000','base_currency'=>'EUR','exchange_rate'=>'1.0000000000','idempotency_key'=>'ops-'.Str::uuid(),'paid_at'=>now(),'created_at'=>now(),'updated_at'=>now()]); $this->patchJson("/api/v1/order-items/$i",['quantity'=>'2'],$h)->assertStatus(422); $this->putJson("/api/v1/orders/$o/discount",['amount'=>'1','reason'=>'Too late discount'],$h)->assertStatus(422); $this->putJson("/api/v1/order-items/$i/price",['unit_price'=>'8','reason'=>'Too late override'],$h)->assertStatus(422); });
+test('any active payment attempt freezes every commercial mutation and preparation send', function(){
+    [$b,$l,$u,$h]=ooContext(); $p=ooProduct($b); [$o,$i]=ooOrder($b,$l,$u,$p,'payment_due'); $p2=ooProduct($b,'Tea','5.0000'); $from=ooTable($b,$l,'T1'); $to=ooTable($b,$l,'T2'); DB::table('orders')->where('id',$o)->update(['type'=>'table','venue_table_id'=>$from]);
+    DB::table('payments')->insert(['id'=>(string)Str::ulid(),'business_id'=>$b->id,'order_id'=>$o,'collected_by_user_id'=>$u->id,'method'=>'card','status'=>'pending','amount'=>'1.0000','currency'=>'EUR','amount_base'=>'1.0000','base_currency'=>'EUR','exchange_rate'=>'1.0000000000','idempotency_key'=>'ops-'.Str::uuid(),'created_at'=>now(),'updated_at'=>now()]);
+    $this->postJson("/api/v1/orders/$o/items",['product_id'=>$p2,'quantity'=>'1'],$h)->assertStatus(422);
+    $this->patchJson("/api/v1/order-items/$i",['quantity'=>'2'],$h)->assertStatus(422);
+    $this->deleteJson("/api/v1/order-items/$i",['reason'=>'Too late removal'],$h)->assertStatus(422);
+    $this->putJson("/api/v1/orders/$o/discount",['amount'=>'1','reason'=>'Too late discount'],$h)->assertStatus(422);
+    $this->putJson("/api/v1/order-items/$i/price",['unit_price'=>'8','reason'=>'Too late override'],$h)->assertStatus(422);
+    $this->postJson("/api/v1/orders/$o/move-table",['venue_table_id'=>$to,'reason'=>'Too late move'],$h)->assertStatus(422);
+    $this->postJson("/api/v1/orders/$o/send",[],$h)->assertStatus(422);
+    expect(DB::table('orders')->where('id',$o)->value('grand_total'))->toBe('10.0000')
+        ->and(DB::table('order_items')->where('id',$i)->value('preparation_status'))->toBe('pending')
+        ->and(DB::table('order_items')->where('order_id',$o)->count())->toBe(1);
+});
