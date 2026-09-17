@@ -21,14 +21,16 @@ final class OrderLifecycleService
     {
         return DB::transaction(function () use ($business, $item, $target): OrderItem {
             $item = OrderItem::query()
-                ->where('business_id', $business->getKey())
+                ->forBusiness($business)
                 ->whereKey($item->getKey())
                 ->with('order')
                 ->lockForUpdate()
                 ->firstOrFail();
 
             if (in_array($item->order->status, ['cancelled', 'closed'], true)) {
-                throw ValidationException::withMessages(['order' => 'Items on a cancelled or closed order cannot be changed.']);
+                throw ValidationException::withMessages([
+                    'order' => 'Items on a cancelled or closed order cannot be changed.',
+                ]);
             }
 
             $allowed = self::PREPARATION_TRANSITIONS[$item->preparation_status] ?? [];
@@ -38,18 +40,18 @@ final class OrderLifecycleService
                 ]);
             }
 
-            $timestamp = match ($target) {
+            $timestampColumn = match ($target) {
                 'preparing' => 'preparing_at',
-                'ready' => 'ready_at',
+                'ready' => 'prepared_at',
                 'served' => 'served_at',
             };
 
             $item->forceFill([
                 'preparation_status' => $target,
-                $timestamp => now(),
+                $timestampColumn => now(),
             ])->save();
 
-            return $item->fresh();
+            return $item->fresh('order');
         }, attempts: 3);
     }
 
@@ -57,17 +59,19 @@ final class OrderLifecycleService
     {
         return DB::transaction(function () use ($business, $user, $item, $reason): OrderItem {
             $item = OrderItem::query()
-                ->where('business_id', $business->getKey())
+                ->forBusiness($business)
                 ->whereKey($item->getKey())
                 ->with('order')
                 ->lockForUpdate()
                 ->firstOrFail();
 
             if (in_array($item->order->status, ['paid', 'closed', 'cancelled'], true)) {
-                throw ValidationException::withMessages(['item' => 'Items on a paid, closed, or cancelled order cannot be voided.']);
+                throw ValidationException::withMessages([
+                    'item' => 'Items on a paid, closed, or cancelled order cannot be cancelled.',
+                ]);
             }
             if ($item->preparation_status === 'voided') {
-                throw ValidationException::withMessages(['item' => 'This item is already voided.']);
+                throw ValidationException::withMessages(['item' => 'This item is already cancelled.']);
             }
 
             $item->forceFill([
@@ -77,25 +81,27 @@ final class OrderLifecycleService
                 'voided_at' => now(),
             ])->save();
 
-            return $item->fresh();
+            return $item->fresh('order');
         }, attempts: 3);
     }
 
     public function cancelOrder(Business $business, User $user, Order $order, string $reason): Order
     {
         return DB::transaction(function () use ($business, $user, $order, $reason): Order {
-            $order = Order::query()->forBusiness($business)
+            $order = Order::query()
+                ->forBusiness($business)
                 ->whereKey($order->getKey())
                 ->with('items')
                 ->lockForUpdate()
                 ->firstOrFail();
 
             if (in_array($order->status, ['paid', 'closed', 'cancelled'], true)) {
-                throw ValidationException::withMessages(['order' => 'A paid, closed, or already cancelled order cannot be cancelled.']);
+                throw ValidationException::withMessages([
+                    'order' => 'A paid, closed, or already cancelled order cannot be cancelled.',
+                ]);
             }
 
-            $hasCompletedPayment = $order->payments()->where('status', 'completed')->exists();
-            if ($hasCompletedPayment) {
+            if ($order->payments()->where('status', 'completed')->exists()) {
                 throw ValidationException::withMessages([
                     'order' => 'An order with completed payments must be refunded before it can be cancelled.',
                 ]);
