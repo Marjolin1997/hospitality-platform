@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\SaveProductRequest;
+use App\Http\Requests\Api\V1\SetProductStatusRequest;
 use App\Models\Business;
 use App\Services\Operations\OperationsService;
 use Illuminate\Http\JsonResponse;
@@ -21,18 +23,20 @@ final class OperationsController extends Controller
         $rows = DB::table('products')->leftJoin('product_categories','product_categories.id','=','products.product_category_id')
             ->where('products.business_id',$business->id)
             ->select('products.*','product_categories.name as category_name')->orderBy('products.name')->get();
-        return response()->json(['data'=>$rows]);
+        $categories = DB::table('product_categories')->where('business_id',$business->id)->where('is_active',true)
+            ->select('id','name')->orderBy('sort_order')->orderBy('name')->get();
+        return response()->json(['data'=>['products'=>$rows,'categories'=>$categories]]);
     }
 
-    public function saveProduct(Request $request): JsonResponse
+    public function saveProduct(SaveProductRequest $request): JsonResponse
     {
-        $business = app(Business::class);
-        $data = $request->validate([
-            'id'=>['nullable','string'], 'name'=>['required','string','max:255'], 'category_id'=>['nullable','string'],
-            'sku'=>['nullable','string','max:64'], 'sale_price'=>['required','numeric','min:0'], 'tax_rate'=>['required','numeric','min:0','max:100'],
-            'preparation_station'=>['nullable',Rule::in(['bar','kitchen'])], 'tracks_stock'=>['required','boolean'], 'is_active'=>['required','boolean'],
-        ]);
-        return response()->json(['data'=>$this->operations->saveProduct($business, $data)]);
+        $product = $this->operations->saveProduct(app(Business::class), $request->validated());
+        return response()->json(['data'=>$product], $request->filled('id') ? 200 : 201);
+    }
+
+    public function setProductStatus(SetProductStatusRequest $request, string $product): JsonResponse
+    {
+        return response()->json(['data'=>$this->operations->setProductStatus(app(Business::class), $product, (bool)$request->validated('is_active'))]);
     }
 
     public function inventory(Request $request): JsonResponse
