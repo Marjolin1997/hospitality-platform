@@ -2,130 +2,22 @@
 
 namespace App\Services\Sales;
 
-use App\Models\Business;
-use App\Models\Order;
-use App\Models\OrderItem;
-use App\Models\User;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
+use App\Models\Business;use App\Models\Order;use App\Models\OrderItem;use App\Models\User;use Brick\Math\BigDecimal;use Illuminate\Support\Facades\DB;use Illuminate\Validation\ValidationException;
 
 final class OrderLifecycleService
 {
-    private const PREPARATION_TRANSITIONS = [
-        'sent' => ['preparing'],
-        'preparing' => ['ready'],
-        'ready' => ['served'],
-    ];
+    private const PREPARATION_TRANSITIONS=['sent'=>['preparing'],'preparing'=>['ready'],'ready'=>['served']];
+    public function __construct(private readonly OrderTotalsCalculator $totals){}
 
-    public function transitionPreparation(Business $business, OrderItem $item, string $target): OrderItem
-    {
-        return DB::transaction(function () use ($business, $item, $target): OrderItem {
-            $item = OrderItem::query()
-                ->forBusiness($business)
-                ->whereKey($item->getKey())
-                ->with('order')
-                ->lockForUpdate()
-                ->firstOrFail();
+    public function transitionPreparation(Business $business,OrderItem $item,string $target):OrderItem{return DB::transaction(function()use($business,$item,$target){$order=$this->lockOrder($business,(string)$item->order_id);$item=$this->lockItem($business,$order,(string)$item->getKey());if(in_array($order->status,['cancelled','closed'],true))throw ValidationException::withMessages(['order'=>'Items on a cancelled or closed order cannot be changed.']);$allowed=self::PREPARATION_TRANSITIONS[$item->preparation_status]??[];if(!in_array($target,$allowed,true))throw ValidationException::withMessages(['status'=>"Cannot move an item from {$item->preparation_status} to {$target}."]);$column=match($target){'preparing'=>'preparing_at','ready'=>'prepared_at','served'=>'served_at'};$item->forceFill(['preparation_status'=>$target,$column=>now()])->save();return$item->fresh('order');},attempts:3);}
 
-            if (in_array($item->order->status, ['cancelled', 'closed'], true)) {
-                throw ValidationException::withMessages([
-                    'order' => 'Items on a cancelled or closed order cannot be changed.',
-                ]);
-            }
+    public function voidItem(Business $business,User $user,OrderItem $item,string $reason):OrderItem{return DB::transaction(function()use($business,$user,$item,$reason){$order=$this->lockOrder($business,(string)$item->order_id);$item=$this->lockItem($business,$order,(string)$item->getKey());if(in_array($order->status,['paid','closed','cancelled'],true))throw ValidationException::withMessages(['item'=>'Items on a paid, closed, or cancelled order cannot be cancelled.']);if($item->preparation_status==='voided')throw ValidationException::withMessages(['item'=>'This item is already cancelled.']);if($this->hasStartedPayment($order))throw ValidationException::withMessages(['item'=>'Items cannot be cancelled after payment has started.']);$active=$order->items()->where('preparation_status','!=','voided')->lockForUpdate()->get();if($active->count()<=1)throw ValidationException::withMessages(['item'=>'The last active item cannot be cancelled individually; cancel the order instead.']);$item->forceFill(['preparation_status'=>'voided','void_reason'=>trim($reason),'voided_by_user_id'=>$user->getKey(),'voided_at'=>now()])->save();$this->recalculate($order);return$item->fresh('order');},attempts:3);}
 
-            $allowed = self::PREPARATION_TRANSITIONS[$item->preparation_status] ?? [];
-            if (! in_array($target, $allowed, true)) {
-                throw ValidationException::withMessages([
-                    'status' => "Cannot move an item from {$item->preparation_status} to {$target}.",
-                ]);
-            }
+    public function cancelOrder(Business $business,User $user,Order $order,string $reason):Order{return DB::transaction(function()use($business,$user,$order,$reason){$order=$this->lockOrder($business,(string)$order->getKey());if(in_array($order->status,['paid','closed','cancelled'],true))throw ValidationException::withMessages(['order'=>'A paid, closed, or already cancelled order cannot be cancelled.']);if($this->netPaid($order)->isPositive())throw ValidationException::withMessages(['order'=>'An order with a remaining paid balance must be fully refunded before it can be cancelled.']);$now=now();$order->items()->where('preparation_status','!=','voided')->lockForUpdate()->get();$order->items()->where('preparation_status','!=','voided')->update(['preparation_status'=>'voided','void_reason'=>'Order cancelled: '.trim($reason),'voided_by_user_id'=>$user->getKey(),'voided_at'=>$now,'updated_at'=>$now]);$order->forceFill(['status'=>'cancelled','cancel_reason'=>trim($reason),'cancelled_by_user_id'=>$user->getKey(),'cancelled_at'=>$now])->save();return$order->fresh('items');},attempts:3);}
 
-            $timestampColumn = match ($target) {
-                'preparing' => 'preparing_at',
-                'ready' => 'prepared_at',
-                'served' => 'served_at',
-            };
-
-            $item->forceFill([
-                'preparation_status' => $target,
-                $timestampColumn => now(),
-            ])->save();
-
-            return $item->fresh('order');
-        }, attempts: 3);
-    }
-
-    public function voidItem(Business $business, User $user, OrderItem $item, string $reason): OrderItem
-    {
-        return DB::transaction(function () use ($business, $user, $item, $reason): OrderItem {
-            $item = OrderItem::query()
-                ->forBusiness($business)
-                ->whereKey($item->getKey())
-                ->with('order')
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            if (in_array($item->order->status, ['paid', 'closed', 'cancelled'], true)) {
-                throw ValidationException::withMessages([
-                    'item' => 'Items on a paid, closed, or cancelled order cannot be cancelled.',
-                ]);
-            }
-            if ($item->preparation_status === 'voided') {
-                throw ValidationException::withMessages(['item' => 'This item is already cancelled.']);
-            }
-
-            $item->forceFill([
-                'preparation_status' => 'voided',
-                'void_reason' => trim($reason),
-                'voided_by_user_id' => $user->getKey(),
-                'voided_at' => now(),
-            ])->save();
-
-            return $item->fresh('order');
-        }, attempts: 3);
-    }
-
-    public function cancelOrder(Business $business, User $user, Order $order, string $reason): Order
-    {
-        return DB::transaction(function () use ($business, $user, $order, $reason): Order {
-            $order = Order::query()
-                ->forBusiness($business)
-                ->whereKey($order->getKey())
-                ->with('items')
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            if (in_array($order->status, ['paid', 'closed', 'cancelled'], true)) {
-                throw ValidationException::withMessages([
-                    'order' => 'A paid, closed, or already cancelled order cannot be cancelled.',
-                ]);
-            }
-
-            if ($order->payments()->where('status', 'completed')->exists()) {
-                throw ValidationException::withMessages([
-                    'order' => 'An order with completed payments must be refunded before it can be cancelled.',
-                ]);
-            }
-
-            $now = now();
-            $order->items()
-                ->where('preparation_status', '!=', 'voided')
-                ->update([
-                    'preparation_status' => 'voided',
-                    'void_reason' => 'Order cancelled: '.trim($reason),
-                    'voided_by_user_id' => $user->getKey(),
-                    'voided_at' => $now,
-                    'updated_at' => $now,
-                ]);
-
-            $order->forceFill([
-                'status' => 'cancelled',
-                'cancel_reason' => trim($reason),
-                'cancelled_by_user_id' => $user->getKey(),
-                'cancelled_at' => $now,
-            ])->save();
-
-            return $order->fresh('items');
-        }, attempts: 3);
-    }
+    private function lockOrder(Business $business,string $id):Order{return Order::query()->forBusiness($business)->whereKey($id)->lockForUpdate()->firstOrFail();}
+    private function lockItem(Business $business,Order $order,string $id):OrderItem{return OrderItem::query()->forBusiness($business)->where('order_id',$order->getKey())->whereKey($id)->lockForUpdate()->firstOrFail();}
+    private function hasStartedPayment(Order $order):bool{return $order->payments()->whereNotIn('status',['failed','cancelled','voided'])->exists();}
+    private function netPaid(Order $order):BigDecimal{$paid=BigDecimal::of((string)$order->payments()->where('status','completed')->sum('amount_base'));$refunded=BigDecimal::of((string)DB::table('payment_refunds')->join('payments','payments.id','=','payment_refunds.payment_id')->where('payments.order_id',$order->getKey())->where('payments.business_id',$order->business_id)->where('payment_refunds.status','completed')->sum('payment_refunds.amount_base'));return$paid->minus($refunded);}
+    private function recalculate(Order $order):void{$items=$order->items()->where('preparation_status','!=','voided')->get();$calculated=$this->totals->calculate($items->map(fn(OrderItem$i)=>['quantity'=>(string)$i->quantity,'unit_price'=>(string)$i->unit_price,'tax_rate'=>(string)$i->tax_rate])->all());$discount=BigDecimal::of((string)$order->discount_total);$gross=BigDecimal::of($calculated['grand_total']);if($discount->isGreaterThan($gross))throw ValidationException::withMessages(['order'=>'Existing discount exceeds the order total after item cancellation.']);$order->forceFill(['subtotal'=>$calculated['subtotal'],'tax_total'=>$calculated['tax_total'],'grand_total'=>(string)$gross->minus($discount)])->save();}
 }
