@@ -10,7 +10,7 @@ class PermissionSeeder extends Seeder
     public function run():void
     {
         $permissions=[
-            'orders'=>['orders.view','orders.create','orders.update','orders.send_to_station','orders.cancel','orders.apply_discount','orders.override_price'],
+            'orders'=>['orders.view','orders.create','orders.update','orders.send_to_station','orders.prepare','orders.cancel','orders.apply_discount','orders.override_price','orders.split','orders.merge'],
             'payments'=>['payments.collect','payments.refund'],
             'cash'=>['cash_sessions.view','cash_sessions.open','cash_sessions.close','cash_movements.create'],
             'catalog'=>['products.view','products.manage'],
