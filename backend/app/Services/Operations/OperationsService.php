@@ -52,7 +52,14 @@ final class OperationsService
         $query = DB::table('products')->where('business_id', $business->id)->where('id', $productId);
         abort_unless($query->exists(), 404);
         $query->update(['is_active' => $isActive, 'updated_at' => now()]);
-        return $query->first();
+        $product = $query->first();
+
+        // Query builder returns MySQL tinyint booleans as 0/1. Normalize the API
+        // contract so clients always receive a real JSON boolean for status fields.
+        $product->is_active = (bool) $product->is_active;
+        $product->tracks_stock = (bool) $product->tracks_stock;
+
+        return $product;
     }
 
     public function adjustInventory(Business $business, string $locationId, array $data, int $userId): void
