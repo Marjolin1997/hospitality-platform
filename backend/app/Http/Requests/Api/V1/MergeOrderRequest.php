@@ -10,6 +10,7 @@ class MergeOrderRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'idempotency_key' => ['required', 'string', 'min:8', 'max:100'],
             'source_order_id' => ['required', 'string'],
             'reason' => ['required', 'string', 'min:3', 'max:500'],
         ];
