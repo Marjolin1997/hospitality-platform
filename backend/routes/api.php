@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\CatalogController;
 use App\Http\Controllers\Api\V1\ExchangeRateController;
 use App\Http\Controllers\Api\V1\OperationsController;
 use App\Http\Controllers\Api\V1\OrderController;
+use App\Http\Controllers\Api\V1\OrderLifecycleController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\VenueController;
 use Illuminate\Support\Facades\Route;
@@ -28,6 +29,9 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/orders', [OrderController::class, 'store'])->middleware('permission:orders.create');
             Route::get('/orders/{order}', [OrderController::class, 'show'])->middleware('permission:orders.view');
             Route::post('/orders/{order}/send', [OrderController::class, 'send'])->middleware('permission:orders.send_to_station');
+            Route::post('/orders/{order}/cancel', [OrderLifecycleController::class, 'cancelOrder'])->middleware('permission:orders.cancel');
+            Route::patch('/order-items/{item}/preparation', [OrderLifecycleController::class, 'transition'])->middleware('permission:orders.send_to_station');
+            Route::post('/order-items/{item}/cancel', [OrderLifecycleController::class, 'cancelItem'])->middleware('permission:orders.cancel');
 
             Route::get('/bar-queue', [BarQueueController::class, 'index'])->middleware('permission:orders.view');
             Route::patch('/bar-queue/{item}/status', [BarQueueController::class, 'transition'])->middleware('permission:orders.send_to_station');
