@@ -14,28 +14,9 @@ use Illuminate\Http\Request;
 
 class OrderController extends Controller
 {
-    public function index(Request $request): JsonResponse
-    {
-        $orders = Order::query()->forBusiness(app(Business::class))->with(['items', 'payments'])
-            ->when($request->string('status')->isNotEmpty(), fn ($query) => $query->where('status', $request->string('status')->toString()))
-            ->latest('opened_at')->paginate(min((int) $request->integer('per_page', 20), 100));
-        return response()->json($orders);
-    }
-
-    public function store(StoreOrderRequest $request, CreateOrder $createOrder): JsonResponse
-    {
-        return response()->json(['data' => $createOrder->execute(app(Business::class), $request->user(), $request->validated())], 201);
-    }
-
-    public function show(string $order): JsonResponse
-    {
-        $record = Order::query()->forBusiness(app(Business::class))->with(['items', 'payments'])->whereKey($order)->firstOrFail();
-        return response()->json(['data' => $record]);
-    }
-
-    public function send(SendOrderToStationRequest $request, string $order, SendOrderToStation $service): JsonResponse
-    {
-        $record = Order::query()->forBusiness(app(Business::class))->whereKey($order)->firstOrFail();
-        return response()->json(['data' => $service->execute(app(Business::class), $record)]);
-    }
+    private const RELATIONS=['items','payments.refunds'];
+    public function index(Request $request):JsonResponse{$orders=Order::query()->forBusiness(app(Business::class))->with(self::RELATIONS)->when($request->string('status')->isNotEmpty(),fn($q)=>$q->where('status',$request->string('status')->toString()))->latest('opened_at')->paginate(min((int)$request->integer('per_page',20),100));return response()->json($orders);}
+    public function store(StoreOrderRequest $request,CreateOrder $service):JsonResponse{return response()->json(['data'=>$service->execute(app(Business::class),$request->user(),$request->validated())],201);}
+    public function show(string $order):JsonResponse{return response()->json(['data'=>Order::query()->forBusiness(app(Business::class))->with(self::RELATIONS)->whereKey($order)->firstOrFail()]);}
+    public function send(SendOrderToStationRequest $request,string $order,SendOrderToStation $service):JsonResponse{$record=Order::query()->forBusiness(app(Business::class))->whereKey($order)->firstOrFail();return response()->json(['data'=>$service->execute(app(Business::class),$record)]);}
 }
