@@ -18,8 +18,8 @@ return new class extends Migration {
             $table->foreignId('voided_by_user_id')->nullable()->after('product_id')->constrained('users')->nullOnDelete();
             $table->string('void_reason', 500)->nullable()->after('note');
             $table->timestamp('preparing_at')->nullable()->after('sent_at');
-            $table->timestamp('ready_at')->nullable()->after('preparing_at');
-            $table->timestamp('served_at')->nullable()->after('ready_at');
+            // prepared_at already exists in the original sales schema and is the canonical ready timestamp.
+            $table->timestamp('served_at')->nullable()->after('prepared_at');
             $table->timestamp('voided_at')->nullable()->after('served_at');
             $table->index(['business_id', 'preparation_status', 'updated_at'], 'order_items_business_prep_updated_index');
         });
@@ -30,7 +30,7 @@ return new class extends Migration {
         Schema::table('order_items', function (Blueprint $table): void {
             $table->dropIndex('order_items_business_prep_updated_index');
             $table->dropForeign(['voided_by_user_id']);
-            $table->dropColumn(['voided_by_user_id', 'void_reason', 'preparing_at', 'ready_at', 'served_at', 'voided_at']);
+            $table->dropColumn(['voided_by_user_id', 'void_reason', 'preparing_at', 'served_at', 'voided_at']);
         });
 
         Schema::table('orders', function (Blueprint $table): void {
