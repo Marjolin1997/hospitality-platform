@@ -13,6 +13,9 @@ use App\Jobs\FiscalizeCreditNoteJob;
 use App\Models\InvoiceCreditNote;
 use App\Services\Fiscalization\SaveFiscalizationProfile;
 use App\Services\Fiscalization\SaveFiscalizationSetup;
+use App\Services\Fiscalization\FiscalizationPreflight;
+use App\Services\Fiscalization\FiscalizationMonitoring;
+use App\Services\Fiscalization\ActivateProductionFiscalization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -48,6 +51,29 @@ final class FiscalizationController extends Controller
     {
         return response()->json([
             'data' => $setup->execute(app(Business::class), $request->validated()),
+        ]);
+    }
+
+    public function preflight(FiscalizationPreflight $preflight): JsonResponse
+    {
+        return response()->json([
+            'data' => $preflight->run(app(Business::class)),
+        ]);
+    }
+
+    public function monitoring(FiscalizationMonitoring $monitoring): JsonResponse
+    {
+        return response()->json([
+            'data' => $monitoring->forBusiness(app(Business::class)),
+        ]);
+    }
+
+    public function activateProduction(ActivateProductionFiscalization $activate): JsonResponse
+    {
+        $profile = $activate->execute(app(Business::class), request()->user());
+
+        return response()->json([
+            'data' => $this->resource($profile),
         ]);
     }
 
@@ -223,6 +249,14 @@ final class FiscalizationController extends Controller
             'certificate_reference_configured' => filled($profile?->certificate_secret_ref),
             'certificate_password_reference_configured' => filled($profile?->certificate_password_secret_ref),
             'last_verified_at' => $profile?->last_verified_at?->toISOString(),
+            'last_test_verified_at' => $profile?->last_test_verified_at?->toISOString(),
+            'last_production_verified_at' => $profile?->last_production_verified_at?->toISOString(),
+            'production_activated_at' => $profile?->production_activated_at?->toISOString(),
+            'preflight_checked_at' => $profile?->preflight_checked_at?->toISOString(),
+            'preflight_status' => $profile?->preflight_status,
+            'certificate_not_before' => $profile?->certificate_not_before?->toISOString(),
+            'certificate_not_after' => $profile?->certificate_not_after?->toISOString(),
+            'certificate_fingerprint_sha256' => $profile?->certificate_fingerprint_sha256,
             'ready_for_verification' => filled($profile?->software_code)
                 && filled($profile?->endpoint)
                 && filled($profile?->certificate_secret_ref)
