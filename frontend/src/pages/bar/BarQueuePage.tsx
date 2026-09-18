@@ -1,5 +1,5 @@
 import { CheckCircle2, ChefHat, Clock3, RefreshCw, Search, ShieldCheck, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { useBarQueue, useTransitionBarItem } from '../../features/bar/api';
 
@@ -17,7 +17,7 @@ export function BarQueuePage() {
   if(queue.isError)return <div className="panel management-state error"><strong>Bar queue unavailable</strong><span>Live preparation data could not be loaded.</span><button type="button" className="secondary-button" onClick={()=>queue.refetch()}><RefreshCw size={15}/> Try again</button></div>;
 
   const items=queue.data??[];
-  const stations=useMemo(()=>Array.from(new Set(items.map(item=>item.preparation_station??'Bar'))).sort(),[items]);
+  const stations=Array.from(new Set(items.map(item=>item.preparation_station??'Bar'))).sort();
   const term=search.trim().toLowerCase();
   const filtered=items.filter(item=>(station==='all'||(item.preparation_station??'Bar')===station)&&(!term||[item.product_name_snapshot,item.order.number,item.note,item.preparation_station].filter(Boolean).some(value=>String(value).toLowerCase().includes(term))));
 
