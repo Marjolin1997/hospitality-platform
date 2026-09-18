@@ -9,14 +9,19 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Services\Authorization\ManageBusinessRole;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 final class BusinessRoleController extends Controller
 {
     public function __construct(private readonly ManageBusinessRole $roles) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $business = app(Business::class);
+        $assignablePermissionKeys = $this->roles->assignablePermissionKeys(
+            $business,
+            (int) $request->user()->id,
+        );
 
         $roles = Role::query()
             ->where('business_id', $business->getKey())
@@ -39,6 +44,7 @@ final class BusinessRoleController extends Controller
             ]);
 
         $permissions = Permission::query()
+            ->whereIn('key', $assignablePermissionKeys)
             ->orderBy('group')
             ->orderBy('key')
             ->get(['key', 'group', 'description']);
@@ -74,12 +80,12 @@ final class BusinessRoleController extends Controller
         return response()->json(['data' => $this->resource($record)]);
     }
 
-    public function destroy(string $role): JsonResponse
+    public function destroy(Request $request, string $role): JsonResponse
     {
         $this->roles->delete(
             app(Business::class),
             $role,
-            (int) request()->user()->id,
+            (int) $request->user()->id,
         );
 
         return response()->json(['message' => 'Custom role deleted.']);
