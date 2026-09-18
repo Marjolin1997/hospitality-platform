@@ -230,3 +230,24 @@ test('diagnostics expose safe operational history but not payload hashes or cert
     expect(json_encode($invoice->json()))->not->toContain('secret-payload')
         ->and(json_encode($credit->json()))->not->toContain('credit-payload');
 });
+
+
+test('fiscal health endpoints separate view manage and production activation permissions', function (): void {
+    $business=fetBusiness('Endpoint Fiscal Health');
+    $viewer=fetUser($business,['fiscalization.view']);
+    $headers=['X-Business-Id'=>$business->id];
+
+    $this->getJson('/api/v1/fiscalization/monitoring',$headers)->assertOk()
+        ->assertJsonStructure(['data'=>['documents','attempts_24h','retry_backlog','recent_failures','generated_at']]);
+
+    $this->postJson('/api/v1/fiscalization/preflight',[],$headers)->assertForbidden();
+    $this->postJson('/api/v1/fiscalization/activate-production',[],$headers)->assertForbidden();
+
+    $manager=fetUser($business,['fiscalization.view','fiscalization.manage']);
+    $this->postJson('/api/v1/fiscalization/preflight',[], $headers)->assertOk()
+        ->assertJsonPath('data.status','blocked');
+    $this->postJson('/api/v1/fiscalization/activate-production',[], $headers)->assertForbidden();
+
+    $activator=fetUser($business,['fiscalization.view','fiscalization.activate_production']);
+    $this->postJson('/api/v1/fiscalization/activate-production',[], $headers)->assertNotFound();
+});
