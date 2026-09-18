@@ -128,12 +128,50 @@ final class OperationsService
         }, attempts: 3);
     }
 
+    public function reverseExpense(Business $business, string $expenseId, string $reason, int $userId): object
+    {
+        return DB::transaction(function () use ($business, $expenseId, $reason, $userId): object {
+            $expense = DB::table('expenses')->where('business_id', $business->id)->where('id', $expenseId)->lockForUpdate()->first();
+            abort_unless($expense, 404);
+
+            if ($expense->status !== 'posted' || $expense->reversal_of_expense_id !== null) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['expense' => 'Only an original posted expense can be reversed.']);
+            }
+
+            $existing = DB::table('expenses')->where('business_id', $business->id)->where('reversal_of_expense_id', $expenseId)->lockForUpdate()->first();
+            if ($existing) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['expense' => 'This expense has already been reversed.']);
+            }
+
+            $reversalId = (string) Str::ulid();
+            DB::table('expenses')->insert([
+                'id' => $reversalId, 'business_id' => $business->id, 'location_id' => $expense->location_id,
+                'created_by_user_id' => $userId, 'category' => $expense->category,
+                'description' => 'Reversal: '.$expense->description,
+                'amount' => $expense->amount, 'currency' => $expense->currency,
+                'expense_date' => now($business->timezone)->toDateString(), 'status' => 'reversal',
+                'reversal_of_expense_id' => $expenseId, 'reversed_by_user_id' => $userId,
+                'reversal_reason' => trim($reason), 'reversed_at' => now(),
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+            DB::table('expenses')->where('business_id', $business->id)->where('id', $expenseId)->update([
+                'status' => 'reversed', 'reversed_by_user_id' => $userId,
+                'reversal_reason' => trim($reason), 'reversed_at' => now(), 'updated_at' => now(),
+            ]);
+
+            return DB::table('expenses')->where('business_id', $business->id)->where('id', $reversalId)->first();
+        }, attempts: 3);
+    }
+
     public function financeOverview(Business $business): array
     {
         $from = now($business->timezone)->startOfMonth()->utc();
         $sales = BigDecimal::of((string) DB::table('payments')->where('business_id', $business->id)->where('status', 'completed')->where('paid_at', '>=', $from)->sum('amount_base'));
         $refunds = BigDecimal::of((string) DB::table('payment_refunds')->where('business_id', $business->id)->where('status', 'completed')->where('refunded_at', '>=', $from)->sum('amount_base'));
-        $expenses = BigDecimal::of((string) DB::table('expenses')->where('business_id', $business->id)->where('status', 'posted')->where('expense_date', '>=', $from->setTimezone($business->timezone)->toDateString())->sum('amount'));
+        $expenseFrom = $from->setTimezone($business->timezone)->toDateString();
+        $postedExpenses = BigDecimal::of((string) DB::table('expenses')->where('business_id', $business->id)->whereIn('status', ['posted','reversed'])->whereNull('reversal_of_expense_id')->where('expense_date', '>=', $expenseFrom)->sum('amount'));
+        $reversedExpenses = BigDecimal::of((string) DB::table('expenses')->where('business_id', $business->id)->where('status', 'reversal')->whereNotNull('reversal_of_expense_id')->where('expense_date', '>=', $expenseFrom)->sum('amount'));
+        $expenses = $postedExpenses->minus($reversedExpenses);
         $netSales = $sales->minus($refunds);
 
         return [
