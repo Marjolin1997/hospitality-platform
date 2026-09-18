@@ -15,8 +15,8 @@ class CollectPaymentRequest extends FormRequest
             'cash_session_id' => ['nullable', 'string'],
             'method' => ['required', Rule::in(['cash', 'card', 'bank_transfer', 'other'])],
             'currency' => ['required', Rule::in(['ALL', 'EUR', 'USD', 'GBP'])],
-            'amount' => ['required', 'numeric', 'gt:0'],
-            'tendered_amount' => ['nullable', 'numeric', 'gt:0'],
+            'amount' => ['required', 'decimal:0,4', 'gt:0', 'max:99999999999999.9999'],
+            'tendered_amount' => ['nullable', 'decimal:0,4', 'gt:0', 'max:99999999999999.9999'],
             'idempotency_key' => ['required', 'string', 'max:100'],
             'external_reference' => ['nullable', 'string', 'max:255'],
         ];
