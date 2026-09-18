@@ -295,27 +295,36 @@ test('monitoring aggregates fiscal states retries and recent failures without se
 test('production dispatch is blocked when activation or preflight becomes stale', function (): void {
     [$business, $user] = frtFixture('production');
     $profile = FiscalizationProfile::query()->where('business_id', $business->id)->firstOrFail();
+    $ca = tempnam(sys_get_temp_dir(), 'dispatch-ca-');
+    file_put_contents($ca, 'test-ca');
 
-    config()->set('fiscalization.production_endpoint', 'https://prod-dpt.example.test/service');
+    try {
+        config()->set('fiscalization.production_endpoint', 'https://prod-dpt.example.test/service');
+        config()->set('fiscalization.dpt_ca_bundle', $ca);
+        config()->set('queue.default', 'redis');
 
-    expect(fn () => app(FiscalizationDispatchGuard::class)->assertCanDispatch($business))
-        ->toThrow(ValidationException::class);
+        expect(fn () => app(FiscalizationDispatchGuard::class)->assertCanDispatch($business))
+            ->toThrow(ValidationException::class);
 
-    $profile->forceFill([
-        'status' => 'active',
-        'production_activated_at' => now(),
-        'production_activated_by_user_id' => $user->id,
-        'preflight_status' => 'ready',
-        'preflight_checked_at' => now(),
-        'certificate_not_after' => now()->addYear(),
-    ])->save();
+        $profile->forceFill([
+            'status' => 'active',
+            'production_activated_at' => now(),
+            'production_activated_by_user_id' => $user->id,
+            'preflight_status' => 'ready',
+            'preflight_checked_at' => now(),
+            'certificate_not_before' => now()->subDay(),
+            'certificate_not_after' => now()->addYear(),
+        ])->save();
 
-    expect(app(FiscalizationDispatchGuard::class)->assertCanDispatch($business)->id)->toBe($profile->id);
+        expect(app(FiscalizationDispatchGuard::class)->assertCanDispatch($business)->id)->toBe($profile->id);
 
-    $profile->forceFill(['preflight_status' => null, 'preflight_checked_at' => null])->save();
+        $profile->forceFill(['preflight_status' => null, 'preflight_checked_at' => null])->save();
 
-    expect(fn () => app(FiscalizationDispatchGuard::class)->assertCanDispatch($business))
-        ->toThrow(ValidationException::class);
+        expect(fn () => app(FiscalizationDispatchGuard::class)->assertCanDispatch($business))
+            ->toThrow(ValidationException::class);
+    } finally {
+        @unlink($ca);
+    }
 });
 
 
