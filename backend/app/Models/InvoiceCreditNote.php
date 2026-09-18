@@ -22,6 +22,8 @@ final class InvoiceCreditNote extends Model
             'tax_total' => 'decimal:4',
             'grand_total' => 'decimal:4',
             'issued_at' => 'datetime',
+            'original_invoice_issued_at_snapshot' => 'datetime',
+            'fiscalized_at' => 'datetime',
         ];
     }
 
