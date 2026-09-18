@@ -151,6 +151,9 @@ test('full invoice credit note is idempotent immutable and authorizes the refund
     expect(DB::table('invoice_credit_notes')->where('id',$creditId)->value('status'))->toBe('refunded')
         ->and(DB::table('orders')->where('id',$order)->value('status'))->toBe('refunded')
         ->and((string)DB::table('payment_refunds')->where('invoice_credit_note_id',$creditId)->sum('amount_base'))->toBe('12.0000');
+
+    $this->postJson("/api/v1/orders/{$order}/cancel",['reason'=>'Do not erase invoiced history'],$headers)
+        ->assertStatus(422)->assertJsonValidationErrors('order');
 });
 
 test('invoice credit notes remain tenant isolated',function():void{
