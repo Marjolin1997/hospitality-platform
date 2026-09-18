@@ -48,6 +48,13 @@ final class RefundPayment
             }
 
             $amountBase = $requested->multipliedBy(BigDecimal::of((string) $payment->exchange_rate))->toScale(self::SCALE, RoundingMode::HALF_UP);
+
+            if ($payment->method !== 'cash' && ! empty($payload['cash_session_id'])) {
+                throw ValidationException::withMessages([
+                    'cash_session_id' => 'A cash session can only be supplied when refunding a cash payment.',
+                ]);
+            }
+
             $session = null;
             if ($payment->method === 'cash') {
                 if (empty($payload['cash_session_id'])) {
