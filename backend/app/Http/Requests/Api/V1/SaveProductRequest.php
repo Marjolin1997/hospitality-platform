@@ -13,6 +13,14 @@ final class SaveProductRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'unit_code' => $this->filled('unit_code') ? trim((string) $this->input('unit_code')) : 'C62',
+            'unit_label' => $this->filled('unit_label') ? trim((string) $this->input('unit_label')) : 'Copë',
+        ]);
+    }
+
     public function rules(): array
     {
         $business = app(Business::class);
