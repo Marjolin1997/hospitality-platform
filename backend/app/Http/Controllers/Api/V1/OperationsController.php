@@ -74,18 +74,6 @@ final class OperationsController extends Controller
         return response()->json(['data' => $expense], 201);
     }
 
-    public function invoices(): JsonResponse
-    {
-        $business=app(Business::class); return response()->json(['data'=>DB::table('invoices')->where('business_id',$business->id)->orderByDesc('created_at')->limit(100)->get()]);
-    }
-
-    public function issueInvoice(Request $request): JsonResponse
-    {
-        $business=app(Business::class); $data=$request->validate(['order_id'=>['required','string'],'customer_name'=>['nullable','string','max:255'],'customer_tax_number'=>['nullable','string','max:80']]);
-        $invoice=$this->operations->issueInvoice($business,$data,$request->user()->id);
-        return response()->json(['data'=>$invoice]);
-    }
-
     public function staff(): JsonResponse
     {
         $business=app(Business::class); $rows=DB::table('business_user as bu')->join('users as u','u.id','=','bu.user_id')->leftJoin('roles as r','r.id','=','bu.role_id')->where('bu.business_id',$business->id)->select('u.id','u.name','u.email','bu.status','bu.role_id','r.name as role_name')->orderBy('u.name')->get();
