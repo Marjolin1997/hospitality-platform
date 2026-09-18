@@ -188,7 +188,9 @@ final class ManageBusinessRole
             $roleQuery->lockForUpdate();
         }
 
-        if (! $roleQuery->exists()) {
+        $role = $roleQuery->first();
+
+        if (! $role) {
             return [];
         }
 
