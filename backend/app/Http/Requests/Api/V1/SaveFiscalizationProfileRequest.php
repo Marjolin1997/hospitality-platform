@@ -14,7 +14,7 @@ final class SaveFiscalizationProfileRequest extends FormRequest
         return [
             'provider' => ['required', Rule::in(['direct_dpt'])],
             'environment' => ['required', Rule::in(['test','production'])],
-            'software_code' => ['nullable','string','max:64'],
+            'software_code' => ['nullable','string','size:10','regex:/^[a-z]{2}[0-9]{3}[a-z]{2}[0-9]{3}$/'],
             'is_issuer_in_vat' => ['nullable','boolean'],
             'endpoint' => ['nullable','url','max:500','starts_with:https://'],
             'certificate_secret_ref' => [
@@ -39,6 +39,7 @@ final class SaveFiscalizationProfileRequest extends FormRequest
         foreach (['software_code','endpoint','certificate_secret_ref','certificate_password_secret_ref'] as $field) {
             if ($this->has($field) && is_string($this->input($field))) {
                 $value = trim((string) $this->input($field));
+                if ($field === 'software_code') $value = strtolower($value);
                 $this->merge([$field => $value === '' ? null : $value]);
             }
         }
