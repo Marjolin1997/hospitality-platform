@@ -130,6 +130,7 @@ final class OperationsService
     public function saveCategory(Business $business, array $data): object
     {
         return DB::transaction(function () use ($business, $data): object {
+            DB::table('businesses')->where('id', $business->id)->lockForUpdate()->first();
             $name = trim($data['name']);
             $duplicate = DB::table('product_categories')
                 ->where('business_id', $business->id)
