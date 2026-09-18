@@ -61,3 +61,17 @@ test('merge uses deterministic sorted order locks before replay and item locks',
         ->and($orderLock)->toBeLessThan($replay)
         ->and($replay)->toBeLessThan($itemLock);
 });
+
+
+test('refund acquires the order lock before payment and replay locks', function (): void {
+    $source = cloSource('Services/Payments/RefundPayment.php');
+
+    $order = cloPosition($source, 'Order::query()->forBusiness($business)');
+    $payment = cloPosition($source, 'Payment::query()->forBusiness($business)');
+    $replay = cloPosition($source, "->where('idempotency_key', \$payload['idempotency_key'])");
+    $refundCreate = cloPosition($source, '$refund = PaymentRefund::query()->create([');
+
+    expect($order)->toBeLessThan($payment)
+        ->and($payment)->toBeLessThan($replay)
+        ->and($replay)->toBeLessThan($refundCreate);
+});
