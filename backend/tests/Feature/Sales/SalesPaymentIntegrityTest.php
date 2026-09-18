@@ -311,3 +311,28 @@ test('cash control blocks drawer overdraft and requires a note for closing varia
     ], $headers)->assertOk()->assertJsonPath('data.status', 'closed')
         ->assertJsonPath('data.cash_difference', '-1.0000');
 });
+
+
+test('partial mixed payments settle exactly and refunds reopen only the refunded balance', function (): void {
+    $business=spiBusiness();$location=spiLocation($business);$user=spiUser($business);$order=spiOrder($business,$location,$user,'100.0000');$headers=spiHeaders($business);
+    $register=(string)Str::ulid();DB::table('cash_registers')->insert(['id'=>$register,'business_id'=>$business->id,'location_id'=>$location->id,'name'=>'Mixed Drawer','code'=>'MIXED','is_active'=>true,'created_at'=>now(),'updated_at'=>now()]);
+    $session=$this->postJson('/api/v1/cash-sessions',['location_id'=>$location->id,'cash_register_id'=>$register,'opening_cash'=>'50.0000'],$headers)->assertCreated()->json('data.id');
+    $cash=$this->postJson("/api/v1/orders/{$order}/payments",['location_id'=>$location->id,'cash_session_id'=>$session,'method'=>'cash','currency'=>'EUR','amount'=>'40.0000','tendered_amount'=>'50.0000','idempotency_key'=>'cash-'.Str::uuid()],$headers)->assertCreated();
+    expect($cash->json('data.change_amount'))->toBe('10.0000')->and(DB::table('orders')->where('id',$order)->value('status'))->toBe('payment_due');
+    $card=$this->postJson("/api/v1/orders/{$order}/payments",['location_id'=>$location->id,'method'=>'card','currency'=>'EUR','amount'=>'60.0000','idempotency_key'=>'card-'.Str::uuid()],$headers)->assertCreated();
+    expect(DB::table('orders')->where('id',$order)->value('status'))->toBe('paid');
+    $this->postJson('/api/v1/payments/'.$card->json('data.id').'/refunds',['location_id'=>$location->id,'amount'=>'15.0000','reason'=>'Partial correction','idempotency_key'=>'refund-'.Str::uuid()],$headers)->assertCreated();
+    expect(DB::table('orders')->where('id',$order)->value('status'))->toBe('payment_due');
+    $this->postJson("/api/v1/orders/{$order}/payments",['location_id'=>$location->id,'method'=>'card','currency'=>'EUR','amount'=>'15.0000','idempotency_key'=>'card-'.Str::uuid()],$headers)->assertCreated();
+    expect(DB::table('orders')->where('id',$order)->value('status'))->toBe('paid');
+});
+
+test('cash refund cannot overdraw the reconciled drawer balance', function (): void {
+    $business=spiBusiness();$location=spiLocation($business);$user=spiUser($business);$order=spiOrder($business,$location,$user,'100.0000');$headers=spiHeaders($business);
+    $register=(string)Str::ulid();DB::table('cash_registers')->insert(['id'=>$register,'business_id'=>$business->id,'location_id'=>$location->id,'name'=>'Refund Drawer','code'=>'REFUND','is_active'=>true,'created_at'=>now(),'updated_at'=>now()]);
+    $session=$this->postJson('/api/v1/cash-sessions',['location_id'=>$location->id,'cash_register_id'=>$register,'opening_cash'=>'0.0000'],$headers)->assertCreated()->json('data.id');
+    $payment=$this->postJson("/api/v1/orders/{$order}/payments",['location_id'=>$location->id,'cash_session_id'=>$session,'method'=>'cash','currency'=>'EUR','amount'=>'100.0000','tendered_amount'=>'100.0000','idempotency_key'=>'cash-'.Str::uuid()],$headers)->assertCreated()->json('data.id');
+    $this->postJson("/api/v1/cash-sessions/{$session}/movements",['location_id'=>$location->id,'type'=>'cash_out','amount'=>'80.0000','currency'=>'EUR','reason'=>'Safe drop'],$headers)->assertCreated();
+    $this->postJson("/api/v1/payments/{$payment}/refunds",['location_id'=>$location->id,'cash_session_id'=>$session,'amount'=>'30.0000','reason'=>'Customer refund','idempotency_key'=>'refund-'.Str::uuid()],$headers)->assertStatus(422)->assertJsonValidationErrors('amount');
+    expect(DB::table('payment_refunds')->where('payment_id',$payment)->count())->toBe(0)->and(DB::table('cash_movements')->where('cash_session_id',$session)->where('type','refund')->count())->toBe(0);
+});
