@@ -153,6 +153,35 @@ export function SettingsPage(){
      {can('fiscalization.manage')&&<button className="primary-button" disabled={saveFiscal.isPending}>{saveFiscal.isPending?'Saving fiscal profile…':'Save fiscalization profile'}</button>}
    </form>}
  </div>}
+ {can('fiscalization.view')&&<div className="panel management-panel fiscalization-settings fiscal-health-panel">
+   <div className="panel-heading"><div><span className="eyebrow">FISCAL HEALTH</span><h2>DPT readiness & monitoring</h2><p>Preflight validates certificate health, deployment guards, tenant fiscal identity and production safety without exposing certificate material.</p></div><span className={`status-badge ${(preflightData?.status??fp?.preflight_status)==='ready'?'success':(preflightData?.status??fp?.preflight_status)==='blocked'?'danger':'warning'}`}>{preflightData?.status??fp?.preflight_status??'not checked'}</span></div>
+   <div className="metric-grid management-metrics fiscal-health-metrics">
+     <div className="metric-card"><span>Attempts 24h</span><strong>{monitor?.attempts_24h.total??0}</strong><small>{monitor?.attempts_24h.success_rate==null?'No attempts yet':`${monitor.attempts_24h.success_rate}% success`}</small></div>
+     <div className="metric-card"><span>Retry backlog</span><strong>{monitor?.retry_backlog.count??0}</strong><small>{monitor?.retry_backlog.oldest_next_retry_at?`Oldest due ${new Date(monitor.retry_backlog.oldest_next_retry_at).toLocaleString()}`:'No queued retries'}</small></div>
+     <div className="metric-card"><span>Retry-pending docs</span><strong>{pendingDocs}</strong><small>Invoices + corrections</small></div>
+     <div className="metric-card"><span>Failed docs</span><strong>{failedDocs}</strong><small>Require operator review</small></div>
+   </div>
+   <div className="fiscal-health-actions">
+     {can('fiscalization.manage')&&<button className="secondary-button" disabled={runPreflight.isPending} onClick={()=>runPreflight.mutate()}>{runPreflight.isPending?'Running preflight…':'Run DPT preflight'}</button>}
+     {fp?.environment==='production'&&can('fiscalization.activate_production')&&!fp.production_activated_at&&<button className="primary-button" disabled={activateProduction.isPending||!['ready','warning'].includes(fp.preflight_status??'')} onClick={()=>activateProduction.mutate()}>{activateProduction.isPending?'Activating…':'Activate PRODUCTION'}</button>}
+   </div>
+   <div className="fiscal-readiness-grid">
+     <div><span>Last TEST verification</span><strong>{fp?.last_test_verified_at?new Date(fp.last_test_verified_at).toLocaleString():'Not completed'}</strong></div>
+     <div><span>Production activation</span><strong>{fp?.production_activated_at?new Date(fp.production_activated_at).toLocaleString():'Locked'}</strong></div>
+     <div><span>Certificate validity</span><strong>{fp?.certificate_not_after?`Until ${new Date(fp.certificate_not_after).toLocaleDateString()}`:'Run preflight'}</strong></div>
+   </div>
+   {fp?.environment==='production'&&!fp.production_activated_at&&<p className="production-guard-note"><strong>Production guard active.</strong> TEST verification, certificate checks, approved production endpoint, CA trust bundle and preflight must pass before activation.</p>}
+   {runPreflight.isError&&<p className="error-state">{apiMessage(runPreflight.error)}</p>}
+   {activateProduction.isError&&<p className="error-state">{apiMessage(activateProduction.error)}</p>}
+   {activateProduction.isSuccess&&<span className="save-confirmation">Production fiscalization activated for this tenant.</span>}
+   {preflightData&&<div className="preflight-results">
+     <div className="preflight-summary"><strong>{preflightData.blocking_failures} blocking issues</strong><span>{preflightData.warnings} warnings · checked {new Date(preflightData.checked_at).toLocaleString()}</span></div>
+     <div className="preflight-check-list">{preflightData.checks.map(check=><div className={`preflight-check ${check.status}`} key={check.key}><span className="preflight-dot"/><div><strong>{check.label}</strong><small>{check.message}</small></div><b>{check.status}</b></div>)}</div>
+     {preflightData.certificate&&<div className="certificate-summary"><div><span>Certificate subject</span><strong>{preflightData.certificate.subject_cn??'—'}</strong></div><div><span>Issuer</span><strong>{preflightData.certificate.issuer_cn??'—'}</strong></div><div><span>Days remaining</span><strong>{preflightData.certificate.days_remaining}</strong></div><div><span>SHA-256 fingerprint</span><code>{preflightData.certificate.fingerprint_sha256}</code></div></div>}
+   </div>}
+   {fiscalMonitoring.isError&&<p className="error-state">{apiMessage(fiscalMonitoring.error)}</p>}
+   {monitor&&monitor.recent_failures.length>0&&<div className="fiscal-monitoring-failures"><h3>Recent fiscalization failures</h3><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Document</th><th>Status</th><th>Error</th><th>HTTP</th><th>Started</th></tr></thead><tbody>{monitor.recent_failures.map((failure,index)=><tr key={`${failure.document_type}-${failure.document_id}-${failure.attempt_no}-${index}`}><td><strong>{failure.number}</strong><small className="cell-note">{failure.document_type.replace('_',' ')} · attempt #{failure.attempt_no}</small></td><td><span className={`status-badge ${failure.status==='failed'?'danger':'warning'}`}>{failure.status.replace('_',' ')}</span></td><td>{failure.error_code?<><strong>{failure.error_code}</strong><small className="cell-note error">{failure.error_message}</small></>:'—'}</td><td>{failure.http_status??'—'}</td><td>{failure.started_at?new Date(failure.started_at).toLocaleString():'—'}</td></tr>)}</tbody></table></div></div>}
+ </div>}
  {can('fiscalization.view')&&<div className="panel management-panel fiscalization-settings">
    <div className="panel-heading"><div><span className="eyebrow">FISCAL IDENTITY MATRIX</span><h2>Business units, TCR devices and operators</h2><p>These codes come from Self-Care/DPT and are tenant-scoped. CASH invoices are issued from exactly one configured TCR.</p></div>{setupDraft&&<span className="status-badge">{setupDraft.summary.locations_ready+setupDraft.summary.registers_ready+setupDraft.summary.operators_ready}/{setupDraft.summary.locations_total+setupDraft.summary.registers_total+setupDraft.summary.operators_total} configured</span>}</div>
    {fiscalSetup.isLoading?<div className="management-state">Loading fiscal setup…</div>:fiscalSetup.isError?<div className="error-state">{apiMessage(fiscalSetup.error)}</div>:setupDraft&&<>
