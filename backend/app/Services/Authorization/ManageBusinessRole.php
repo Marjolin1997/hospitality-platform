@@ -95,6 +95,8 @@ final class ManageBusinessRole
     public function delete(Business $business, string $roleId, int $performedByUserId): void
     {
         DB::transaction(function () use ($business, $roleId, $performedByUserId): void {
+            DB::table('businesses')->where('id', $business->getKey())->lockForUpdate()->first();
+
             $role = Role::query()
                 ->where('business_id', $business->getKey())
                 ->whereKey($roleId)
