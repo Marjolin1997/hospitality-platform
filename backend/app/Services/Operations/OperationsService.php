@@ -168,7 +168,7 @@ final class OperationsService
         $from = now($business->timezone)->startOfMonth()->utc();
         $sales = BigDecimal::of((string) DB::table('payments')->where('business_id', $business->id)->where('status', 'completed')->where('paid_at', '>=', $from)->sum('amount_base'));
         $refunds = BigDecimal::of((string) DB::table('payment_refunds')->where('business_id', $business->id)->where('status', 'completed')->where('refunded_at', '>=', $from)->sum('amount_base'));
-        $expenseFrom = $from->setTimezone($business->timezone)->toDateString();
+        $expenseFrom = $from->copy()->setTimezone($business->timezone)->toDateString();
         $postedExpenses = BigDecimal::of((string) DB::table('expenses')->where('business_id', $business->id)->whereIn('status', ['posted','reversed'])->whereNull('reversal_of_expense_id')->where('expense_date', '>=', $expenseFrom)->sum('amount'));
         $reversedExpenses = BigDecimal::of((string) DB::table('expenses')->where('business_id', $business->id)->where('status', 'reversal')->whereNotNull('reversal_of_expense_id')->where('expense_date', '>=', $expenseFrom)->sum('amount'));
         $expenses = $postedExpenses->minus($reversedExpenses);
