@@ -253,7 +253,10 @@ test('staff update preserves at least one active owner while allowing a safe own
     expect(DB::table('business_user')
         ->where('business_id', $business->id)
         ->where('user_id', $owner->id)
-        ->value('role_id'))->toBe($ownerRole->id);
+        ->value('role_id'))->toBe($ownerRole->id)
+        ->and(DB::table('business_membership_audits')
+            ->where('business_id', $business->id)
+            ->count())->toBe(0);
 
     $coOwner = User::query()->create([
         'name' => 'Secondary Owner',
@@ -270,6 +273,11 @@ test('staff update preserves at least one active owner while allowing a safe own
         'status' => 'active',
     ], $headers)->assertOk();
 
+    $audit = DB::table('business_membership_audits')
+        ->where('business_id', $business->id)
+        ->where('target_user_id', $owner->id)
+        ->first();
+
     expect(DB::table('business_user')
         ->where('business_id', $business->id)
         ->where('user_id', $owner->id)
@@ -279,7 +287,16 @@ test('staff update preserves at least one active owner while allowing a safe own
             ->where('bu.business_id', $business->id)
             ->where('bu.status', 'active')
             ->where('r.slug', 'owner')
-            ->count())->toBe(1);
+            ->count())->toBe(1)
+        ->and($audit)->not->toBeNull()
+        ->and($audit->performed_by_user_id)->toBe($owner->id)
+        ->and($audit->previous_role_id)->toBe($ownerRole->id)
+        ->and($audit->previous_role_slug)->toBe('owner')
+        ->and($audit->previous_status)->toBe('active')
+        ->and($audit->new_role_id)->toBe($managerRole->id)
+        ->and($audit->new_role_slug)->toBe('manager')
+        ->and($audit->new_status)->toBe('active')
+        ->and($audit->action)->toBe('role_changed');
 });
 
 test('settings remain isolated by business',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$userA=omtUser($a);$userB=omtUser($b);$this->putJson('/api/v1/settings',['receipt_footer'=>'A footer','service_charge_enabled'=>true,'low_stock_alerts'=>true],omtHeaders($userA,$a))->assertOk();$this->putJson('/api/v1/settings',['receipt_footer'=>'B footer','service_charge_enabled'=>false,'low_stock_alerts'=>false],omtHeaders($userB,$b))->assertOk();$this->getJson('/api/v1/settings',omtHeaders($userA,$a))->assertOk()->assertJsonPath('data.settings.receipt_footer','A footer')->assertJsonPath('data.settings.service_charge_enabled',true);});
