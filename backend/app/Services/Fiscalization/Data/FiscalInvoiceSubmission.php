@@ -33,6 +33,8 @@ final readonly class FiscalInvoiceSubmission
         public array $sameTaxes,
         public array $payments,
         public string $payloadHash,
+        public ?string $correctiveIicRef = null,
+        public ?string $correctiveIssueDateTime = null,
     ) {}
 
     public function toArray(): array
