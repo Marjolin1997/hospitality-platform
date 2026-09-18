@@ -122,6 +122,45 @@ test('issued invoice blocks direct refunds until a document correction exists',f
     expect(DB::table('payment_refunds')->where('payment_id',$payment)->count())->toBe(0);
 });
 
+test('full invoice credit note is idempotent immutable and authorizes the refund lifecycle',function():void{
+    $business=omtBusiness('Credit notes');$location=omtLocation($business,'CN1');$user=omtUser($business);$headers=omtHeaders($user,$business);
+    $order=omtOrder($business,$location,$user,'paid');omtOrderItem($business,$order,'Flat White');$payment=omtSettleOrder($business,$order,$user);
+    $invoice=$this->postJson('/api/v1/invoices',['order_id'=>$order,'customer_name'=>'Guest'],$headers)->assertCreated()->json('data');
+
+    $key='credit-'.Str::uuid();
+    $first=$this->postJson("/api/v1/invoices/{$invoice['id']}/credit-notes",['reason'=>'Full order return','idempotency_key'=>$key],$headers)
+        ->assertCreated()->assertJsonPath('data.number','CN-'.now($business->timezone)->format('Ymd').'-0001')
+        ->assertJsonPath('data.status','issued')->assertJsonPath('data.grand_total','12.0000')->assertJsonCount(1,'data.lines');
+    $creditId=$first->json('data.id');
+    expect(DB::table('invoice_credit_note_lines')->where('invoice_credit_note_id',$creditId)->value('product_name_snapshot'))->toBe('Flat White');
+
+    $replay=$this->postJson("/api/v1/invoices/{$invoice['id']}/credit-notes",['reason'=>'Full order return','idempotency_key'=>$key],$headers)->assertCreated();
+    expect($replay->json('data.id'))->toBe($creditId);
+    $this->postJson("/api/v1/invoices/{$invoice['id']}/credit-notes",['reason'=>'Different replay','idempotency_key'=>$key],$headers)->assertStatus(422)->assertJsonValidationErrors('idempotency_key');
+    $this->postJson("/api/v1/invoices/{$invoice['id']}/credit-notes",['reason'=>'Second correction','idempotency_key'=>'credit-'.Str::uuid()],$headers)->assertStatus(422)->assertJsonValidationErrors('invoice');
+
+    $this->postJson("/api/v1/payments/{$payment}/refunds",[
+        'location_id'=>$location->id,'invoice_credit_note_id'=>$creditId,'amount'=>'5.0000','reason'=>'First refund tranche','idempotency_key'=>'refund-'.Str::uuid(),
+    ],$headers)->assertCreated()->assertJsonPath('data.invoice_credit_note_id',$creditId);
+    expect(DB::table('invoice_credit_notes')->where('id',$creditId)->value('status'))->toBe('partially_refunded')
+        ->and(DB::table('orders')->where('id',$order)->value('status'))->toBe('partially_refunded');
+
+    $this->postJson("/api/v1/payments/{$payment}/refunds",[
+        'location_id'=>$location->id,'invoice_credit_note_id'=>$creditId,'amount'=>'7.0000','reason'=>'Final refund tranche','idempotency_key'=>'refund-'.Str::uuid(),
+    ],$headers)->assertCreated();
+    expect(DB::table('invoice_credit_notes')->where('id',$creditId)->value('status'))->toBe('refunded')
+        ->and(DB::table('orders')->where('id',$order)->value('status'))->toBe('refunded')
+        ->and((string)DB::table('payment_refunds')->where('invoice_credit_note_id',$creditId)->sum('amount_base'))->toBe('12.0000');
+});
+
+test('invoice credit notes remain tenant isolated',function():void{
+    $a=omtBusiness('Credit A');$b=omtBusiness('Credit B');$la=omtLocation($a,'CA1');$lb=omtLocation($b,'CB1');$userA=omtUser($a);$userB=omtUser($b);
+    $orderB=omtOrder($b,$lb,$userB,'paid');omtOrderItem($b,$orderB);omtSettleOrder($b,$orderB,$userB);
+    $invoiceB=$this->postJson('/api/v1/invoices',['order_id'=>$orderB],omtHeaders($userB,$b))->assertCreated()->json('data.id');
+    $this->postJson("/api/v1/invoices/{$invoiceB}/credit-notes",['reason'=>'Cross tenant attempt','idempotency_key'=>'credit-'.Str::uuid()],omtHeaders($userA,$a))->assertNotFound();
+    expect(DB::table('invoice_credit_notes')->where('business_id',$a->id)->count())->toBe(0);
+});
+
 test('staff update rejects roles and memberships from another business',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$owner=omtUser($a);$foreignUser=omtUser($b);$headers=omtHeaders($owner,$a);$foreignRole=DB::table('business_user')->where('business_id',$b->id)->where('user_id',$foreignUser->id)->value('role_id');$this->patchJson('/api/v1/staff/'.$owner->id,['role_id'=>$foreignRole,'status'=>'active'],$headers)->assertStatus(422);$this->patchJson('/api/v1/staff/'.$foreignUser->id,['role_id'=>DB::table('business_user')->where('business_id',$a->id)->where('user_id',$owner->id)->value('role_id'),'status'=>'active'],$headers)->assertNotFound();});
 
 test('settings remain isolated by business',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$userA=omtUser($a);$userB=omtUser($b);$this->putJson('/api/v1/settings',['receipt_footer'=>'A footer','service_charge_enabled'=>true,'low_stock_alerts'=>true],omtHeaders($userA,$a))->assertOk();$this->putJson('/api/v1/settings',['receipt_footer'=>'B footer','service_charge_enabled'=>false,'low_stock_alerts'=>false],omtHeaders($userB,$b))->assertOk();$this->getJson('/api/v1/settings',omtHeaders($userA,$a))->assertOk()->assertJsonPath('data.settings.receipt_footer','A footer')->assertJsonPath('data.settings.service_charge_enabled',true);});
