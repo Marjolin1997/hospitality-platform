@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\SaveFiscalizationProfileRequest;
+use App\Http\Requests\Api\V1\SaveFiscalizationSetupRequest;
 use App\Models\Business;
 use App\Models\FiscalizationProfile;
 use App\Models\Invoice;
 use App\Jobs\FiscalizeInvoiceJob;
 use App\Services\Fiscalization\SaveFiscalizationProfile;
+use App\Services\Fiscalization\SaveFiscalizationSetup;
 use Illuminate\Http\JsonResponse;
 
 final class FiscalizationController extends Controller
@@ -29,6 +31,20 @@ final class FiscalizationController extends Controller
 
         return response()->json([
             'data' => $this->resource($profile),
+        ]);
+    }
+
+    public function setup(SaveFiscalizationSetup $setup): JsonResponse
+    {
+        return response()->json([
+            'data' => $setup->read(app(Business::class)),
+        ]);
+    }
+
+    public function updateSetup(SaveFiscalizationSetupRequest $request, SaveFiscalizationSetup $setup): JsonResponse
+    {
+        return response()->json([
+            'data' => $setup->execute(app(Business::class), $request->validated()),
         ]);
     }
 
