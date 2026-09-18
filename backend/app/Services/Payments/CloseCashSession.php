@@ -27,6 +27,12 @@ final class CloseCashSession
             $counted = BigDecimal::of((string) $payload['counted_cash'])->toScale(4, RoundingMode::HALF_UP);
             $difference = $counted->minus($expected)->toScale(4, RoundingMode::HALF_UP);
 
+            if (! $difference->isZero() && trim((string) ($payload['closing_note'] ?? '')) === '') {
+                throw ValidationException::withMessages([
+                    'closing_note' => 'A reconciliation note is required when counted cash differs from expected cash.',
+                ]);
+            }
+
             $session->forceFill([
                 'closed_by_user_id' => $user->getKey(),
                 'expected_cash' => (string) $expected,
