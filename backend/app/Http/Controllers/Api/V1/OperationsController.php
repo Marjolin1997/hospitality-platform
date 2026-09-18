@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\SaveProductRequest;
 use App\Http\Requests\Api\V1\SetProductStatusRequest;
 use App\Http\Requests\Api\V1\StoreExpenseRequest;
+use App\Http\Requests\Api\V1\ReverseExpenseRequest;
 use App\Models\Business;
 use App\Services\Operations\OperationsService;
 use Illuminate\Http\JsonResponse;
@@ -54,6 +55,12 @@ final class OperationsController extends Controller
         $data=$request->validate(['product_id'=>['required','string'],'quantity_delta'=>['required','numeric','not_in:0'],'note'=>['nullable','string','max:500']]);
         $this->operations->adjustInventory($business, $location, $data, $request->user()->id);
         return response()->json(['message'=>'Inventory adjusted.']);
+    }
+
+    public function reverseExpense(ReverseExpenseRequest $request, string $expense): JsonResponse
+    {
+        $reversal = $this->operations->reverseExpense(app(Business::class), $expense, $request->validated('reason'), $request->user()->id);
+        return response()->json(['data' => $reversal], 201);
     }
 
     public function finance(): JsonResponse
