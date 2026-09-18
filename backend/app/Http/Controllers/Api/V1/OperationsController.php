@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\SaveProductRequest;
 use App\Http\Requests\Api\V1\SetProductStatusRequest;
+use App\Http\Requests\Api\V1\StoreExpenseRequest;
 use App\Models\Business;
 use App\Services\Operations\OperationsService;
 use Illuminate\Http\JsonResponse;
@@ -60,12 +61,10 @@ final class OperationsController extends Controller
         return response()->json(['data'=>$this->operations->financeOverview(app(Business::class))]);
     }
 
-    public function createExpense(Request $request): JsonResponse
+    public function createExpense(StoreExpenseRequest $request): JsonResponse
     {
-        $business=app(Business::class); $data=$request->validate(['location_id'=>['nullable','string'],'category'=>['required','string','max:80'],'description'=>['required','string','max:255'],'amount'=>['required','numeric','gt:0'],'expense_date'=>['required','date']]);
-        if(!empty($data['location_id'])) abort_unless(DB::table('locations')->where('business_id',$business->id)->where('id',$data['location_id'])->exists(),422,'Invalid location.');
-        $id=(string)Str::ulid(); DB::table('expenses')->insert(['id'=>$id,'business_id'=>$business->id,'location_id'=>$data['location_id']??null,'created_by_user_id'=>$request->user()->id,'category'=>$data['category'],'description'=>$data['description'],'amount'=>$data['amount'],'currency'=>$business->currency,'expense_date'=>$data['expense_date'],'status'=>'posted','created_at'=>now(),'updated_at'=>now()]);
-        return response()->json(['data'=>DB::table('expenses')->where('business_id',$business->id)->where('id',$id)->first()],201);
+        $expense = $this->operations->createExpense(app(Business::class), $request->validated(), $request->user()->id);
+        return response()->json(['data' => $expense], 201);
     }
 
     public function invoices(): JsonResponse
