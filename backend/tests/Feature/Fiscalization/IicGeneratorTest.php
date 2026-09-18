@@ -16,7 +16,7 @@ test('NSLF IIC generation follows the signed fiscal input contract deterministic
     $first = $service->generate(
         issuerNuis: 'K02212001T',
         issueDateTime: '2026-09-18T10:37:45+02:00',
-        invoiceNumber: '10848/2026/aa123bb456',
+        invoiceNumber: '10848',
         businessUnitCode: 'kp830wi380',
         tcrCode: 'aa123bb456',
         softwareCode: 'sw123code',
@@ -26,7 +26,7 @@ test('NSLF IIC generation follows the signed fiscal input contract deterministic
     $second = $service->generate(
         issuerNuis: 'K02212001T',
         issueDateTime: '2026-09-18T10:37:45+02:00',
-        invoiceNumber: '10848/2026/aa123bb456',
+        invoiceNumber: '10848',
         businessUnitCode: 'kp830wi380',
         tcrCode: 'aa123bb456',
         softwareCode: 'sw123code',
@@ -34,7 +34,7 @@ test('NSLF IIC generation follows the signed fiscal input contract deterministic
         privateKeyPem: $privateKeyPem,
     );
 
-    expect($first['input'])->toBe('K02212001T|2026-09-18T10:37:45+02:00|10848/2026/aa123bb456|kp830wi380|aa123bb456|sw123code|100.00')
+    expect($first['input'])->toBe('K02212001T|2026-09-18T10:37:45+02:00|10848|kp830wi380|aa123bb456|sw123code|100.00')
         ->and($first['iic'])->toMatch('/^[0-9A-F]{32}$/')
         ->and($first['signature'])->toMatch('/^[0-9A-F]+$/')
         ->and($second['iic'])->toBe($first['iic'])
@@ -59,4 +59,23 @@ test('NSLF IIC generation rejects incomplete fiscal identity', function (): void
         totalPrice: '100.00',
         privateKeyPem: $privateKeyPem,
     ))->toThrow(InvalidArgumentException::class);
+});
+
+test('NSLF input preserves the empty TCR slot for a noncash fiscal identity', function (): void {
+    $resource = openssl_pkey_new(['private_key_bits'=>2048,'private_key_type'=>OPENSSL_KEYTYPE_RSA]);
+    $privateKeyPem = '';
+    openssl_pkey_export($resource, $privateKeyPem);
+
+    $result = app(IicGenerator::class)->generate(
+        issuerNuis: 'K02212001T',
+        issueDateTime: '2026-09-18T10:37:45+02:00',
+        invoiceNumber: '10849',
+        businessUnitCode: 'kp830wi380',
+        tcrCode: '',
+        softwareCode: 'sw123code',
+        totalPrice: '100.00',
+        privateKeyPem: $privateKeyPem,
+    );
+
+    expect($result['input'])->toBe('K02212001T|2026-09-18T10:37:45+02:00|10849|kp830wi380||sw123code|100.00');
 });
