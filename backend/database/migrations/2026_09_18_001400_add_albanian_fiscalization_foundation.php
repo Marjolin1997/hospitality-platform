@@ -63,6 +63,21 @@ return new class extends Migration {
             $table->decimal('discount_percent', 9, 4)->default(0)->after('unit_price');
         });
 
+        Schema::table('invoice_credit_notes', function (Blueprint $table): void {
+            $table->string('fiscalization_status', 24)->default('not_fiscalized')->after('status');
+            $table->string('fiscal_invoice_number', 64)->nullable()->after('fiscalization_status');
+            $table->unsignedBigInteger('fiscal_ordinal_number')->nullable()->after('fiscal_invoice_number');
+            $table->string('original_invoice_nslf_snapshot', 128)->nullable()->after('invoice_number_snapshot');
+            $table->string('nslf', 128)->nullable()->after('reason');
+            $table->string('nivf', 128)->nullable()->after('nslf');
+            $table->text('verification_url')->nullable()->after('nivf');
+            $table->longText('qr_payload')->nullable()->after('verification_url');
+            $table->timestamp('fiscalized_at')->nullable()->after('issued_at');
+            $table->unsignedSmallInteger('fiscalization_attempts')->default(0)->after('fiscalized_at');
+            $table->text('fiscalization_error')->nullable()->after('fiscalization_attempts');
+            $table->index(['business_id','fiscalization_status','issued_at'], 'credit_notes_business_fiscal_status_idx');
+        });
+
         Schema::create('invoice_payment_snapshots', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->foreignUlid('business_id')->constrained()->restrictOnDelete();
@@ -107,6 +122,15 @@ return new class extends Migration {
     {
         Schema::dropIfExists('invoice_fiscalization_attempts');
         Schema::dropIfExists('invoice_payment_snapshots');
+
+        Schema::table('invoice_credit_notes', function (Blueprint $table): void {
+            $table->dropIndex('credit_notes_business_fiscal_status_idx');
+            $table->dropColumn([
+                'fiscalization_status','fiscal_invoice_number','fiscal_ordinal_number',
+                'original_invoice_nslf_snapshot','nslf','nivf','verification_url','qr_payload',
+                'fiscalized_at','fiscalization_attempts','fiscalization_error',
+            ]);
+        });
 
         Schema::table('invoice_lines', function (Blueprint $table): void {
             $table->dropColumn(['unit_code_snapshot','unit_label_snapshot','discount_percent']);
