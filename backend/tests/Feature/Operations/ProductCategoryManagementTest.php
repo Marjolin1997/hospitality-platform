@@ -143,6 +143,10 @@ test('category names are unique inside a business but reusable across businesses
         ->assertStatus(422)
         ->assertJsonValidationErrors('name');
 
+    $this->postJson('/api/v1/management/categories', [...$payload, 'name' => 'coffee'], ccmHeaders($userA, $businessA))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('name');
+
     $this->postJson('/api/v1/management/categories', $payload, ccmHeaders($userB, $businessB))->assertCreated();
 });
 
@@ -170,6 +174,12 @@ test('category disable is blocked while active products still depend on it', fun
     $this->patchJson("/api/v1/management/categories/{$category}/status", ['is_active' => false], $headers)
         ->assertOk()
         ->assertJsonPath('data.is_active', false);
+
+    $this->patchJson("/api/v1/management/products/{$product}/status", ['is_active' => true], $headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('product');
+
+    expect((bool) DB::table('products')->where('id', $product)->value('is_active'))->toBeFalse();
 
     $this->patchJson("/api/v1/management/categories/{$category}/status", ['is_active' => true], $headers)
         ->assertOk()
