@@ -39,6 +39,16 @@ test('expense posting is tenant validated precise and rejects future dates',func
     expect(DB::table('expenses')->where('business_id',$a->id)->count())->toBe(1)->and(DB::table('expenses')->where('business_id',$a->id)->value('category'))->toBe('Supplies');
 });
 
+test('expense reversal preserves history and neutralizes finance totals exactly once',function():void{
+    $business=omtBusiness('Expense reversal');$location=omtLocation($business,'ER1');$user=omtUser($business);$headers=omtHeaders($user,$business);
+    $expense=$this->postJson('/api/v1/expenses',['location_id'=>$location->id,'category'=>'Supplies','description'=>'Coffee beans','amount'=>'25.5000','expense_date'=>now()->toDateString()],$headers)->assertCreated()->json('data.id');
+    $this->getJson('/api/v1/finance/overview',$headers)->assertOk()->assertJsonPath('data.expenses','25.5000');
+    $this->postJson("/api/v1/expenses/{$expense}/reverse",['reason'=>'Duplicate supplier receipt'],$headers)->assertCreated()->assertJsonPath('data.status','reversal')->assertJsonPath('data.reversal_of_expense_id',$expense);
+    expect(DB::table('expenses')->where('id',$expense)->value('status'))->toBe('reversed')->and(DB::table('expenses')->where('reversal_of_expense_id',$expense)->count())->toBe(1);
+    $this->getJson('/api/v1/finance/overview',$headers)->assertOk()->assertJsonPath('data.expenses','0.0000');
+    $this->postJson("/api/v1/expenses/{$expense}/reverse",['reason'=>'Second reversal attempt'],$headers)->assertStatus(422)->assertJsonValidationErrors('expense');
+});
+
 test('invoice issuance is idempotent per order and uses order totals',function():void{$business=omtBusiness('Invoices');$location=omtLocation($business,'I1');$user=omtUser($business);$headers=omtHeaders($user,$business);$order=omtOrder($business,$location,$user);$first=$this->postJson('/api/v1/invoices',['order_id'=>$order,'customer_name'=>'Customer'],$headers)->assertOk();$second=$this->postJson('/api/v1/invoices',['order_id'=>$order,'customer_name'=>'Changed'],$headers)->assertOk();expect($second->json('data.id'))->toBe($first->json('data.id'));expect(DB::table('invoices')->where('business_id',$business->id)->where('order_id',$order)->count())->toBe(1);$first->assertJsonPath('data.grand_total','12.0000')->assertJsonPath('data.currency','EUR')->assertJsonPath('data.status','issued');});
 
 test('invoice cannot be issued for another business order or a cancelled order',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$la=omtLocation($a,'A1');$lb=omtLocation($b,'B1');$userA=omtUser($a);$userB=omtUser($b);$headers=omtHeaders($userA,$a);$foreign=omtOrder($b,$lb,$userB);$cancelled=omtOrder($a,$la,$userA,'cancelled');$this->postJson('/api/v1/invoices',['order_id'=>$foreign],$headers)->assertNotFound();$this->postJson('/api/v1/invoices',['order_id'=>$cancelled],$headers)->assertStatus(422);});
