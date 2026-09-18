@@ -48,7 +48,7 @@ export function FiscalReceiptPage(){
 
       <section className="receipt-meta">
         <div><span>Nr:</span><strong>{doc.fiscal_invoice_number||doc.number}</strong></div>
-        <div><span>Data:</span><strong>{when(doc.fiscalized_at||doc.issued_at,tz)}</strong></div>
+        <div><span>Data:</span><strong>{when(doc.issued_at,tz)}</strong></div>
         <div><span>Operator:</span><strong>{doc.fiscal_operator_code_snapshot||'—'}</strong></div>
         <div><span>Njësia:</span><strong>{doc.fiscal_business_unit_code_snapshot||'—'}</strong></div>
         <div><span>TCR:</span><strong>{doc.fiscal_tcr_code_snapshot||'—'}</strong></div>
