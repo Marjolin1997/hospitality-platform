@@ -301,3 +301,48 @@ test('production dispatch is blocked when activation or preflight becomes stale'
     expect(fn () => app(FiscalizationDispatchGuard::class)->assertCanDispatch($business))
         ->toThrow(ValidationException::class);
 });
+
+
+test('monitoring ignores superseded retry attempts after a later success', function (): void {
+    [$business, $user] = frtFixture('test');
+    $locationId = DB::table('locations')->where('business_id',$business->id)->value('id');
+
+    $orderId = (string) Str::ulid();
+    DB::table('orders')->insert([
+        'id'=>$orderId,'business_id'=>$business->id,'location_id'=>$locationId,'opened_by_user_id'=>$user->id,
+        'number'=>'ORD-MON-2','type'=>'takeaway','status'=>'paid','currency'=>'ALL',
+        'subtotal'=>'10.0000','discount_total'=>'0.0000','tax_total'=>'2.0000','grand_total'=>'12.0000',
+        'opened_at'=>now(),'created_at'=>now(),'updated_at'=>now(),
+    ]);
+
+    $invoiceId = (string) Str::ulid();
+    DB::table('invoices')->insert([
+        'id'=>$invoiceId,'business_id'=>$business->id,'location_id'=>$locationId,'order_id'=>$orderId,
+        'created_by_user_id'=>$user->id,'number'=>'INV-MON-2','status'=>'issued','fiscalization_status'=>'fiscalized',
+        'currency'=>'ALL','subtotal'=>'10.0000','discount_total'=>'0.0000','tax_total'=>'2.0000','grand_total'=>'12.0000',
+        'nslf'=>'00112233445566778899AABBCCDDEEFF','nivf'=>'FIC-MON-2','issued_at'=>now(),'fiscalized_at'=>now(),
+        'created_at'=>now(),'updated_at'=>now(),
+    ]);
+
+    DB::table('invoice_fiscalization_attempts')->insert([
+        [
+            'id'=>(string)Str::ulid(),'business_id'=>$business->id,'invoice_id'=>$invoiceId,'attempt_no'=>1,
+            'provider'=>'direct_dpt','environment'=>'test','status'=>'retry_pending','retryable'=>true,
+            'next_retry_at'=>now()->subMinute(),'error_code'=>'NETWORK_TIMEOUT','error_message'=>'Old retry',
+            'started_at'=>now()->subMinutes(2),'completed_at'=>now()->subMinutes(2),'created_at'=>now(),'updated_at'=>now(),
+        ],
+        [
+            'id'=>(string)Str::ulid(),'business_id'=>$business->id,'invoice_id'=>$invoiceId,'attempt_no'=>2,
+            'provider'=>'direct_dpt','environment'=>'test','status'=>'succeeded','retryable'=>false,
+            'nslf'=>'00112233445566778899AABBCCDDEEFF','nivf'=>'FIC-MON-2',
+            'started_at'=>now()->subMinute(),'completed_at'=>now()->subMinute(),'created_at'=>now(),'updated_at'=>now(),
+        ],
+    ]);
+
+    $result = app(FiscalizationMonitoring::class)->forBusiness($business);
+
+    expect($result['retry_backlog']['count'])->toBe(0)
+        ->and(collect($result['recent_failures'])->where('document_id',$invoiceId))->toHaveCount(0)
+        ->and($result['attempts_24h']['total'])->toBe(2)
+        ->and($result['attempts_24h']['succeeded'])->toBe(1);
+});
