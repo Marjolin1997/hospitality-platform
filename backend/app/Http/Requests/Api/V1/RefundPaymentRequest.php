@@ -11,7 +11,7 @@ class RefundPaymentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'amount' => ['required', 'numeric', 'gt:0'],
+            'amount' => ['required', 'decimal:0,4', 'gt:0', 'max:99999999999999.9999'],
             'cash_session_id' => ['nullable', 'string'],
             'reason' => ['required', 'string', 'min:3', 'max:500'],
             'idempotency_key' => ['required', 'string', 'max:100'],
