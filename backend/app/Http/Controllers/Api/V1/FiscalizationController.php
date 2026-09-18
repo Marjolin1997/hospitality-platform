@@ -138,6 +138,66 @@ final class FiscalizationController extends Controller
         ], 202);
     }
 
+    public function invoiceAttempts(string $invoice): JsonResponse
+    {
+        $business = app(Business::class);
+        $row = Invoice::query()->forBusiness($business)->whereKey($invoice)->first();
+        abort_unless($row, 404);
+
+        $attempts = DB::table('invoice_fiscalization_attempts')
+            ->where('business_id', $business->id)
+            ->where('invoice_id', $row->id)
+            ->orderByDesc('attempt_no')
+            ->get([
+                'id','attempt_no','provider','environment','status','retryable','next_retry_at',
+                'http_status','request_id','nslf','nivf','error_code','error_message',
+                'started_at','completed_at','created_at',
+            ]);
+
+        return response()->json([
+            'data' => [
+                'document_type' => 'invoice',
+                'document_id' => $row->id,
+                'number' => $row->number,
+                'fiscalization_status' => $row->fiscalization_status,
+                'nslf' => $row->nslf,
+                'nivf' => $row->nivf,
+                'fiscalization_error' => $row->fiscalization_error,
+                'attempts' => $attempts,
+            ],
+        ]);
+    }
+
+    public function creditNoteAttempts(string $creditNote): JsonResponse
+    {
+        $business = app(Business::class);
+        $row = InvoiceCreditNote::query()->forBusiness($business)->whereKey($creditNote)->first();
+        abort_unless($row, 404);
+
+        $attempts = DB::table('credit_note_fiscalization_attempts')
+            ->where('business_id', $business->id)
+            ->where('invoice_credit_note_id', $row->id)
+            ->orderByDesc('attempt_no')
+            ->get([
+                'id','attempt_no','provider','environment','status','retryable','next_retry_at',
+                'http_status','request_id','nslf','nivf','error_code','error_message',
+                'started_at','completed_at','created_at',
+            ]);
+
+        return response()->json([
+            'data' => [
+                'document_type' => 'credit_note',
+                'document_id' => $row->id,
+                'number' => $row->number,
+                'fiscalization_status' => $row->fiscalization_status,
+                'nslf' => $row->nslf,
+                'nivf' => $row->nivf,
+                'fiscalization_error' => $row->fiscalization_error,
+                'attempts' => $attempts,
+            ],
+        ]);
+    }
+
     private function resource(?FiscalizationProfile $profile): array
     {
         return [
