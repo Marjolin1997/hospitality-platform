@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\SaveProductCategoryRequest;
 use App\Http\Requests\Api\V1\SaveProductRequest;
+use App\Http\Requests\Api\V1\SetProductCategoryStatusRequest;
 use App\Http\Requests\Api\V1\SetProductStatusRequest;
 use App\Http\Requests\Api\V1\StoreExpenseRequest;
 use App\Http\Requests\Api\V1\ReverseExpenseRequest;
@@ -29,6 +31,61 @@ final class OperationsController extends Controller
         $categories = DB::table('product_categories')->where('business_id',$business->id)->where('is_active',true)
             ->select('id','name')->orderBy('sort_order')->orderBy('name')->get();
         return response()->json(['data'=>['products'=>$rows,'categories'=>$categories]]);
+    }
+
+    public function categories(): JsonResponse
+    {
+        $business = app(Business::class);
+
+        $rows = DB::table('product_categories')
+            ->where('business_id', $business->id)
+            ->select('id', 'name', 'color', 'sort_order', 'is_active')
+            ->selectSub(function ($query): void {
+                $query->from('products')
+                    ->selectRaw('COUNT(*)')
+                    ->whereColumn('products.product_category_id', 'product_categories.id')
+                    ->whereColumn('products.business_id', 'product_categories.business_id');
+            }, 'product_count')
+            ->selectSub(function ($query): void {
+                $query->from('products')
+                    ->selectRaw('COUNT(*)')
+                    ->whereColumn('products.product_category_id', 'product_categories.id')
+                    ->whereColumn('products.business_id', 'product_categories.business_id')
+                    ->where('products.is_active', true);
+            }, 'active_product_count')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get()
+            ->map(function (object $row): object {
+                $row->is_active = (bool) $row->is_active;
+                $row->product_count = (int) $row->product_count;
+                $row->active_product_count = (int) $row->active_product_count;
+
+                return $row;
+            });
+
+        return response()->json(['data' => $rows]);
+    }
+
+    public function saveCategory(SaveProductCategoryRequest $request): JsonResponse
+    {
+        $category = $this->operations->saveCategory(app(Business::class), $request->validated());
+
+        return response()->json(
+            ['data' => $category],
+            $request->filled('id') ? 200 : 201,
+        );
+    }
+
+    public function setCategoryStatus(SetProductCategoryStatusRequest $request, string $category): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->operations->setCategoryStatus(
+                app(Business::class),
+                $category,
+                (bool) $request->validated('is_active'),
+            ),
+        ]);
     }
 
     public function saveProduct(SaveProductRequest $request): JsonResponse
