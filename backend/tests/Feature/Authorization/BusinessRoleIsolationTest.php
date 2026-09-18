@@ -93,10 +93,10 @@ test('operational role templates enforce least privilege contracts', function ()
         ->and(rbacRolePermissionKeys($cashier))->toContain('orders.view', 'payments.collect', 'payments.refund', 'invoices.view')
         ->and(rbacRolePermissionKeys($cashier))->not->toContain('orders.prepare', 'orders.split', 'orders.merge', 'expenses.approve', 'invoices.correct')
         ->and(rbacRolePermissionKeys($manager))->toContain('expenses.create', 'expenses.approve', 'invoices.issue', 'invoices.correct', 'fiscalization.view', 'fiscalization.issue', 'fiscalization.retry')
-        ->and(rbacRolePermissionKeys($manager))->not->toContain('fiscalization.manage')
+        ->and(rbacRolePermissionKeys($manager))->not->toContain('fiscalization.manage', 'fiscalization.activate_production')
         ->and(rbacRolePermissionKeys($finance))->toContain('finance.view', 'expenses.create', 'expenses.approve', 'invoices.issue', 'invoices.correct', 'fiscalization.view', 'fiscalization.issue', 'fiscalization.retry')
-        ->and(rbacRolePermissionKeys($finance))->not->toContain('fiscalization.manage')
-        ->and(rbacRolePermissionKeys($owner))->toContain('fiscalization.manage', 'fiscalization.issue', 'fiscalization.retry');
+        ->and(rbacRolePermissionKeys($finance))->not->toContain('fiscalization.manage', 'fiscalization.activate_production')
+        ->and(rbacRolePermissionKeys($owner))->toContain('fiscalization.manage', 'fiscalization.issue', 'fiscalization.retry', 'fiscalization.activate_production');
 });
 
 test('reprovisioning synchronizes newly introduced operational permissions into existing business roles', function (): void {
