@@ -41,11 +41,11 @@ export function AppShell(){
 
   return <div className="app-shell">
     <a className="skip-link" href="#workspace-content">Skip to workspace</a>
-    {mobileNavOpen&&<button className="sidebar-scrim" aria-label="Close navigation" onClick={()=>setMobileNavOpen(false)}/>}
+    {mobileNavOpen&&<button type="button" className="sidebar-scrim" aria-label="Close navigation" onClick={()=>setMobileNavOpen(false)}/>}
     <aside className={`sidebar ${mobileNavOpen?'mobile-open':''}`} aria-label="Workspace navigation">
       <div className="sidebar-brand-row">
         <div className="brand"><div className="brand-mark">H</div><div><strong>Hospitality</strong><span>Bar & Café OS</span></div></div>
-        <button className="sidebar-close" aria-label="Close navigation" onClick={()=>setMobileNavOpen(false)}><X size={18}/></button>
+        <button type="button" className="sidebar-close" aria-label="Close navigation" onClick={()=>setMobileNavOpen(false)}><X size={18}/></button>
       </div>
 
       <div className="mobile-workspace-switchers">
@@ -71,7 +71,7 @@ export function AppShell(){
     <main className="main-content">
       <header className="topbar">
         <div className="mobile-topbar-brand">
-          <button className="mobile-menu-button" aria-label="Open navigation" aria-expanded={mobileNavOpen} onClick={()=>setMobileNavOpen(true)}><Menu size={20}/></button>
+          <button type="button" className="mobile-menu-button" aria-label="Open navigation" aria-expanded={mobileNavOpen} onClick={()=>setMobileNavOpen(true)}><Menu size={20}/></button>
           <div><strong>{activeNavigation.label}</strong><span>{activeLocation?.name??activeBusiness?.name??'Workspace'}</span></div>
         </div>
 
@@ -86,9 +86,9 @@ export function AppShell(){
         </div>
 
         <div className="topbar-actions">
-          {canUseCashRegister&&<button className="ghost-button topbar-cash-button" onClick={()=>navigate('/cash-register')}><WalletCards size={16}/> Cash register</button>}
+          {canUseCashRegister&&<button type="button" className="ghost-button topbar-cash-button" onClick={()=>navigate('/cash-register')}><WalletCards size={16}/> Cash register</button>}
           <div className="account-chip"><div className="avatar">{user?.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div><div><strong>{user?.name}</strong><span>{activeBusiness?.role?.name??user?.email}</span></div></div>
-          <button className="icon-button" title="Sign out" aria-label="Sign out" onClick={()=>logout()}><LogOut size={18}/></button>
+          <button type="button" className="icon-button" title="Sign out" aria-label="Sign out" onClick={()=>logout()}><LogOut size={18}/></button>
         </div>
       </header>
       <div className="page-container" id="workspace-content"><Outlet/></div>
