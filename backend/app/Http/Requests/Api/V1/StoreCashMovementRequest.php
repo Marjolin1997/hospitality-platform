@@ -15,7 +15,7 @@ class StoreCashMovementRequest extends FormRequest
             'type' => ['required', Rule::in(['cash_in', 'cash_out'])],
             'amount' => ['required', 'decimal:0,4', 'gt:0', 'max:99999999999999.9999'],
             'currency' => ['required', Rule::in(['ALL', 'EUR', 'USD', 'GBP'])],
-            'reason' => ['required', 'string', 'max:255'],
+            'reason' => ['required', 'string', 'min:3', 'max:255'],
         ];
     }
 }
