@@ -26,7 +26,6 @@ final class BusinessRoleController extends Controller
         $roles = Role::query()
             ->where('business_id', $business->getKey())
             ->with(['permissions' => fn ($query) => $query->select('permissions.id', 'key', 'group', 'description')->orderBy('group')->orderBy('key')])
-            ->withCount('users')
             ->orderByDesc('is_system')
             ->orderBy('name')
             ->get()
@@ -35,7 +34,7 @@ final class BusinessRoleController extends Controller
                 'name' => $role->name,
                 'slug' => $role->slug,
                 'is_system' => $role->is_system,
-                'member_count' => $role->users_count,
+                'member_count' => DB::table('business_user')->where('business_id', $business->getKey())->where('role_id', $role->getKey())->count(),
                 'permissions' => $role->permissions->map(fn (Permission $permission) => [
                     'key' => $permission->key,
                     'group' => $permission->group,
@@ -98,7 +97,7 @@ final class BusinessRoleController extends Controller
             'name' => $role->name,
             'slug' => $role->slug,
             'is_system' => $role->is_system,
-            'member_count' => $role->users_count ?? 0,
+            'member_count' => DB::table('business_user')->where('business_id', $role->business_id)->where('role_id', $role->getKey())->count(),
             'permissions' => $role->permissions->map(fn (Permission $permission) => [
                 'key' => $permission->key,
                 'group' => $permission->group,
