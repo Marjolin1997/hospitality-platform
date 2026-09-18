@@ -16,6 +16,12 @@ final class FiscalizationProfile extends Model
     {
         return [
             'last_verified_at' => 'datetime',
+            'last_test_verified_at' => 'datetime',
+            'last_production_verified_at' => 'datetime',
+            'production_activated_at' => 'datetime',
+            'preflight_checked_at' => 'datetime',
+            'certificate_not_before' => 'datetime',
+            'certificate_not_after' => 'datetime',
             'is_issuer_in_vat' => 'boolean',
         ];
     }
