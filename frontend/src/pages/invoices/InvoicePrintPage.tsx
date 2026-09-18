@@ -15,7 +15,7 @@ type PaymentSnapshot={
   amount_base:string;base_currency:string;exchange_rate:string;external_reference:string|null;
 };
 type InvoiceDetail={
-  id:string;number:string;status:string;fiscalization_status:string;fiscal_invoice_type:string|null;
+  id:string;number:string;status:string;fiscalization_status:string;fiscal_invoice_type:string|null;fiscal_invoice_number:string|null;
   currency:string;subtotal:string;discount_total:string;tax_total:string;grand_total:string;
   order_number_snapshot:string|null;business_name_snapshot:string|null;business_legal_name_snapshot:string|null;
   business_tax_number_snapshot:string|null;location_name_snapshot:string|null;location_address_snapshot:string|null;
@@ -87,8 +87,9 @@ export function InvoicePrintPage(){
       </section>
 
       <section className="invoice-box invoice-party-grid">
-        <span>Data dhe ora e lëshimit të faturës:</span><strong>{fiscalDate(invoice.fiscalized_at||invoice.issued_at,timeZone)}</strong>
-        <span>Numri i Faturës:</span><strong>{invoice.number}</strong>
+        <span>Data dhe ora e lëshimit të faturës:</span><strong>{fiscalDate(invoice.issued_at,timeZone)}</strong>
+        <span>Numri fiskal i Faturës:</span><strong>{invoice.fiscal_invoice_number??invoice.number}</strong>
+        {invoice.fiscal_invoice_number&&<><span>Referenca e brendshme:</span><strong>{invoice.number}</strong></>}
         <span>Operatori:</span><strong>{invoice.fiscal_operator_code_snapshot??'—'}</strong>
         <span>Kodi i vendit të ushtrimit të veprimtarisë:</span><strong>{invoice.fiscal_business_unit_code_snapshot??'—'}</strong>
         <span>Kodi i pajisjes elektronike:</span><strong>{invoice.fiscal_tcr_code_snapshot??'—'}</strong>
