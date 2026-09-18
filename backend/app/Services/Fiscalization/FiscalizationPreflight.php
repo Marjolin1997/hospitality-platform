@@ -118,21 +118,31 @@ final class FiscalizationPreflight
             ->where('is_active', true)
             ->get(['id','fiscal_tcr_code']);
         $registersReady = $activeRegisters->filter(fn ($row) => filled($row->fiscal_tcr_code))->count();
+        $tcrComplete = $activeRegisters->count() === 0 || $registersReady === $activeRegisters->count();
         $this->check($checks, 'tcr_registers', 'Active TCR registers',
-            $activeRegisters->count() === 0 || $registersReady === $activeRegisters->count(),
-            false,
+            $tcrComplete,
+            $profile->environment === 'production',
             "{$registersReady}/{$activeRegisters->count()} active registers have TCR codes.",
-            ($activeRegisters->count() > 0 && $registersReady !== $activeRegisters->count()) ? 'warning' : null);
+            ! $tcrComplete && $profile->environment !== 'production' ? 'warning' : null);
 
-        $activeOperators = DB::table('business_user')
-            ->where('business_id', $business->id)
-            ->where('status', 'active')
-            ->get(['user_id','fiscal_operator_code']);
-        $operatorsReady = $activeOperators->filter(fn ($row) => filled($row->fiscal_operator_code))->count();
-        $this->check($checks, 'operators', 'Active fiscal operators',
-            $activeOperators->count() > 0 && $operatorsReady > 0,
+        $fiscalIssuers = DB::table('business_user as bu')
+            ->join('roles as r', function ($join) use ($business): void {
+                $join->on('r.id','=','bu.role_id')
+                    ->where('r.business_id',$business->id);
+            })
+            ->join('permission_role as pr','pr.role_id','=','r.id')
+            ->join('permissions as p','p.id','=','pr.permission_id')
+            ->where('bu.business_id', $business->id)
+            ->where('bu.status', 'active')
+            ->where('p.key', 'fiscalization.issue')
+            ->distinct()
+            ->get(['bu.user_id','bu.fiscal_operator_code']);
+
+        $issuersReady = $fiscalIssuers->filter(fn ($row) => filled($row->fiscal_operator_code))->count();
+        $this->check($checks, 'operators', 'Authorized fiscal operators',
+            $fiscalIssuers->count() > 0 && $issuersReady === $fiscalIssuers->count(),
             true,
-            "{$operatorsReady}/{$activeOperators->count()} active members have operator codes.");
+            "{$issuersReady}/{$fiscalIssuers->count()} users authorized to fiscalize documents have DPT operator codes.");
 
         if ($profile->environment === 'production') {
             $this->check($checks, 'test_verified', 'Successful TEST verification',
