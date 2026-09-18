@@ -39,6 +39,7 @@ final class FiscalizationController extends Controller
             'software_code' => $profile?->software_code,
             'endpoint' => $profile?->endpoint,
             'certificate_reference_configured' => filled($profile?->certificate_secret_ref),
+            'certificate_password_reference_configured' => filled($profile?->certificate_password_secret_ref),
             'last_verified_at' => $profile?->last_verified_at?->toISOString(),
             'ready_for_verification' => filled($profile?->software_code)
                 && filled($profile?->endpoint)
