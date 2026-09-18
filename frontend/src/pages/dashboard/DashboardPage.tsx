@@ -64,7 +64,14 @@ export function DashboardPage() {
   const occupiedTableIds=new Set(locationOrders.map(order=>order.venue_table_id).filter(Boolean));
   const quickOrders=locationOrders.filter(order=>!order.venue_table_id).length;
   const isRefreshing=[orders,inventory,queue,venue,finance,cashSessions].some(query=>query.isFetching);
-  const refetchAll=()=>{void Promise.all([orders.refetch(),inventory.refetch(),queue.refetch(),venue.refetch(),finance.refetch(),cashSessions.refetch()])};
+  const refetchAll=()=>{
+    const requests:Promise<unknown>[]=[];
+    if(can('orders.view')){requests.push(orders.refetch(),queue.refetch(),venue.refetch())}
+    if(can('inventory.view'))requests.push(inventory.refetch());
+    if(can('finance.view'))requests.push(finance.refetch());
+    if(can('payments.collect'))requests.push(cashSessions.refetch());
+    void Promise.all(requests);
+  };
 
   const metrics=[
     {label:'Net sales · month',value:can('finance.view')?(finance.data?money(finance.data.sales,currency):'—'):'—',note:can('finance.view')?'Completed payments less refunds':'Finance permission required',icon:Banknote,to:'/finance',enabled:can('finance.view')},
