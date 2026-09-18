@@ -252,3 +252,62 @@ test('foreign currency payment uses inverse rate and enforces the base remaining
     expect($payment->json('data.amount_base'))->toBe('100.0000')
         ->and(DB::table('orders')->where('id', $order)->value('status'))->toBe('paid');
 });
+
+
+test('cash payment idempotency rejects a changed tendered amount', function (): void {
+    $business = spiBusiness();
+    $location = spiLocation($business);
+    $user = spiUser($business);
+    $order = spiOrder($business, $location, $user);
+    $headers = spiHeaders($business);
+
+    $registerId = (string) Str::ulid();
+    DB::table('cash_registers')->insert([
+        'id' => $registerId, 'business_id' => $business->id, 'location_id' => $location->id,
+        'name' => 'Main Drawer', 'code' => 'MAIN-DRAWER', 'is_active' => true,
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $session = $this->postJson('/api/v1/cash-sessions', [
+        'cash_register_id' => $registerId, 'opening_cash' => '100.0000',
+    ], $headers)->assertCreated()->json('data.id');
+
+    $key = 'cash-pay-'.Str::uuid();
+    $payload = [
+        'cash_session_id' => $session, 'method' => 'cash', 'currency' => 'EUR',
+        'amount' => '20.0000', 'tendered_amount' => '50.0000', 'idempotency_key' => $key,
+    ];
+    $this->postJson("/api/v1/orders/{$order}/payments", $payload, $headers)->assertCreated();
+    $this->postJson("/api/v1/orders/{$order}/payments", [...$payload, 'tendered_amount' => '100.0000'], $headers)
+        ->assertStatus(422)->assertJsonValidationErrors(['idempotency_key']);
+});
+
+test('cash control blocks drawer overdraft and requires a note for closing variance', function (): void {
+    $business = spiBusiness();
+    $location = spiLocation($business);
+    spiUser($business);
+    $headers = spiHeaders($business);
+
+    $registerId = (string) Str::ulid();
+    DB::table('cash_registers')->insert([
+        'id' => $registerId, 'business_id' => $business->id, 'location_id' => $location->id,
+        'name' => 'Safe Drawer', 'code' => 'SAFE-DRAWER', 'is_active' => true,
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $session = $this->postJson('/api/v1/cash-sessions', [
+        'cash_register_id' => $registerId, 'opening_cash' => '100.0000',
+    ], $headers)->assertCreated()->json('data.id');
+
+    $this->postJson("/api/v1/cash-sessions/{$session}/movements", [
+        'type' => 'cash_out', 'amount' => '101.0000', 'currency' => 'EUR', 'reason' => 'Supplier payout',
+    ], $headers)->assertStatus(422)->assertJsonValidationErrors(['amount']);
+    expect(DB::table('cash_movements')->where('cash_session_id', $session)->count())->toBe(0);
+
+    $this->postJson("/api/v1/cash-sessions/{$session}/close", [
+        'counted_cash' => '99.0000',
+    ], $headers)->assertStatus(422)->assertJsonValidationErrors(['closing_note']);
+
+    $this->postJson("/api/v1/cash-sessions/{$session}/close", [
+        'counted_cash' => '99.0000', 'closing_note' => 'One euro short after physical recount',
+    ], $headers)->assertOk()->assertJsonPath('data.status', 'closed')
+        ->assertJsonPath('data.cash_difference', '-1.0000');
+});
