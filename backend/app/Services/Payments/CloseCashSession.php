@@ -27,9 +27,10 @@ final class CloseCashSession
             $counted = BigDecimal::of((string) $payload['counted_cash'])->toScale(4, RoundingMode::HALF_UP);
             $difference = $counted->minus($expected)->toScale(4, RoundingMode::HALF_UP);
 
-            if (! $difference->isZero() && trim((string) ($payload['closing_note'] ?? '')) === '') {
+            $closingNote = trim((string) ($payload['closing_note'] ?? ''));
+            if (! $difference->isZero() && mb_strlen($closingNote) < 3) {
                 throw ValidationException::withMessages([
-                    'closing_note' => 'A reconciliation note is required when counted cash differs from expected cash.',
+                    'closing_note' => 'A reconciliation note of at least 3 characters is required when counted cash differs from expected cash.',
                 ]);
             }
 
@@ -40,7 +41,7 @@ final class CloseCashSession
                 'cash_difference' => (string) $difference,
                 'status' => 'closed',
                 'closed_at' => now(),
-                'closing_note' => $payload['closing_note'] ?? null,
+                'closing_note' => $closingNote !== '' ? $closingNote : null,
             ])->save();
 
             return $session->fresh(['register', 'movements']);
