@@ -216,3 +216,25 @@ test('direct DPT gateway rejects a response signed with the wrong fiscal identit
         putenv('DPT_TEST_PASSWORD');
     }
 });
+
+
+test('direct DPT gateway refuses an unapproved production endpoint before any network call', function (): void {
+    Http::fake();
+
+    config()->set('fiscalization.production_endpoint', 'https://approved-dpt.example.test/service');
+
+    $profile = new FiscalizationProfile([
+        'environment' => 'production',
+        'status' => 'active',
+        'endpoint' => 'https://unexpected.example.test/service',
+        'certificate_secret_ref' => 'env:SHOULD_NOT_BE_READ',
+    ]);
+
+    $result = app(DirectDptGateway::class)->registerInvoice(dptSubmission(), $profile);
+
+    expect($result->successful)->toBeFalse()
+        ->and($result->errorCode)->toBe('DPT_PRODUCTION_ENDPOINT_MISMATCH')
+        ->and($result->retryable)->toBeFalse();
+
+    Http::assertNothingSent();
+});
