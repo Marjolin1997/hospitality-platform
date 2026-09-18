@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Boxes, FileText, PackagePlus, Pencil, Plus, ReceiptText, Search, Settings2, ShieldCheck, Trash2, Users, WalletCards, X } from 'lucide-react';
+import { AlertTriangle, Boxes, Building2, FileText, MapPin, PackagePlus, Pencil, Plus, ReceiptText, Search, Settings2, ShieldCheck, Trash2, Users, WalletCards, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../features/auth/AuthProvider';
@@ -32,6 +32,8 @@ type FiscalSetup={locations:FiscalLocationSetup[];cash_registers:FiscalRegisterS
 type FiscalAttempt={id:string;attempt_no:number;provider:string;environment:string;status:string;retryable:boolean;next_retry_at:string|null;http_status:number|null;request_id:string|null;nslf:string|null;nivf:string|null;error_code:string|null;error_message:string|null;started_at:string|null;completed_at:string|null;created_at:string|null};
 type FiscalDiagnostics={document_type:'invoice'|'credit_note';document_id:string;number:string;fiscalization_status:string;nslf:string|null;nivf:string|null;fiscalization_error:string|null;attempts:FiscalAttempt[]};
 type FiscalDiagnosticsTarget={type:'invoice'|'credit_note';id:string;number:string};
+type ManagedLocation={id:string;name:string;code:string;type:string;address:string|null;is_active:boolean;table_count:number;cash_register_count:number;open_order_count:number;open_cash_session_count:number;is_last_active:boolean};
+type LocationDraft={id?:string;name:string;code:string;type:string;address:string};
 
 
 type ProductDraft={id?:string;name:string;category_id:string;sku:string;sale_price:string;tax_rate:string;unit_code:string;unit_label:string;preparation_station:string;tracks_stock:boolean;is_active:boolean};
