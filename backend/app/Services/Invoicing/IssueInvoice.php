@@ -47,12 +47,16 @@ final class IssueInvoice
                 ]);
             }
 
-            $items = DB::table('order_items')
-                ->where('business_id', $business->id)
-                ->where('order_id', $order->id)
-                ->whereNull('voided_at')
-                ->orderBy('created_at')
-                ->orderBy('id')
+            $items = DB::table('order_items as oi')
+                ->leftJoin('products as p', function ($join) use ($business): void {
+                    $join->on('p.id', '=', 'oi.product_id')->where('p.business_id', $business->id);
+                })
+                ->where('oi.business_id', $business->id)
+                ->where('oi.order_id', $order->id)
+                ->whereNull('oi.voided_at')
+                ->select('oi.*','p.unit_code as product_unit_code','p.unit_label as product_unit_label')
+                ->orderBy('oi.created_at')
+                ->orderBy('oi.id')
                 ->get();
 
             if ($items->isEmpty()) {
@@ -67,6 +71,29 @@ final class IssueInvoice
                 ->first();
 
             abort_unless($location, 422, 'The order location is no longer available.');
+
+            $operatorCode = DB::table('business_user')
+                ->where('business_id', $business->id)
+                ->where('user_id', $user->id)
+                ->value('fiscal_operator_code');
+
+            $payments = DB::table('payments')
+                ->where('business_id', $business->id)
+                ->where('order_id', $order->id)
+                ->where('status', 'completed')
+                ->orderBy('paid_at')
+                ->orderBy('id')
+                ->get();
+
+            $tcrCodes = DB::table('payments as p')
+                ->join('cash_sessions as cs', 'cs.id', '=', 'p.cash_session_id')
+                ->join('cash_registers as cr', 'cr.id', '=', 'cs.cash_register_id')
+                ->where('p.business_id', $business->id)
+                ->where('p.order_id', $order->id)
+                ->where('p.status', 'completed')
+                ->whereNotNull('cr.fiscal_tcr_code')
+                ->distinct()
+                ->pluck('cr.fiscal_tcr_code');
 
             $businessNow = CarbonImmutable::now($business->timezone);
             $invoiceId = (string) \Illuminate\Support\Str::ulid();
@@ -83,6 +110,9 @@ final class IssueInvoice
                 'business_tax_number_snapshot' => $business->tax_number,
                 'location_name_snapshot' => $location->name,
                 'location_address_snapshot' => $location->address,
+                'fiscal_operator_code_snapshot' => $operatorCode,
+                'fiscal_business_unit_code_snapshot' => $location->fiscal_business_unit_code,
+                'fiscal_tcr_code_snapshot' => $tcrCodes->count() === 1 ? $tcrCodes->first() : null,
                 'number' => $this->nextNumber($business, $businessNow),
                 'status' => 'issued',
                 'currency' => $order->currency,
@@ -105,12 +135,34 @@ final class IssueInvoice
                     'position' => $index + 1,
                     'product_name_snapshot' => $item->product_name_snapshot,
                     'sku_snapshot' => $item->sku_snapshot,
+                    'unit_code_snapshot' => $item->product_unit_code ?: 'C62',
+                    'unit_label_snapshot' => $item->product_unit_label ?: 'Copë',
                     'quantity' => $item->quantity,
                     'unit_price' => $item->unit_price,
+                    'discount_percent' => '0.0000',
                     'tax_rate' => $item->tax_rate,
                     'line_subtotal' => $item->line_subtotal,
                     'line_tax' => $item->line_tax,
                     'line_total' => $item->line_total,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            foreach ($payments->values() as $index => $payment) {
+                DB::table('invoice_payment_snapshots')->insert([
+                    'id' => (string) \Illuminate\Support\Str::ulid(),
+                    'business_id' => $business->id,
+                    'invoice_id' => $invoiceId,
+                    'position' => $index + 1,
+                    'method' => $payment->method,
+                    'method_label' => $this->paymentLabel((string) $payment->method),
+                    'amount' => $payment->amount,
+                    'currency' => $payment->currency,
+                    'amount_base' => $payment->amount_base,
+                    'base_currency' => $payment->base_currency,
+                    'exchange_rate' => $payment->exchange_rate,
+                    'external_reference' => $payment->external_reference,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -169,9 +221,25 @@ final class IssueInvoice
         }
     }
 
+    private function paymentLabel(string $method): string
+    {
+        return match ($method) {
+            'cash' => 'Kartëmonedha dhe monedha',
+            'card' => 'Kartë',
+            'bank_transfer' => 'Transfertë bankare',
+            default => 'Tjetër',
+        };
+    }
+
     private function withLines(Business $business, object $invoice): object
     {
         $invoice->lines = DB::table('invoice_lines')
+            ->where('business_id', $business->id)
+            ->where('invoice_id', $invoice->id)
+            ->orderBy('position')
+            ->get();
+
+        $invoice->payments = DB::table('invoice_payment_snapshots')
             ->where('business_id', $business->id)
             ->where('invoice_id', $invoice->id)
             ->orderBy('position')
