@@ -25,7 +25,6 @@ final class IicGenerator
             'issueDateTime' => $issueDateTime,
             'invoiceNumber' => $invoiceNumber,
             'businessUnitCode' => $businessUnitCode,
-            'tcrCode' => $tcrCode,
             'softwareCode' => $softwareCode,
             'totalPrice' => $totalPrice,
         ] as $field => $value) {
