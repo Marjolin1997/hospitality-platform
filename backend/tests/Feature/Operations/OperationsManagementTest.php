@@ -5,6 +5,7 @@ use App\Models\Location;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use Brick\Math\BigDecimal;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +31,26 @@ test('product status mutation preserves catalog data and is tenant safe',functio
 test('product sku is unique inside a business but reusable across businesses',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$userA=omtUser($a);$userB=omtUser($b);$payload=['name'=>'Espresso','sku'=>'ESP-001','sale_price'=>'3.50','tax_rate'=>'19','tracks_stock'=>false,'is_active'=>true];$this->postJson('/api/v1/management/products',$payload,omtHeaders($userA,$a))->assertCreated();$this->postJson('/api/v1/management/products',[...$payload,'name'=>'Double Espresso'],omtHeaders($userA,$a))->assertStatus(422)->assertJsonValidationErrors('sku');$this->postJson('/api/v1/management/products',$payload,omtHeaders($userB,$b))->assertCreated();});
 
 test('finance overview subtracts completed refunds and posted expenses',function():void{$business=omtBusiness('Finance');$location=omtLocation($business,'F1');$user=omtUser($business);$headers=omtHeaders($user,$business);$order=omtOrder($business,$location,$user);$payment=(string)Str::ulid();DB::table('payments')->insert(['id'=>$payment,'business_id'=>$business->id,'order_id'=>$order,'collected_by_user_id'=>$user->id,'method'=>'card','status'=>'completed','currency'=>'EUR','base_currency'=>'EUR','amount'=>'100.0000','amount_base'=>'100.0000','exchange_rate'=>'1.0000000000','idempotency_key'=>'p-'.Str::uuid(),'paid_at'=>now(),'created_at'=>now(),'updated_at'=>now()]);DB::table('payment_refunds')->insert(['id'=>(string)Str::ulid(),'business_id'=>$business->id,'payment_id'=>$payment,'refunded_by_user_id'=>$user->id,'status'=>'completed','currency'=>'EUR','base_currency'=>'EUR','amount'=>'15.0000','amount_base'=>'15.0000','exchange_rate'=>'1.0000000000','reason'=>'Test refund','idempotency_key'=>'r-'.Str::uuid(),'refunded_at'=>now(),'created_at'=>now(),'updated_at'=>now()]);DB::table('expenses')->insert(['id'=>(string)Str::ulid(),'business_id'=>$business->id,'created_by_user_id'=>$user->id,'category'=>'supplies','description'=>'Coffee beans','amount'=>'20.0000','currency'=>'EUR','expense_date'=>now()->toDateString(),'status'=>'posted','created_at'=>now(),'updated_at'=>now()]);$this->getJson('/api/v1/finance/overview',$headers)->assertOk()->assertJsonPath('data.gross_sales','100.0000')->assertJsonPath('data.refunds','15.0000')->assertJsonPath('data.sales','85.0000')->assertJsonPath('data.expenses','20.0000')->assertJsonPath('data.net','65.0000');});
+
+test('finance overview reports open shifts and closed drawer variance',function():void{
+    $business=omtBusiness('Cash reconciliation');$location=omtLocation($business,'CR1');$user=omtUser($business);$headers=omtHeaders($user,$business);
+    $register=(string)Str::ulid();
+    DB::table('cash_registers')->insert(['id'=>$register,'business_id'=>$business->id,'location_id'=>$location->id,'name'=>'Main','code'=>'CR-MAIN','is_active'=>true,'created_at'=>now(),'updated_at'=>now()]);
+    foreach ([['closed','5.0000',now()->subDays(2)],['closed','-3.0000',now()->subDay()],['open',null,null]] as [$status,$difference,$closedAt]) {
+        DB::table('cash_sessions')->insert([
+            'id'=>(string)Str::ulid(),'business_id'=>$business->id,'location_id'=>$location->id,'cash_register_id'=>$register,
+            'opened_by_user_id'=>$user->id,'closed_by_user_id'=>$status==='closed'?$user->id:null,'base_currency'=>'EUR','opening_cash'=>'100.0000',
+            'expected_cash'=>$status==='closed'?'100.0000':null,'counted_cash'=>$status==='closed'?(BigDecimal::of('100.0000')->plus($difference)->toScale(4)) : null,
+            'cash_difference'=>$difference,'status'=>$status,'opened_at'=>now()->subDays(3),'closed_at'=>$closedAt,'created_at'=>now(),'updated_at'=>now(),
+        ]);
+    }
+    $this->getJson('/api/v1/finance/overview',$headers)->assertOk()
+        ->assertJsonPath('data.cash_reconciliation.open_sessions',1)
+        ->assertJsonPath('data.cash_reconciliation.closed_sessions',2)
+        ->assertJsonPath('data.cash_reconciliation.cash_over','5.0000')
+        ->assertJsonPath('data.cash_reconciliation.cash_short','3.0000')
+        ->assertJsonPath('data.cash_reconciliation.net_variance','2.0000');
+});
 
 test('expense posting is tenant validated precise and rejects future dates',function():void{
     $a=omtBusiness('Expense A');$b=omtBusiness('Expense B');$la=omtLocation($a,'EA1');$lb=omtLocation($b,'EB1');$user=omtUser($a);$headers=omtHeaders($user,$a);
