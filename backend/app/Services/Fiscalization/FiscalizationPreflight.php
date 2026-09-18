@@ -113,10 +113,15 @@ final class FiscalizationPreflight
             true,
             "{$locationsReady}/{$activeLocations->count()} active locations have DPT business-unit codes.");
 
-        $activeRegisters = DB::table('cash_registers')
-            ->where('business_id', $business->id)
-            ->where('is_active', true)
-            ->get(['id','fiscal_tcr_code']);
+        $activeRegisters = DB::table('cash_registers as cr')
+            ->join('locations as l', function ($join) use ($business): void {
+                $join->on('l.id', '=', 'cr.location_id')
+                    ->where('l.business_id', $business->id)
+                    ->where('l.is_active', true);
+            })
+            ->where('cr.business_id', $business->id)
+            ->where('cr.is_active', true)
+            ->get(['cr.id','cr.fiscal_tcr_code']);
         $registersReady = $activeRegisters->filter(fn ($row) => filled($row->fiscal_tcr_code))->count();
         $tcrComplete = $activeRegisters->count() === 0 || $registersReady === $activeRegisters->count();
         $this->check($checks, 'tcr_registers', 'Active TCR registers',
