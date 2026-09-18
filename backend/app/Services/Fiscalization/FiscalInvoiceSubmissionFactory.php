@@ -58,6 +58,25 @@ final class FiscalInvoiceSubmissionFactory
                 ]);
             }
 
+            if (! is_string($business->tax_number) || ! preg_match('/^[A-Za-z][0-9]{8}[A-Za-z]$/', $business->tax_number)) {
+                throw ValidationException::withMessages([
+                    'fiscalization' => 'Business NUIS/NIPT must match the Albanian fiscal identity format.',
+                ]);
+            }
+
+            if (filled($invoice->customer_tax_number)) {
+                if (! is_string($invoice->customer_tax_number) || ! preg_match('/^[A-Za-z][0-9]{8}[A-Za-z]$/', $invoice->customer_tax_number)) {
+                    throw ValidationException::withMessages([
+                        'customer_tax_number' => 'Buyer NUIS/NIPT must match the Albanian fiscal identity format.',
+                    ]);
+                }
+                if (! filled($invoice->customer_name)) {
+                    throw ValidationException::withMessages([
+                        'customer_name' => 'Buyer name is required when a buyer NUIS/NIPT is supplied.',
+                    ]);
+                }
+            }
+
             foreach ([
                 'business tax number' => $business->tax_number,
                 'software code' => $profile->software_code,
