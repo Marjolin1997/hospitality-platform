@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Order extends Model
 {
@@ -37,6 +38,7 @@ class Order extends Model
 
     public function items(): HasMany { return $this->hasMany(OrderItem::class); }
     public function payments(): HasMany { return $this->hasMany(Payment::class); }
+    public function invoice(): HasOne { return $this->hasOne(Invoice::class); }
     public function cancelledBy(): BelongsTo { return $this->belongsTo(User::class, 'cancelled_by_user_id'); }
     public function discountAppliedBy(): BelongsTo { return $this->belongsTo(User::class, 'discount_applied_by_user_id'); }
     public function tableMovedBy(): BelongsTo { return $this->belongsTo(User::class, 'table_moved_by_user_id'); }
