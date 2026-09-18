@@ -68,6 +68,13 @@ final class RefundPayment
             ]);
 
             if ($payment->method === 'cash' && $session) {
+                $expectedCash = BigDecimal::of(app(CashSessionReconciler::class)->expectedCash($session));
+                if ($amountBase->isGreaterThan($expectedCash)) {
+                    throw ValidationException::withMessages([
+                        'amount' => 'Cash refund exceeds the expected cash currently available in the drawer.',
+                    ]);
+                }
+
                 CashMovement::query()->create([
                     'business_id' => $business->getKey(), 'cash_session_id' => $session->getKey(),
                     'created_by_user_id' => $user->getKey(), 'type' => 'refund',
