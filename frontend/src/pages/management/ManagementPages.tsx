@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Boxes, Building2, FileText, MapPin, PackagePlus, Pencil, Plus, ReceiptText, Search, Settings2, ShieldCheck, Trash2, Users, WalletCards, X } from 'lucide-react';
+import { AlertTriangle, Boxes, FileText, MapPin, PackagePlus, Pencil, Plus, ReceiptText, Search, Settings2, ShieldCheck, Trash2, Users, WalletCards, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../features/auth/AuthProvider';
