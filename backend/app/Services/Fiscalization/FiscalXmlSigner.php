@@ -14,10 +14,10 @@ final class FiscalXmlSigner
     private const RSA_SHA256 = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256';
     private const SHA256 = 'http://www.w3.org/2001/04/xmlenc#sha256';
 
-    public function sign(DOMDocument $document, DOMElement $request, string $privateKeyPem, string $certificatePem): string
+    public function sign(DOMDocument $document, DOMElement $request, string $privateKeyPem, string $certificatePem, string $expectedId = 'Request'): string
     {
-        if ($request->getAttribute('Id') !== 'Request') {
-            throw new RuntimeException('Fiscal XML request must have Id="Request".');
+        if ($request->getAttribute('Id') !== $expectedId) {
+            throw new RuntimeException('Fiscal XML signed element has an unexpected Id.');
         }
 
         $canonicalRequest = $request->C14N(true, false);
@@ -39,7 +39,7 @@ final class FiscalXmlSigner
         $signedInfo->appendChild($signatureMethod);
 
         $reference = $document->createElementNS(self::DS, 'Reference');
-        $reference->setAttribute('URI', '#Request');
+        $reference->setAttribute('URI', '#'.$expectedId);
 
         $transforms = $document->createElementNS(self::DS, 'Transforms');
         $transformEnveloped = $document->createElementNS(self::DS, 'Transform');
