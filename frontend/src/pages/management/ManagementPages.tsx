@@ -154,15 +154,15 @@ export function InvoicesPage(){
 }
 
 export function StaffPage(){
- const {activeBusiness,can}=useAuth(); const qc=useQueryClient();
+ const {activeBusiness,can,refreshUser}=useAuth(); const qc=useQueryClient();
  const [section,setSection]=useState<'team'|'roles'>('team');
  const [search,setSearch]=useState(''); const [roleFilter,setRoleFilter]=useState('all'); const [statusFilter,setStatusFilter]=useState('all'); const [deactivating,setDeactivating]=useState<Staff|null>(null);
  const [roleEditor,setRoleEditor]=useState<RoleDraft|null>(null); const [deletingRole,setDeletingRole]=useState<ManagedRole|null>(null);
 
  const q=useQuery({queryKey:['staff',activeBusiness?.id],enabled:Boolean(activeBusiness),queryFn:()=>api.get<{data:{staff:Staff[];roles:Role[]}}>('/staff').then(r=>r.data.data)});
  const rolesQ=useQuery({queryKey:['roles',activeBusiness?.id],enabled:Boolean(activeBusiness)&&can('roles.manage'),queryFn:()=>api.get<{data:RoleManagementResponse}>('/roles').then(r=>r.data.data)});
- const update=useMutation({mutationFn:({member,role_id,status}:{member:Staff;role_id:string;status:string})=>api.patch(`/staff/${member.id}`,{role_id,status}),onSuccess:()=>{setDeactivating(null);qc.invalidateQueries({queryKey:['staff',activeBusiness?.id]})}});
- const saveRole=useMutation({mutationFn:(draft:RoleDraft)=>draft.id?api.put(`/roles/${draft.id}`,{name:draft.name.trim(),permissions:draft.permissions}):api.post('/roles',{name:draft.name.trim(),permissions:draft.permissions}),onSuccess:async()=>{setRoleEditor(null);await Promise.all([qc.invalidateQueries({queryKey:['roles',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['staff',activeBusiness?.id]})])}});
+ const update=useMutation({mutationFn:({member,role_id,status}:{member:Staff;role_id:string;status:string})=>api.patch(`/staff/${member.id}`,{role_id,status}),onSuccess:async()=>{setDeactivating(null);await qc.invalidateQueries({queryKey:['staff',activeBusiness?.id]});await refreshUser()}});
+ const saveRole=useMutation({mutationFn:(draft:RoleDraft)=>draft.id?api.put(`/roles/${draft.id}`,{name:draft.name.trim(),permissions:draft.permissions}):api.post('/roles',{name:draft.name.trim(),permissions:draft.permissions}),onSuccess:async()=>{setRoleEditor(null);await Promise.all([qc.invalidateQueries({queryKey:['roles',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['staff',activeBusiness?.id]})]);await refreshUser()}});
  const deleteRole=useMutation({mutationFn:(role:ManagedRole)=>api.delete(`/roles/${role.id}`),onSuccess:async()=>{setDeletingRole(null);await Promise.all([qc.invalidateQueries({queryKey:['roles',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['staff',activeBusiness?.id]})])}});
 
  if(q.isLoading)return <Loading/>; if(q.isError)return <ErrorState/>; const d=q.data!;
