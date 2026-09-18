@@ -90,3 +90,40 @@ Platform:
 - REST/webhook integrations
 - onboarding wizard and fiscalization health dashboard
 - observability, retry diagnostics and support tooling
+
+
+## Production readiness and activation
+
+Production is fail-closed and requires an explicit activation step. Changing certificate identity, software code, VAT-registration facts, or deployment endpoint invalidates prior readiness state as appropriate.
+
+Preflight validates, without exposing secret material:
+- business NUIS/NIPT and certified software code
+- HTTPS endpoint and deployment-approved endpoint allowlist
+- PKCS#12 secret resolution
+- X509 not-before / not-after validity
+- certificate/private-key match
+- certificate SHA-256 fingerprint for operator comparison
+- active business-unit codes, TCR codes and operator codes
+- successful prior TEST verification before PRODUCTION
+- readable DPT/AKSHI CA trust bundle in PRODUCTION
+- asynchronous queue driver in PRODUCTION
+
+PRODUCTION activation is owner-only through the dedicated permission and is audited with activation timestamp and actor. Fiscal dispatch checks activation and fresh preflight state again before queueing, while the DPT gateway independently re-checks the approved endpoint and certificate validity before any network call.
+
+Recommended deployment variables:
+- `FISCAL_DPT_TEST_ENDPOINT`
+- `FISCAL_DPT_PRODUCTION_ENDPOINT`
+- `FISCAL_DPT_CA_BUNDLE`
+- `FISCAL_SECRET_DIR`
+- certificate/password references through `env:`, `secret:`, or an implemented `vault:` provider
+
+## Monitoring
+
+The platform exposes tenant-safe fiscal health metrics:
+- invoice and corrective-document states
+- attempts and success rate over the last 24 hours
+- retry backlog and oldest scheduled retry
+- recent safe error diagnostics
+- per-document attempt history
+
+Payload hashes, private keys, certificate/password secret references, raw XML credentials and certificate material are never returned by monitoring endpoints.
