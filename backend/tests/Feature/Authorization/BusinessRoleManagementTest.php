@@ -131,6 +131,25 @@ test('custom role lifecycle is tenant scoped audited and exposes the permission 
         ->and(json_decode($deleteAudit->previous_permissions, true))->toBe(['orders.update', 'orders.view', 'products.view']);
 });
 
+test('custom role names are case-insensitively unique inside a business', function (): void {
+    $business = brmBusiness('Unique Roles');
+    $actor = brmActor($business);
+    $headers = brmHeaders($actor, $business);
+
+    $this->postJson('/api/v1/roles', [
+        'name' => 'Floor Lead',
+        'permissions' => ['orders.view'],
+    ], $headers)->assertCreated();
+
+    $this->postJson('/api/v1/roles', [
+        'name' => 'floor lead',
+        'permissions' => ['orders.view'],
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('name');
+
+    expect(Role::query()->where('business_id', $business->getKey())->whereRaw('LOWER(name) = ?', ['floor lead'])->count())->toBe(1);
+});
+
 test('system role templates are immutable through custom role endpoints', function (): void {
     $business = brmBusiness('System Roles');
     app(ProvisionBusinessRoles::class)->handle($business);
