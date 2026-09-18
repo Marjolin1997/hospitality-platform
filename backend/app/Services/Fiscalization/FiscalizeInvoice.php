@@ -62,12 +62,17 @@ final class FiscalizeInvoice
             $result->requestId,
         );
 
+        $verificationColumn = $profile->environment === 'production'
+            ? 'last_production_verified_at'
+            : 'last_test_verified_at';
+
         DB::table('fiscalization_profiles')
             ->where('business_id', $business->id)
             ->where('id', $profile->id)
             ->update([
                 'status' => 'active',
                 'last_verified_at' => now(),
+                $verificationColumn => now(),
                 'updated_at' => now(),
             ]);
 
