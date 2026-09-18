@@ -160,6 +160,7 @@ export function StaffPage(){
  const [section,setSection]=useState<'team'|'roles'>('team');
  const [search,setSearch]=useState(''); const [roleFilter,setRoleFilter]=useState('all'); const [statusFilter,setStatusFilter]=useState('all'); const [deactivating,setDeactivating]=useState<Staff|null>(null);
  const [roleEditor,setRoleEditor]=useState<RoleDraft|null>(null); const [deletingRole,setDeletingRole]=useState<ManagedRole|null>(null);
+ useEffect(()=>{if(!can('roles.manage')&&section==='roles')setSection('team')},[can,section]);
 
  const q=useQuery({queryKey:['staff',activeBusiness?.id],enabled:Boolean(activeBusiness),queryFn:()=>api.get<{data:{staff:Staff[];roles:Role[]}}>('/staff').then(r=>r.data.data)});
  const rolesQ=useQuery({queryKey:['roles',activeBusiness?.id],enabled:Boolean(activeBusiness)&&can('roles.manage'),queryFn:()=>api.get<{data:RoleManagementResponse}>('/roles').then(r=>r.data.data)});
