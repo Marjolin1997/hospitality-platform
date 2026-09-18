@@ -78,6 +78,11 @@ final class IssueInvoiceCreditNote
                 ]);
             }
 
+            $operatorCode = DB::table('business_user')
+                ->where('business_id', $business->id)
+                ->where('user_id', $user->id)
+                ->value('fiscal_operator_code');
+
             $businessNow = CarbonImmutable::now($business->timezone);
             $creditNoteId = (string) Str::ulid();
 
@@ -89,7 +94,12 @@ final class IssueInvoiceCreditNote
                 'number' => $this->nextNumber($business, $businessNow),
                 'invoice_number_snapshot' => $invoice->number,
                 'original_invoice_nslf_snapshot' => $invoice->nslf,
+                'fiscal_operator_code_snapshot' => $operatorCode ?: $invoice->fiscal_operator_code_snapshot,
+                'fiscal_business_unit_code_snapshot' => $invoice->fiscal_business_unit_code_snapshot,
+                'fiscal_tcr_code_snapshot' => $invoice->fiscal_tcr_code_snapshot,
+                'original_invoice_issued_at_snapshot' => $invoice->issued_at,
                 'status' => 'issued',
+                'fiscal_invoice_type' => $invoice->fiscal_invoice_type,
                 'currency' => $invoice->currency,
                 'subtotal' => $invoice->subtotal,
                 'discount_total' => $invoice->discount_total,
@@ -113,8 +123,11 @@ final class IssueInvoiceCreditNote
                     'position' => $line->position,
                     'product_name_snapshot' => $line->product_name_snapshot,
                     'sku_snapshot' => $line->sku_snapshot,
+                    'unit_code_snapshot' => $line->unit_code_snapshot,
+                    'unit_label_snapshot' => $line->unit_label_snapshot,
                     'quantity' => $line->quantity,
                     'unit_price' => $line->unit_price,
+                    'discount_percent' => $line->discount_percent,
                     'tax_rate' => $line->tax_rate,
                     'line_subtotal' => $line->line_subtotal,
                     'line_tax' => $line->line_tax,
