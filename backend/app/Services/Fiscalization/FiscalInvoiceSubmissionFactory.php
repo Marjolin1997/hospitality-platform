@@ -52,9 +52,10 @@ final class FiscalInvoiceSubmissionFactory
             if (! $profile || ! in_array($profile->status, ['configured','active'], true)) {
                 throw ValidationException::withMessages(['fiscalization' => 'Fiscalization profile is not configured.']);
             }
-            if ($profile->environment === 'production' && $profile->status !== 'active') {
+            if ($profile->environment === 'production'
+                && ($profile->status !== 'active' || $profile->production_activated_at === null)) {
                 throw ValidationException::withMessages([
-                    'fiscalization' => 'Production fiscalization remains locked until the DPT profile has been verified successfully.',
+                    'fiscalization' => 'Production fiscalization remains locked until explicit production activation succeeds after TEST verification and preflight.',
                 ]);
             }
 
