@@ -5,7 +5,7 @@ namespace App\Services\Payments;
 use App\Models\Business;
 use App\Models\CashMovement;
 use App\Models\CashSession;
-use App\Models\ExchangeRate;
+use App\Services\Finance\CurrencyConverter;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentRefund;
@@ -17,6 +17,8 @@ use Illuminate\Validation\ValidationException;
 
 final class CollectPayment
 {
+    public function __construct(private readonly CurrencyConverter $converter) {}
+
     private const SCALE = 4;
     private const PAYABLE_ORDER_STATES = ['open', 'payment_due'];
 
@@ -141,15 +143,29 @@ final class CollectPayment
 
     private function resolveRate(Business $business, string $currency): array
     {
-        if ($currency === $business->currency) return [BigDecimal::one(), ['source' => 'base_currency', 'rate' => '1']];
-        $rate = ExchangeRate::query()->forBusiness($business)
-            ->where('base_currency', $currency)->where('quote_currency', $business->currency)
-            ->where('effective_at', '<=', now())->latest('effective_at')->first();
-        if (! $rate) throw ValidationException::withMessages(['currency' => 'No current exchange rate is configured for this currency.']);
-        return [BigDecimal::of((string) $rate->rate), [
-            'exchange_rate_id' => $rate->getKey(), 'base_currency' => $rate->base_currency,
-            'quote_currency' => $rate->quote_currency, 'rate' => (string) $rate->rate,
-            'source' => $rate->source, 'effective_at' => $rate->effective_at?->toISOString(),
-        ]];
+        if ($currency === $business->currency) {
+            return [BigDecimal::one(), ['source' => 'base_currency', 'rate' => '1.0000000000']];
+        }
+
+        try {
+            $conversion = $this->converter->convert('1', $currency, $business->currency);
+        } catch (\DomainException) {
+            throw ValidationException::withMessages([
+                'currency' => 'No current exchange rate is configured for this currency.',
+            ]);
+        }
+
+        return [
+            BigDecimal::of((string) $conversion['rate']),
+            [
+                'base_currency' => $currency,
+                'quote_currency' => $business->currency,
+                'rate' => (string) $conversion['rate'],
+                'source' => $conversion['source'],
+                'effective_at' => $conversion['effective_at'],
+                'inverse' => (bool) ($conversion['inverse'] ?? false),
+            ],
+        ];
     }
+
 }
