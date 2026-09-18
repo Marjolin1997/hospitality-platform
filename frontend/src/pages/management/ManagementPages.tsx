@@ -97,7 +97,7 @@ export function SettingsPage(){
  </div>
  {can('fiscalization.view')&&<div className="panel management-panel fiscalization-settings">
    <div className="panel-heading"><div><span className="eyebrow">ALBANIAN FISCALIZATION</span><h2>DPT connection profile</h2><p>Configure identifiers and a secure certificate reference. The certificate/private key itself is never stored in the application database.</p></div>{fp&&<span className={`status-badge ${fp.status==='active'?'success':fp.status==='configured'?'warning':'muted'}`}>{fp.status}</span>}</div>
-   {fiscal.isLoading?<div className="management-state">Loading fiscalization profile…</div>:fiscal.isError?<div className="error-state">{apiMessage(fiscal.error)}</div>:<form className="settings-form fiscalization-form" key={`${fp?.environment}-${fp?.software_code}-${fp?.endpoint}-${fp?.certificate_reference_configured}`} onSubmit={submitFiscal}>
+   {fiscal.isLoading?<div className="management-state">Loading fiscalization profile…</div>:fiscal.isError?<div className="error-state">{apiMessage(fiscal.error)}</div>:<form className="settings-form fiscalization-form" key={`${fp?.environment}-${fp?.software_code}-${fp?.endpoint}-${fp?.certificate_reference_configured}-${fp?.certificate_password_reference_configured}`} onSubmit={submitFiscal}>
      <div className="form-grid">
        <label><span>Provider</span><input value="Direct DPT" disabled/><small>Adapter boundary prepared for the Albanian Tax Administration.</small></label>
        <label><span>Environment</span><select name="environment" defaultValue={fp?.environment??'test'} disabled={!can('fiscalization.manage')}><option value="test">TEST</option><option value="production">PRODUCTION</option></select></label>
