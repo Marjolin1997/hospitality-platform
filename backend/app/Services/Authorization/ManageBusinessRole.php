@@ -15,10 +15,12 @@ final class ManageBusinessRole
     {
         return DB::transaction(function () use ($business, $data, $performedByUserId): Role {
             [$permissionIds, $permissionKeys] = $this->resolvePermissions($data['permissions']);
+            $name = trim($data['name']);
+            $this->assertUniqueName($business, $name);
 
             $role = Role::query()->create([
                 'business_id' => $business->getKey(),
-                'name' => trim($data['name']),
+                'name' => $name,
                 'slug' => $this->customSlug($data['name']),
                 'is_system' => false,
             ]);
@@ -59,6 +61,7 @@ final class ManageBusinessRole
                 ->all();
 
             $nextName = trim($data['name']);
+            $this->assertUniqueName($business, $nextName, $role->getKey());
 
             if ($previousName === $nextName && $previousPermissions === $permissionKeys) {
                 return $role->load('permissions:id,key,group,description')->loadCount('users');
@@ -93,13 +96,14 @@ final class ManageBusinessRole
 
             $this->assertCustom($role);
 
-            $assigned = DB::table('business_user')
+            $assignedMemberships = DB::table('business_user')
                 ->where('business_id', $business->getKey())
                 ->where('role_id', $role->getKey())
+                ->orderBy('id')
                 ->lockForUpdate()
-                ->exists();
+                ->pluck('id');
 
-            if ($assigned) {
+            if ($assignedMemberships->isNotEmpty()) {
                 throw ValidationException::withMessages([
                     'role' => 'Reassign every staff member before deleting this role.',
                 ]);
@@ -123,6 +127,23 @@ final class ManageBusinessRole
 
             $role->delete();
         }, 3);
+    }
+
+    private function assertUniqueName(Business $business, string $name, ?string $exceptRoleId = null): void
+    {
+        $query = DB::table('roles')
+            ->where('business_id', $business->getKey())
+            ->whereRaw('LOWER(name) = ?', [Str::lower($name)]);
+
+        if ($exceptRoleId !== null) {
+            $query->where('id', '!=', $exceptRoleId);
+        }
+
+        if ($query->exists()) {
+            throw ValidationException::withMessages([
+                'name' => 'A role with this name already exists in this business.',
+            ]);
+        }
     }
 
     private function resolvePermissions(array $requested): array
