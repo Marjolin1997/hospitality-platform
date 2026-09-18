@@ -12,7 +12,7 @@ use Illuminate\Validation\ValidationException;
 
 final class IssueInvoice
 {
-    public function __construct(private readonly FiscalPaymentMapper $paymentMapper) {}
+    public function __construct(private readonly FiscalPaymentMapper $paymentMapper, private readonly InvoiceLineAllocator $lineAllocator) {}
 
     public function execute(Business $business, User $user, array $payload): object
     {
@@ -65,6 +65,13 @@ final class IssueInvoice
             if ($items->isEmpty()) {
                 throw ValidationException::withMessages([
                     'order_id' => 'An invoice requires at least one active order item.',
+                ]);
+            }
+
+            $allocation = $this->lineAllocator->allocate($items, (string) $order->discount_total);
+            if (BigDecimal::of($allocation['grand_total'])->isNotEqualTo(BigDecimal::of((string) $order->grand_total))) {
+                throw ValidationException::withMessages([
+                    'order_id' => 'Fiscal invoice allocation does not reconcile with the authoritative order total.',
                 ]);
             }
 
@@ -122,10 +129,10 @@ final class IssueInvoice
                 'status' => 'issued',
                 'fiscal_invoice_type' => $fiscalInvoiceType,
                 'currency' => $order->currency,
-                'subtotal' => $order->subtotal,
-                'discount_total' => $order->discount_total,
-                'tax_total' => $order->tax_total,
-                'grand_total' => $order->grand_total,
+                'subtotal' => $allocation['subtotal'],
+                'discount_total' => $allocation['discount_total'],
+                'tax_total' => $allocation['tax_total'],
+                'grand_total' => $allocation['grand_total'],
                 'customer_name' => $payload['customer_name'] ?? null,
                 'customer_tax_number' => $payload['customer_tax_number'] ?? null,
                 'issued_at' => $businessNow->utc(),
@@ -133,23 +140,23 @@ final class IssueInvoice
                 'updated_at' => now(),
             ]);
 
-            foreach ($items->values() as $index => $item) {
+            foreach ($allocation['lines'] as $line) {
                 DB::table('invoice_lines')->insert([
                     'id' => (string) \Illuminate\Support\Str::ulid(),
                     'business_id' => $business->id,
                     'invoice_id' => $invoiceId,
-                    'position' => $index + 1,
-                    'product_name_snapshot' => $item->product_name_snapshot,
-                    'sku_snapshot' => $item->sku_snapshot,
-                    'unit_code_snapshot' => $item->product_unit_code ?: 'C62',
-                    'unit_label_snapshot' => $item->product_unit_label ?: 'Copë',
-                    'quantity' => $item->quantity,
-                    'unit_price' => $item->unit_price,
-                    'discount_percent' => '0.0000',
-                    'tax_rate' => $item->tax_rate,
-                    'line_subtotal' => $item->line_subtotal,
-                    'line_tax' => $item->line_tax,
-                    'line_total' => $item->line_total,
+                    'position' => $line['position'],
+                    'product_name_snapshot' => $line['product_name_snapshot'],
+                    'sku_snapshot' => $line['sku_snapshot'],
+                    'unit_code_snapshot' => $line['unit_code_snapshot'],
+                    'unit_label_snapshot' => $line['unit_label_snapshot'],
+                    'quantity' => $line['quantity'],
+                    'unit_price' => $line['unit_price'],
+                    'discount_percent' => $line['discount_percent'],
+                    'tax_rate' => $line['tax_rate'],
+                    'line_subtotal' => $line['line_subtotal'],
+                    'line_tax' => $line['line_tax'],
+                    'line_total' => $line['line_total'],
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
