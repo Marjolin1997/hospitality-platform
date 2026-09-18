@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
 
 final class RecordCashMovement
 {
-    public function __construct(private readonly CurrencyConverter $converter) {}
+    public function __construct(private readonly CurrencyConverter $converter, private readonly CashSessionReconciler $reconciler) {}
 
     public function execute(Business $business, User $user, CashSession $session, array $payload): CashMovement
     {
@@ -34,6 +34,15 @@ final class RecordCashMovement
 
             $amount = BigDecimal::of((string) $payload['amount']);
             $amountBase = $amount->multipliedBy($rate)->toScale(4, RoundingMode::HALF_UP);
+
+            if ($payload['type'] === 'cash_out') {
+                $expected = BigDecimal::of($this->reconciler->expectedCash($session));
+                if ($amountBase->isGreaterThan($expected)) {
+                    throw ValidationException::withMessages([
+                        'amount' => 'Cash out cannot exceed the expected cash currently available in the drawer.',
+                    ]);
+                }
+            }
 
             return CashMovement::query()->create([
                 'business_id' => $business->getKey(), 'cash_session_id' => $session->getKey(),
