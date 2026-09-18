@@ -49,6 +49,12 @@ final class CollectPayment
                 ]);
             }
 
+            if ($payload['method'] !== 'cash' && (! empty($payload['cash_session_id']) || array_key_exists('tendered_amount', $payload))) {
+                throw ValidationException::withMessages([
+                    'method' => 'Cash session and tendered amount are only valid for cash payments.',
+                ]);
+            }
+
             $session = null;
             if (! empty($payload['cash_session_id'])) {
                 $session = CashSession::query()->forBusiness($business)
