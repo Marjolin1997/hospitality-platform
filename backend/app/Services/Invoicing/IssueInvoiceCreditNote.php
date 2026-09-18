@@ -66,6 +66,18 @@ final class IssueInvoiceCreditNote
                 ]);
             }
 
+            $fiscalizationEnabled = DB::table('fiscalization_profiles')
+                ->where('business_id', $business->id)
+                ->whereIn('status', ['configured','active'])
+                ->exists();
+
+            if ($fiscalizationEnabled
+                && ($invoice->fiscalization_status !== 'fiscalized' || ! filled($invoice->nslf) || ! filled($invoice->nivf))) {
+                throw ValidationException::withMessages([
+                    'invoice' => 'Fiscalize the original invoice successfully before issuing its corrective document.',
+                ]);
+            }
+
             $lines = DB::table('invoice_lines')
                 ->where('business_id', $business->id)
                 ->where('invoice_id', $invoice->id)
@@ -82,6 +94,12 @@ final class IssueInvoiceCreditNote
                 ->where('business_id', $business->id)
                 ->where('user_id', $user->id)
                 ->value('fiscal_operator_code');
+
+            if ($fiscalizationEnabled && ! filled($operatorCode)) {
+                throw ValidationException::withMessages([
+                    'operator' => 'The user issuing a corrective fiscal document must have a DPT operator code.',
+                ]);
+            }
 
             $businessNow = CarbonImmutable::now($business->timezone);
             $creditNoteId = (string) Str::ulid();
