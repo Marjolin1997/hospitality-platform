@@ -268,12 +268,12 @@ test('cash payment idempotency rejects a changed tendered amount', function (): 
         'created_at' => now(), 'updated_at' => now(),
     ]);
     $session = $this->postJson('/api/v1/cash-sessions', [
-        'cash_register_id' => $registerId, 'opening_cash' => '100.0000',
+        'location_id' => $location->id, 'cash_register_id' => $registerId, 'opening_cash' => '100.0000',
     ], $headers)->assertCreated()->json('data.id');
 
     $key = 'cash-pay-'.Str::uuid();
     $payload = [
-        'cash_session_id' => $session, 'method' => 'cash', 'currency' => 'EUR',
+        'location_id' => $location->id, 'cash_session_id' => $session, 'method' => 'cash', 'currency' => 'EUR',
         'amount' => '20.0000', 'tendered_amount' => '50.0000', 'idempotency_key' => $key,
     ];
     $this->postJson("/api/v1/orders/{$order}/payments", $payload, $headers)->assertCreated();
@@ -294,20 +294,20 @@ test('cash control blocks drawer overdraft and requires a note for closing varia
         'created_at' => now(), 'updated_at' => now(),
     ]);
     $session = $this->postJson('/api/v1/cash-sessions', [
-        'cash_register_id' => $registerId, 'opening_cash' => '100.0000',
+        'location_id' => $location->id, 'cash_register_id' => $registerId, 'opening_cash' => '100.0000',
     ], $headers)->assertCreated()->json('data.id');
 
     $this->postJson("/api/v1/cash-sessions/{$session}/movements", [
-        'type' => 'cash_out', 'amount' => '101.0000', 'currency' => 'EUR', 'reason' => 'Supplier payout',
+        'location_id' => $location->id, 'type' => 'cash_out', 'amount' => '101.0000', 'currency' => 'EUR', 'reason' => 'Supplier payout',
     ], $headers)->assertStatus(422)->assertJsonValidationErrors(['amount']);
     expect(DB::table('cash_movements')->where('cash_session_id', $session)->count())->toBe(0);
 
     $this->postJson("/api/v1/cash-sessions/{$session}/close", [
-        'counted_cash' => '99.0000',
+        'location_id' => $location->id, 'counted_cash' => '99.0000',
     ], $headers)->assertStatus(422)->assertJsonValidationErrors(['closing_note']);
 
     $this->postJson("/api/v1/cash-sessions/{$session}/close", [
-        'counted_cash' => '99.0000', 'closing_note' => 'One euro short after physical recount',
+        'location_id' => $location->id, 'counted_cash' => '99.0000', 'closing_note' => 'One euro short after physical recount',
     ], $headers)->assertOk()->assertJsonPath('data.status', 'closed')
         ->assertJsonPath('data.cash_difference', '-1.0000');
 });
