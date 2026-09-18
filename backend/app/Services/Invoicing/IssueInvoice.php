@@ -6,11 +6,14 @@ use App\Models\Business;
 use App\Models\User;
 use Brick\Math\BigDecimal;
 use Carbon\CarbonImmutable;
+use App\Services\Fiscalization\FiscalPaymentMapper;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 final class IssueInvoice
 {
+    public function __construct(private readonly FiscalPaymentMapper $paymentMapper) {}
+
     public function execute(Business $business, User $user, array $payload): object
     {
         return DB::transaction(function () use ($business, $user, $payload): object {
@@ -85,6 +88,8 @@ final class IssueInvoice
                 ->orderBy('id')
                 ->get();
 
+            $fiscalInvoiceType = $this->paymentMapper->invoiceType($payments);
+
             $tcrCodes = DB::table('payments as p')
                 ->join('cash_sessions as cs', 'cs.id', '=', 'p.cash_session_id')
                 ->join('cash_registers as cr', 'cr.id', '=', 'cs.cash_register_id')
@@ -115,6 +120,7 @@ final class IssueInvoice
                 'fiscal_tcr_code_snapshot' => $tcrCodes->count() === 1 ? $tcrCodes->first() : null,
                 'number' => $this->nextNumber($business, $businessNow),
                 'status' => 'issued',
+                'fiscal_invoice_type' => $fiscalInvoiceType,
                 'currency' => $order->currency,
                 'subtotal' => $order->subtotal,
                 'discount_total' => $order->discount_total,
@@ -156,7 +162,7 @@ final class IssueInvoice
                     'invoice_id' => $invoiceId,
                     'position' => $index + 1,
                     'method' => $payment->method,
-                    'method_label' => $this->paymentLabel((string) $payment->method),
+                    'method_label' => $this->paymentMapper->map((string) $payment->method)['label'],
                     'amount' => $payment->amount,
                     'currency' => $payment->currency,
                     'amount_base' => $payment->amount_base,
@@ -219,16 +225,6 @@ final class IssueInvoice
                 'order_id' => 'This order already has an issued invoice with different customer details.',
             ]);
         }
-    }
-
-    private function paymentLabel(string $method): string
-    {
-        return match ($method) {
-            'cash' => 'Kartëmonedha dhe monedha',
-            'card' => 'Kartë',
-            'bank_transfer' => 'Transfertë bankare',
-            default => 'Tjetër',
-        };
     }
 
     private function withLines(Business $business, object $invoice): object
