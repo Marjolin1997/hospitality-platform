@@ -1,22 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../lib/api';
+import { api, getActiveBusinessId } from '../../lib/api';
 import type { Order, OrderItem } from './types';
 
 
 export function useOpenOrders() {
-  return useQuery({ queryKey: ['orders', 'open-workspace'], queryFn: async () => (await api.get<{ data: Order[] }>('/orders', { params: { per_page: 100 } })).data.data.filter(order => ['open', 'payment_due'].includes(order.status)) });
+  const businessId = getActiveBusinessId();
+  return useQuery({ queryKey: ['orders', businessId, 'open-workspace'], enabled: Boolean(businessId), queryFn: async () => (await api.get<{ data: Order[] }>('/orders', { params: { per_page: 100 } })).data.data.filter(order => ['open', 'payment_due'].includes(order.status)) });
 }
 
 export function useOrder(orderId?: string) {
-  return useQuery({ queryKey: ['orders', orderId], enabled: Boolean(orderId), queryFn: async () => (await api.get<{ data: Order }>(`/orders/${orderId}`)).data.data });
+  const businessId = getActiveBusinessId();
+  return useQuery({ queryKey: ['orders', businessId, orderId], enabled: Boolean(businessId&&orderId), queryFn: async () => (await api.get<{ data: Order }>(`/orders/${orderId}`)).data.data });
 }
 
 function useOrderMutation<T>(orderId: string | undefined, request: (id: string, payload: T) => Promise<Order>) {
   const qc = useQueryClient();
+  const businessId = getActiveBusinessId();
   return useMutation({
     mutationFn: (payload: T) => request(orderId!, payload),
     onSuccess: order => {
-      qc.setQueryData(['orders', order.id], order);
+      qc.setQueryData(['orders', businessId, order.id], order);
       qc.invalidateQueries({ queryKey: ['orders'] });
     },
   });
@@ -33,11 +36,12 @@ export function useCancelOrder(orderId?: string) { return useOrderMutation<{ rea
 
 export function useSplitOrder(orderId?: string) {
   const qc = useQueryClient();
+  const businessId = getActiveBusinessId();
   return useMutation({
     mutationFn: async (p: { idempotency_key: string; item_ids: string[]; venue_table_id?: string | null; reason: string }) => (await api.post<{ data: { source: Order; destination: Order } }>(`/orders/${orderId}/split`, p)).data.data,
     onSuccess: data => {
-      qc.setQueryData(['orders', data.source.id], data.source);
-      qc.setQueryData(['orders', data.destination.id], data.destination);
+      qc.setQueryData(['orders', businessId, data.source.id], data.source);
+      qc.setQueryData(['orders', businessId, data.destination.id], data.destination);
       qc.invalidateQueries({ queryKey: ['orders'] });
     },
   });
