@@ -224,7 +224,6 @@ test('foreign currency payment uses inverse rate and enforces the base remaining
 
     DB::table('exchange_rates')->insert([
         'id' => (string) Str::ulid(),
-        'business_id' => $business->id,
         'base_currency' => 'EUR',
         'quote_currency' => 'USD',
         'rate' => '1.2500000000',
