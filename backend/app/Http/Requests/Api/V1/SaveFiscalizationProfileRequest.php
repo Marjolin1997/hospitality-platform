@@ -15,6 +15,7 @@ final class SaveFiscalizationProfileRequest extends FormRequest
             'provider' => ['required', Rule::in(['direct_dpt'])],
             'environment' => ['required', Rule::in(['test','production'])],
             'software_code' => ['nullable','string','max:64'],
+            'is_issuer_in_vat' => ['nullable','boolean'],
             'endpoint' => ['nullable','url','max:500','starts_with:https://'],
             'certificate_secret_ref' => [
                 'nullable',
