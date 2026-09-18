@@ -16,6 +16,7 @@ final class FiscalizationProfile extends Model
     {
         return [
             'last_verified_at' => 'datetime',
+            'is_issuer_in_vat' => 'boolean',
         ];
     }
 }
