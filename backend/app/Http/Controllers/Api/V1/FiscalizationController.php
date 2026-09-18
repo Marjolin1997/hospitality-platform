@@ -9,6 +9,8 @@ use App\Models\Business;
 use App\Models\FiscalizationProfile;
 use App\Models\Invoice;
 use App\Jobs\FiscalizeInvoiceJob;
+use App\Jobs\FiscalizeCreditNoteJob;
+use App\Models\InvoiceCreditNote;
 use App\Services\Fiscalization\SaveFiscalizationProfile;
 use App\Services\Fiscalization\SaveFiscalizationSetup;
 use Illuminate\Http\JsonResponse;
@@ -87,6 +89,50 @@ final class FiscalizationController extends Controller
         return response()->json([
             'data' => [
                 'invoice_id' => $row->id,
+                'status' => 'queued',
+            ],
+        ], 202);
+    }
+
+    public function fiscalizeCreditNote(string $creditNote): JsonResponse
+    {
+        $business = app(Business::class);
+        $row = InvoiceCreditNote::query()->forBusiness($business)->whereKey($creditNote)->first();
+        abort_unless($row, 404);
+
+        if ($row->fiscalization_status === 'fiscalized' || filled($row->nivf)) {
+            return response()->json(['message' => 'Corrective document is already fiscalized.'], 422);
+        }
+
+        FiscalizeCreditNoteJob::dispatch((string) $business->id, (string) $row->id, false);
+
+        return response()->json([
+            'data' => [
+                'credit_note_id' => $row->id,
+                'status' => 'queued',
+            ],
+        ], 202);
+    }
+
+    public function retryCreditNote(string $creditNote): JsonResponse
+    {
+        $business = app(Business::class);
+        $row = InvoiceCreditNote::query()->forBusiness($business)->whereKey($creditNote)->first();
+        abort_unless($row, 404);
+
+        if ($row->fiscalization_status === 'fiscalized' || filled($row->nivf)) {
+            return response()->json(['message' => 'Corrective document is already fiscalized.'], 422);
+        }
+
+        if (! in_array($row->fiscalization_status, ['failed','retry_pending'], true)) {
+            return response()->json(['message' => 'Only failed or retry-pending corrective documents can be retried.'], 422);
+        }
+
+        FiscalizeCreditNoteJob::dispatch((string) $business->id, (string) $row->id, true);
+
+        return response()->json([
+            'data' => [
+                'credit_note_id' => $row->id,
                 'status' => 'queued',
             ],
         ], 202);
