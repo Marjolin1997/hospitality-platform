@@ -71,6 +71,8 @@ export function InvoicePrintPage(){
       <button className="secondary-button" onClick={()=>navigate('/invoices')}><ArrowLeft size={16}/> Faturat</button>
       <div>
         <span className={`status-badge ${invoice.fiscalization_status==='fiscalized'?'success':'warning'}`}>{invoice.fiscalization_status.replaceAll('_',' ')}</span>
+        <button className="secondary-button" onClick={()=>window.open(`/invoices/${invoice.id}/receipt/80`,'_blank','noopener,noreferrer')}>80mm</button>
+        <button className="secondary-button" onClick={()=>window.open(`/invoices/${invoice.id}/receipt/58`,'_blank','noopener,noreferrer')}>58mm</button>
         <button className="primary-button" onClick={()=>window.print()}><Printer size={16}/> Print / PDF</button>
       </div>
     </div>
