@@ -14,6 +14,7 @@ use App\Models\InvoiceCreditNote;
 use App\Services\Fiscalization\SaveFiscalizationProfile;
 use App\Services\Fiscalization\SaveFiscalizationSetup;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 final class FiscalizationController extends Controller
 {
