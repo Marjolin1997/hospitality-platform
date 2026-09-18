@@ -88,3 +88,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .modal-card>header{position:sticky;top:-20px;z-index:3;margin:-20px -16px 18px;padding:20px 16px 14px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px)}
   .modal-actions{position:sticky;bottom:-20px;z-index:3;margin:8px -16px -20px;padding:14px 16px max(14px,env(safe-area-inset-bottom));background:rgba(255,255,255,.97);backdrop-filter:blur(10px)}
 }
+
+
+/* Staff access / custom roles */
+.management-tabs{display:flex;align-items:center;gap:5px;width:fit-content;margin:0 0 16px;padding:5px;border:1px solid #dfe6e2;border-radius:12px;background:#fff;box-shadow:var(--ui-shadow-sm)}
+.management-tabs button{min-height:36px;display:flex;align-items:center;gap:7px;padding:8px 12px;border:0;border-radius:9px;background:transparent;color:#6f7c75;font-size:10px;font-weight:850;cursor:pointer}
+.management-tabs button:hover{background:#f3f6f4;color:#34463c}.management-tabs button.active{background:#1c2b24;color:#fff;box-shadow:0 5px 14px rgba(23,37,31,.12)}
+.role-management-panel>.panel-heading{align-items:center}.role-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}
+.role-card{display:grid;align-content:start;gap:12px;min-width:0;padding:15px;border:1px solid #e0e7e3;border-radius:14px;background:linear-gradient(180deg,#fff,#fbfcfb)}
+.role-card>header{display:grid;gap:6px}.role-card>header>div{display:flex;align-items:center;justify-content:space-between;gap:10px}.role-card>header>div>strong{font-size:13px;letter-spacing:-.02em}.role-card>header>small{color:#849088;font-size:9.5px}
+.role-card details{border-top:1px solid #edf1ef;border-bottom:1px solid #edf1ef;padding:9px 0}.role-card summary{cursor:pointer;color:#64736b;font-size:10px;font-weight:800}.role-card footer{min-height:35px;display:flex;align-items:center;justify-content:flex-end}
+.permission-chip-list{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}.permission-chip-list span{padding:5px 7px;border:1px solid #dfe6e2;border-radius:999px;background:#f7f9f8;color:#5d6d64;font-size:8.5px;font-weight:750}
+.role-editor-modal{width:min(900px,100%)}.role-editor-modal>label{display:grid;gap:7px;margin-top:16px;color:#526159;font-size:11px;font-weight:800}.role-editor-modal>label input{min-height:44px;border:1px solid #dce4df;border-radius:10px;padding:9px 11px}
+.role-editor-summary{display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 12px;border-radius:10px;background:#f4f7f5;color:#607068;font-size:10px;font-weight:750}.role-editor-summary strong{font-size:14px;color:#213129}
+.permission-group-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.permission-group-card{padding:12px;border:1px solid #e1e7e4;border-radius:12px;background:#fff}.permission-group-card>header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #edf1ef}.permission-group-card>header>div{display:grid;gap:2px}.permission-group-card>header strong{text-transform:capitalize;font-size:11px}.permission-group-card>header small{color:#8b9690;font-size:8.5px}
+.permission-option{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:flex-start;padding:7px 5px;border-radius:8px;cursor:pointer}.permission-option:hover{background:#f7f9f8}.permission-option input{width:15px;height:15px;margin-top:2px}.permission-option span{display:grid;gap:2px;min-width:0}.permission-option strong{overflow-wrap:anywhere;color:#34453c;font-size:9.5px}.permission-option small{color:#8a958f;font-size:8.5px;line-height:1.35}
+
+@media(max-width:900px){.role-grid,.permission-group-grid{grid-template-columns:1fr}}
+@media(max-width:680px){.management-tabs{width:100%}.management-tabs button{flex:1;justify-content:center}.role-management-panel>.panel-heading{align-items:stretch;flex-direction:column}.role-management-panel>.panel-heading .primary-button{width:100%}}
