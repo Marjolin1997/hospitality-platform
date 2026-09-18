@@ -19,7 +19,7 @@ final class StoreExpenseRequest extends FormRequest
             'category' => ['required','string','max:80'],
             'description' => ['required','string','max:255'],
             'amount' => ['required','decimal:0,4','gt:0','max:99999999999999.9999'],
-            'expense_date' => ['required','date','before_or_equal:today'],
+            'expense_date' => ['required','date','before_or_equal:'.now($business->timezone)->toDateString()],
         ];
     }
 }
