@@ -2,6 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import type { Order, OrderItem } from './types';
 
+
+export function useOpenOrders() {
+  return useQuery({ queryKey: ['orders', 'open-workspace'], queryFn: async () => (await api.get<{ data: Order[] }>('/orders', { params: { per_page: 100 } })).data.data.filter(order => ['open', 'payment_due'].includes(order.status)) });
+}
+
 export function useOrder(orderId?: string) {
   return useQuery({ queryKey: ['orders', orderId], enabled: Boolean(orderId), queryFn: async () => (await api.get<{ data: Order }>(`/orders/${orderId}`)).data.data });
 }
