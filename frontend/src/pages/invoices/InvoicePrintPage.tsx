@@ -103,7 +103,8 @@ export function InvoicePrintPage(){
           <tbody>
             {invoice.lines.map(line=>{
               const qty=Number(line.quantity)||1;
-              const unitNet=Number(line.line_subtotal)/qty;
+              const taxFactor=1+(Number(line.tax_rate)/100);
+              const unitNet=taxFactor===0?Number(line.unit_price):Number(line.unit_price)/taxFactor;
               return <tr key={line.id}>
                 <td>{line.product_name_snapshot}</td><td>{line.unit_label_snapshot||line.unit_code_snapshot}</td>
                 <td>{fixed(line.quantity,3)}</td><td>{fixed(unitNet)}</td><td>{Number(line.discount_percent)>0?fixed(line.discount_percent):''}</td>
