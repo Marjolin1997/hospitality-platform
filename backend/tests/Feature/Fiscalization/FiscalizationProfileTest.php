@@ -54,21 +54,29 @@ test('fiscalization profile stores only a secret reference and never exposes it'
         'provider' => 'direct_dpt',
         'environment' => 'test',
         'software_code' => 'SW-TEST-001',
+        'is_issuer_in_vat' => true,
         'endpoint' => 'https://example.test/fiscalization',
         'certificate_secret_ref' => 'env:FISCAL_CERTIFICATE_P12',
+        'certificate_password_secret_ref' => 'env:FISCAL_CERTIFICATE_PASSWORD',
     ], $headers)->assertOk()
         ->assertJsonPath('data.status', 'configured')
         ->assertJsonPath('data.certificate_reference_configured', true)
+        ->assertJsonPath('data.certificate_password_reference_configured', true)
+        ->assertJsonPath('data.is_issuer_in_vat', true)
         ->assertJsonPath('data.ready_for_verification', true)
         ->assertJsonMissingPath('data.certificate_secret_ref');
 
     expect(DB::table('fiscalization_profiles')->where('business_id', $business->id)->value('certificate_secret_ref'))
-        ->toBe('env:FISCAL_CERTIFICATE_P12');
+        ->toBe('env:FISCAL_CERTIFICATE_P12')
+        ->and(DB::table('fiscalization_profiles')->where('business_id', $business->id)->value('certificate_password_secret_ref'))
+        ->toBe('env:FISCAL_CERTIFICATE_PASSWORD');
 
     $this->getJson('/api/v1/fiscalization/profile', $headers)->assertOk()
         ->assertJsonPath('data.software_code', 'SW-TEST-001')
         ->assertJsonPath('data.certificate_reference_configured', true)
-        ->assertJsonMissingPath('data.certificate_secret_ref');
+        ->assertJsonPath('data.certificate_password_reference_configured', true)
+        ->assertJsonMissingPath('data.certificate_secret_ref')
+        ->assertJsonMissingPath('data.certificate_password_secret_ref');
 });
 
 test('raw certificates and non-https endpoints are rejected before persistence', function (): void {
@@ -98,6 +106,7 @@ test('fiscalization profile is tenant isolated and manage permission is separate
         'provider' => 'direct_dpt',
         'environment' => 'test',
         'software_code' => 'A-CODE',
+        'is_issuer_in_vat' => true,
         'endpoint' => 'https://a.example.test/fiscal',
         'certificate_secret_ref' => 'secret:a-cert',
     ], $headersA)->assertOk();
@@ -113,6 +122,7 @@ test('fiscalization profile is tenant isolated and manage permission is separate
         'provider' => 'direct_dpt',
         'environment' => 'test',
         'software_code' => 'B-CODE',
+        'is_issuer_in_vat' => true,
         'endpoint' => 'https://b.example.test/fiscal',
         'certificate_secret_ref' => 'secret:b-cert',
     ], $headersB)->assertForbidden();
