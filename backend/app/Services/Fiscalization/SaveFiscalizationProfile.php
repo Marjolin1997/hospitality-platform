@@ -12,6 +12,8 @@ final class SaveFiscalizationProfile
     public function execute(Business $business, array $payload): FiscalizationProfile
     {
         return DB::transaction(function () use ($business, $payload): FiscalizationProfile {
+            DB::table('businesses')->where('id', $business->id)->lockForUpdate()->firstOrFail();
+
             $profile = FiscalizationProfile::query()
                 ->forBusiness($business)
                 ->where('business_id', $business->id)
