@@ -53,6 +53,19 @@ function frtCredentials(int $days = 365): array
     ];
 }
 
+function frtUseCertificateClock(array $credentials): void
+{
+    $notBefore = CarbonImmutable::createFromTimestampUTC((int) $credentials['not_before_ts']);
+    $notAfter = CarbonImmutable::createFromTimestampUTC((int) $credentials['not_after_ts']);
+
+    $safeInstant = $notBefore->addMinute();
+    if ($safeInstant->greaterThanOrEqualTo($notAfter)) {
+        $safeInstant = $notBefore;
+    }
+
+    CarbonImmutable::setTestNow($safeInstant);
+}
+
 function frtFixture(string $environment = 'test'): array
 {
     $business = Business::query()->create([
@@ -134,6 +147,7 @@ test('preflight reports a valid certificate and complete TEST fiscal setup witho
     putenv('FRT_PASSWORD='.$credentials['password']);
 
     try {
+        frtUseCertificateClock($credentials);
         [$business] = frtFixture('test');
         config()->set('fiscalization.test_endpoint', 'https://test-dpt.example.test/service');
 
@@ -153,6 +167,7 @@ test('preflight reports a valid certificate and complete TEST fiscal setup witho
             ->and($profile->certificate_not_after)->not->toBeNull()
             ->and(strlen((string) $profile->certificate_fingerprint_sha256))->toBe(64);
     } finally {
+        CarbonImmutable::setTestNow();
         putenv('FRT_P12');
         putenv('FRT_PASSWORD');
     }
@@ -192,6 +207,7 @@ test('production activation requires TEST verification approved endpoint CA bund
     file_put_contents($ca, "test-ca-bundle");
 
     try {
+        frtUseCertificateClock($credentials);
         [$business, $user] = frtFixture('production');
         config()->set('fiscalization.production_endpoint', 'https://prod-dpt.example.test/service');
         config()->set('fiscalization.dpt_ca_bundle', $ca);
@@ -216,6 +232,7 @@ test('production activation requires TEST verification approved endpoint CA bund
             ->and((int) $profile->production_activated_by_user_id)->toBe($user->id)
             ->and($profile->preflight_status)->toBe('ready');
     } finally {
+        CarbonImmutable::setTestNow();
         @unlink($ca);
         putenv('FRT_P12');
         putenv('FRT_PASSWORD');
