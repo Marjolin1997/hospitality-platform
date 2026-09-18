@@ -67,6 +67,31 @@ final class InvoiceController extends Controller
             ->orderBy('position')
             ->get();
 
+        $row->payments = DB::table('invoice_payment_snapshots')
+            ->where('business_id', $business->id)
+            ->where('invoice_id', $invoice)
+            ->orderBy('position')
+            ->get();
+
+        $profile = DB::table('fiscalization_profiles')->where('business_id', $business->id)->first();
+        $missing = [];
+        if (! $business->tax_number) $missing[] = 'Business tax number (NIPT/NUIS)';
+        if (! $row->fiscal_business_unit_code_snapshot) $missing[] = 'Business unit code';
+        if (! $row->fiscal_operator_code_snapshot) $missing[] = 'Operator code';
+        if (! $profile || $profile->status !== 'active') $missing[] = 'Active fiscalization profile';
+        if (! $profile?->software_code) $missing[] = 'Certified software code';
+        if (! $profile?->certificate_secret_ref) $missing[] = 'Electronic certificate reference';
+
+        $cashLike = collect($row->payments)->contains(fn ($payment) => in_array($payment->method, ['cash','card'], true));
+        if ($cashLike && ! $row->fiscal_tcr_code_snapshot) $missing[] = 'Fiscal device / TCR code';
+
+        $row->fiscalization_readiness = [
+            'ready' => count($missing) === 0,
+            'missing' => $missing,
+            'environment' => $profile?->environment,
+            'provider' => $profile?->provider,
+        ];
+
         $row->credit_note = DB::table('invoice_credit_notes')
             ->where('business_id', $business->id)
             ->where('invoice_id', $invoice)
