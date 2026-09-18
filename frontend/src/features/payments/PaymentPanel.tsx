@@ -59,7 +59,7 @@ export function PaymentPanel({ orderId, grandTotal, paidTotal, baseCurrency, pay
   const submitRefund=async()=>{if(!refundValid||!selectedRefund)return;await refund.mutateAsync({amount:refundValue,reason:refundReason.trim(),cash_session_id:selectedRefund.method==='cash'?selectedSession?.id:undefined,invoice_credit_note_id:invoiceCreditNote?.id,idempotency_key:refundKey});setRefundPaymentId('');setRefundAmount('');setRefundReason('');};
 
   return <section className="payment-panel">
-    <header><div><span className="eyebrow">PAYMENT</span><h2>{format(remaining,baseCurrency)} remaining</h2></div><span className="status-pill">Partial & mixed enabled</span></header>
+    <header><div><span className="eyebrow">{issuedInvoiceNumber?'FINANCIAL DOCUMENT':'PAYMENT'}</span><h2>{invoiceCreditNote?`${invoiceCreditNote.number} refund`:issuedInvoiceNumber?`Invoice ${issuedInvoiceNumber}`:`${format(remaining,baseCurrency)} remaining`}</h2></div><span className="status-pill">{invoiceCreditNote?'Credit authorized':issuedInvoiceNumber?'Invoice issued':'Partial & mixed enabled'}</span></header>
     {allowCollect&&remaining>0&&<><div className="payment-methods" role="group" aria-label="Payment method">
       {methods.map(({value,label,icon:Icon}) => <button type="button" key={value} className={method === value ? 'active' : ''} aria-pressed={method===value} onClick={() => {setMethod(value);if(value==='cash'){setCurrency(baseCurrency);setTendered('')}}}><Icon size={15}/><span>{label}</span></button>)}
     </div>
