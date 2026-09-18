@@ -16,6 +16,8 @@ use Illuminate\Validation\ValidationException;
 
 final class RefundPayment
 {
+    public function __construct(private readonly CashSessionReconciler $reconciler) {}
+
     private const SCALE = 4;
 
     public function execute(Business $business, User $user, Payment $payment, array $payload): PaymentRefund
@@ -68,7 +70,7 @@ final class RefundPayment
             ]);
 
             if ($payment->method === 'cash' && $session) {
-                $expectedCash = BigDecimal::of(app(CashSessionReconciler::class)->expectedCash($session));
+                $expectedCash = BigDecimal::of($this->reconciler->expectedCash($session));
                 if ($amountBase->isGreaterThan($expectedCash)) {
                     throw ValidationException::withMessages([
                         'amount' => 'Cash refund exceeds the expected cash currently available in the drawer.',
