@@ -118,3 +118,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
 @media(max-width:900px){.category-toolbar{min-width:0;max-width:none}}
 @media(max-width:680px){.category-toolbar{align-items:stretch;flex-direction:column}.category-toolbar>select{width:100%}.category-editor-modal .form-grid{grid-template-columns:1fr}.category-editor-modal .span-2{grid-column:auto}}
+
+
+/* Settings / business locations */
+#locations-settings{scroll-margin-top:142px}
+.location-settings-panel>.panel-heading{align-items:center}.location-metrics{margin:14px 0 18px}
+.location-toolbar{margin-top:4px}.location-toolbar .toolbar-actions{max-width:650px;min-width:min(100%,520px);flex-wrap:wrap}.location-toolbar .toolbar-actions>select{width:145px}
+.location-identity{display:flex;align-items:center;gap:10px;min-width:220px}.location-icon{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;border:1px solid #dfe6e2;border-radius:10px;background:#f6f8f7;color:#607168}.location-identity>div{display:grid;gap:3px;min-width:0}.location-identity strong{display:flex;align-items:center;gap:7px}.location-identity small{max-width:340px;overflow:hidden;text-overflow:ellipsis;color:#849189;font-size:9px;white-space:nowrap}
+.current-location-label{display:inline-flex;padding:3px 6px;border-radius:999px;background:#edf5df;color:#506c20;font-size:8px;font-weight:850;text-transform:uppercase;letter-spacing:.04em}.location-type{text-transform:capitalize}
+.location-editor-modal{width:min(680px,100%)}.location-editor-modal .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}.location-editor-modal .span-2{grid-column:1/-1}
+.location-blockers{display:grid;gap:8px;margin-top:16px;padding:13px 14px;border:1px solid #edcec8;border-radius:12px;background:#fff6f4;color:#7d3c34}.location-blockers>strong{font-size:11px}.location-blockers>span{display:flex;align-items:flex-start;gap:7px;font-size:10px}.location-blockers svg{flex:0 0 auto;margin-top:1px}
+
+@media(max-width:900px){.location-toolbar .toolbar-actions{min-width:0;max-width:none}}
+@media(max-width:680px){.location-settings-panel>.panel-heading{align-items:stretch;flex-direction:column}.location-settings-panel>.panel-heading .primary-button{width:100%}.location-toolbar .toolbar-actions{align-items:stretch;flex-direction:column}.location-toolbar .toolbar-actions>select{width:100%}.location-editor-modal .form-grid{grid-template-columns:1fr}.location-editor-modal .span-2{grid-column:auto}.location-identity small{max-width:210px}}
