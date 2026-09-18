@@ -20,6 +20,9 @@ final class RefundPayment
     public function execute(Business $business, User $user, Payment $payment, array $payload): PaymentRefund
     {
         return DB::transaction(function () use ($business, $user, $payment, $payload): PaymentRefund {
+            $payment = Payment::query()->forBusiness($business)->whereKey($payment->getKey())->lockForUpdate()->firstOrFail();
+            $order = $payment->order()->lockForUpdate()->firstOrFail();
+
             $existing = PaymentRefund::query()->forBusiness($business)
                 ->where('idempotency_key', $payload['idempotency_key'])
                 ->lockForUpdate()
@@ -30,12 +33,9 @@ final class RefundPayment
                 return $existing;
             }
 
-            $payment = Payment::query()->forBusiness($business)->whereKey($payment->getKey())->lockForUpdate()->firstOrFail();
             if ($payment->status !== 'completed') {
                 throw ValidationException::withMessages(['payment' => 'Only completed payments can be refunded.']);
             }
-
-            $order = $payment->order()->lockForUpdate()->firstOrFail();
             $alreadyRefunded = BigDecimal::of((string) PaymentRefund::query()->forBusiness($business)
                 ->where('payment_id', $payment->getKey())->where('status', 'completed')->sum('amount'));
             $requested = BigDecimal::of((string) $payload['amount'])->toScale(self::SCALE, RoundingMode::HALF_UP);
