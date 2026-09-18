@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Banknote, CheckCircle2, CreditCard, Landmark, RefreshCw, WalletCards } from 'lucide-react';
-import { useCollectPayment, useCurrencyQuote, useCurrentCashSession } from './api';
-import type { Currency, PaymentMethod } from './types';
+import { useCollectPayment, useCurrencyQuote, useCurrentCashSession, useRefundPayment } from './api';
+import type { Currency, Payment, PaymentMethod } from './types';
 
-type Props = { orderId: string; grandTotal: number; paidTotal: number; baseCurrency: Currency; onPaid?: () => void };
+type Props = { orderId: string; grandTotal: number; paidTotal: number; baseCurrency: Currency; payments: Payment[]; allowCollect: boolean; allowRefund: boolean };
 const methods:{value:PaymentMethod;label:string;icon:any}[]=[{value:'cash',label:'Cash',icon:Banknote},{value:'card',label:'Card',icon:CreditCard},{value:'bank_transfer',label:'Transfer',icon:Landmark},{value:'other',label:'Other',icon:WalletCards}];
 const format=(value:number,currency:Currency)=>new Intl.NumberFormat(undefined,{style:'currency',currency,minimumFractionDigits:2,maximumFractionDigits:2}).format(value);
 
-export function PaymentPanel({ orderId, grandTotal, paidTotal, baseCurrency, onPaid }: Props) {
+export function PaymentPanel({ orderId, grandTotal, paidTotal, baseCurrency, payments, allowCollect, allowRefund }: Props) {
   const session = useCurrentCashSession();
   const collect = useCollectPayment(orderId);
   const remaining = Math.max(grandTotal - paidTotal, 0);
@@ -15,6 +15,8 @@ export function PaymentPanel({ orderId, grandTotal, paidTotal, baseCurrency, onP
   const [currency, setCurrency] = useState<Currency>(baseCurrency);
   const [amount, setAmount] = useState(String(remaining));
   const [tendered, setTendered] = useState('');
+  const [refundPaymentId,setRefundPaymentId]=useState(''); const [refundAmount,setRefundAmount]=useState(''); const [refundReason,setRefundReason]=useState('');
+  const refund=useRefundPayment(refundPaymentId);
   useEffect(()=>{setCurrency(baseCurrency);setAmount(String(remaining));setTendered('')},[orderId,baseCurrency,remaining]);
   const numericAmount=Number(amount); const numericTendered=Number(tendered||0);
   const quote=useCurrencyQuote(numericAmount,currency,baseCurrency);
@@ -36,12 +38,18 @@ export function PaymentPanel({ orderId, grandTotal, paidTotal, baseCurrency, onP
       idempotency_key: idempotencyKey,
     });
     setTendered('');
-    if (Number(payment.amount_base) >= remaining-.00005) onPaid?.();
+    void payment;
   };
+
+  const refundablePayments=payments.filter(p=>p.status==='completed').map(p=>{const refunded=(p.refunds??[]).filter(r=>r.status==='completed').reduce((s,r)=>s+Number(r.amount),0);return {...p,refundable:Math.max(0,Number(p.amount)-refunded)}}).filter(p=>p.refundable>.00005);
+  const selectedRefund=refundablePayments.find(p=>p.id===refundPaymentId);
+  const refundValue=Number(refundAmount); const refundValid=Boolean(selectedRefund)&&Number.isFinite(refundValue)&&refundValue>0&&refundValue<=Number(selectedRefund?.refundable??0)+.00005&&refundReason.trim().length>=3;
+  const refundKey=useMemo(()=>crypto.randomUUID(),[refundPaymentId,refundAmount,refundReason]);
+  const submitRefund=async()=>{if(!refundValid||!selectedRefund)return;await refund.mutateAsync({amount:refundValue,reason:refundReason.trim(),cash_session_id:selectedRefund.method==='cash'?session.data?.id:undefined,idempotency_key:refundKey});setRefundPaymentId('');setRefundAmount('');setRefundReason('');};
 
   return <section className="payment-panel">
     <header><div><span className="eyebrow">PAYMENT</span><h2>{format(remaining,baseCurrency)} remaining</h2></div><span className="status-pill">Partial & mixed enabled</span></header>
-    <div className="payment-methods" role="group" aria-label="Payment method">
+    {allowCollect&&remaining>0&&<><div className="payment-methods" role="group" aria-label="Payment method">
       {methods.map(({value,label,icon:Icon}) => <button type="button" key={value} className={method === value ? 'active' : ''} aria-pressed={method===value} onClick={() => setMethod(value)}><Icon size={15}/><span>{label}</span></button>)}
     </div>
     <div className="payment-fields">
@@ -58,6 +66,8 @@ export function PaymentPanel({ orderId, grandTotal, paidTotal, baseCurrency, onP
     {method === 'cash' && session.isLoading && <p className="field-hint">Checking the active cash register…</p>}
     {method === 'cash' && !session.isLoading && !session.data && <p className="error-state">Open a cash register session before accepting cash.</p>}
     {collect.error && <p className="error-state">Payment could not be completed. Check the amount, currency rate and register session.</p>}
-    {remaining<=0?<div className="payment-complete"><CheckCircle2 size={18}/> Payment complete</div>:<button className="primary-action full" disabled={collect.isPending||quote.isLoading||!validAmount||!validTendered||(method === 'cash' && !session.data)} onClick={submit}>{collect.isPending ? 'Processing payment…' : `Collect ${format(validAmount?numericAmount:0,currency)}`}</button>}
+    <button className="primary-action full" disabled={collect.isPending||quote.isLoading||!validAmount||!validTendered||(method === 'cash' && !session.data)} onClick={submit}>{collect.isPending ? 'Processing payment…' : `Collect ${format(validAmount?numericAmount:0,currency)}`}</button></>}
+    {remaining<=0&&<div className="payment-complete"><CheckCircle2 size={18}/> Payment complete</div>}
+    {allowRefund&&<div className="refund-panel"><div className="panel-heading"><div><h3>Refund payment</h3><p>Refund against the original payment and exchange-rate snapshot.</p></div></div>{refundablePayments.length===0?<p className="field-hint">No refundable completed payments.</p>:<><label><span>Payment</span><select value={refundPaymentId} onChange={e=>{const id=e.target.value;setRefundPaymentId(id);const p=refundablePayments.find(x=>x.id===id);setRefundAmount(p?String(p.refundable):'')}}><option value="">Select payment</option>{refundablePayments.map(p=><option key={p.id} value={p.id}>{p.method} · {format(p.refundable,p.currency)} refundable</option>)}</select></label>{selectedRefund&&<><label><span>Refund amount ({selectedRefund.currency})</span><input type="number" min="0.01" max={selectedRefund.refundable} step="0.01" inputMode="decimal" value={refundAmount} onChange={e=>setRefundAmount(e.target.value)}/></label><label><span>Reason</span><textarea minLength={3} maxLength={500} value={refundReason} onChange={e=>setRefundReason(e.target.value)} placeholder="Required for audit trail"/></label>{selectedRefund.method==='cash'&&!session.data&&<p className="error-state">An open cash register session at this location is required for a cash refund.</p>}{refund.isError&&<p className="error-state">Refund could not be completed. Check refundable balance and cash session.</p>}<button className="danger-action full" disabled={!refundValid||refund.isPending||(selectedRefund.method==='cash'&&!session.data)} onClick={submitRefund}>{refund.isPending?'Processing refund…':`Refund ${format(refundValid?refundValue:0,selectedRefund.currency)}`}</button></>}</>}</div>}
   </section>;
 }
