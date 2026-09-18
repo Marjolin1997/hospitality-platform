@@ -36,6 +36,12 @@ final class RefundPayment
                 return $existing;
             }
 
+            if (DB::table('invoices')->where('business_id', $business->id)->where('order_id', $order->id)->where('status', 'issued')->exists()) {
+                throw ValidationException::withMessages([
+                    'payment' => 'Direct refunds are blocked after invoice issuance. Create an invoice correction before refunding this order.',
+                ]);
+            }
+
             if ($payment->status !== 'completed') {
                 throw ValidationException::withMessages(['payment' => 'Only completed payments can be refunded.']);
             }
