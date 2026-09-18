@@ -53,7 +53,7 @@ test('fiscalization profile stores only a secret reference and never exposes it'
     $this->putJson('/api/v1/fiscalization/profile', [
         'provider' => 'direct_dpt',
         'environment' => 'test',
-        'software_code' => 'SW-TEST-001',
+        'software_code' => 'sw123sw123',
         'is_issuer_in_vat' => true,
         'endpoint' => 'https://example.test/fiscalization',
         'certificate_secret_ref' => 'env:FISCAL_CERTIFICATE_P12',
@@ -72,7 +72,7 @@ test('fiscalization profile stores only a secret reference and never exposes it'
         ->toBe('env:FISCAL_CERTIFICATE_PASSWORD');
 
     $this->getJson('/api/v1/fiscalization/profile', $headers)->assertOk()
-        ->assertJsonPath('data.software_code', 'SW-TEST-001')
+        ->assertJsonPath('data.software_code', 'sw123sw123')
         ->assertJsonPath('data.certificate_reference_configured', true)
         ->assertJsonPath('data.certificate_password_reference_configured', true)
         ->assertJsonMissingPath('data.certificate_secret_ref')
@@ -87,7 +87,7 @@ test('raw certificates and non-https endpoints are rejected before persistence',
     $this->putJson('/api/v1/fiscalization/profile', [
         'provider' => 'direct_dpt',
         'environment' => 'test',
-        'software_code' => 'SW-TEST-002',
+        'software_code' => 'sx123sx123',
         'endpoint' => 'http://insecure.example.test',
         'certificate_secret_ref' => '-----BEGIN PRIVATE KEY-----',
     ], $headers)->assertStatus(422)
@@ -105,7 +105,7 @@ test('fiscalization profile is tenant isolated and manage permission is separate
     $this->putJson('/api/v1/fiscalization/profile', [
         'provider' => 'direct_dpt',
         'environment' => 'test',
-        'software_code' => 'A-CODE',
+        'software_code' => 'sa123sa123',
         'is_issuer_in_vat' => true,
         'endpoint' => 'https://a.example.test/fiscal',
         'certificate_secret_ref' => 'secret:a-cert',
@@ -121,12 +121,12 @@ test('fiscalization profile is tenant isolated and manage permission is separate
     $this->putJson('/api/v1/fiscalization/profile', [
         'provider' => 'direct_dpt',
         'environment' => 'test',
-        'software_code' => 'B-CODE',
+        'software_code' => 'sb123sb123',
         'is_issuer_in_vat' => true,
         'endpoint' => 'https://b.example.test/fiscal',
         'certificate_secret_ref' => 'secret:b-cert',
     ], $headersB)->assertForbidden();
 
-    expect(DB::table('fiscalization_profiles')->where('business_id', $a->id)->value('software_code'))->toBe('A-CODE')
+    expect(DB::table('fiscalization_profiles')->where('business_id', $a->id)->value('software_code'))->toBe('sa123sa123')
         ->and(DB::table('fiscalization_profiles')->where('business_id', $b->id)->count())->toBe(0);
 });
