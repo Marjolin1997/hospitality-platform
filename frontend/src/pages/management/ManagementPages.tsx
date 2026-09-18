@@ -6,6 +6,8 @@ import { useAuth } from '../../features/auth/AuthProvider';
 
 type Product={id:string;name:string;sku:string|null;product_category_id:string|null;category_name:string|null;sale_price:string;tax_rate:string;unit_code:string;unit_label:string;preparation_station:string|null;tracks_stock:boolean;is_active:boolean};
 type Category={id:string;name:string};
+type ManagedCategory={id:string;name:string;color:string|null;sort_order:number;is_active:boolean;product_count:number;active_product_count:number};
+type CategoryDraft={id?:string;name:string;color:string;sort_order:string};
 type ProductResponse={products:Product[];categories:Category[]};
 type Stock={id:string;name:string;sku:string|null;quantity_on_hand:string;reorder_level:string};
 type Expense={id:string;category:string;description:string;amount:string;currency:string;expense_date:string;status:string;reversal_of_expense_id?:string|null;reversal_reason?:string|null};
