@@ -24,7 +24,7 @@ function RouteFallback() {
 }
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, activeBusiness, activeLocation } = useAuth();
 
   if (loading) return <RouteFallback />;
   if (!user) return <Routes><Route path="*" element={<LoginPage />} /></Routes>;
@@ -35,7 +35,7 @@ export default function App() {
       <Route path="/invoices/:invoiceId/receipt/:paper" element={<FiscalReceiptPage />} />
       <Route path="/invoice-credit-notes/:creditNoteId/print" element={<CreditNotePrintPage />} />
       <Route path="/invoice-credit-notes/:creditNoteId/receipt/:paper" element={<FiscalReceiptPage />} />
-      <Route element={<AppShell />}>
+      <Route element={<AppShell key={`${activeBusiness?.id??'business'}:${activeLocation?.id??'location'}`} />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/pos" element={<PosPage />} />
