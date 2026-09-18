@@ -174,13 +174,30 @@ final class OperationsService
         $expenses = $postedExpenses->minus($reversedExpenses);
         $netSales = $sales->minus($refunds);
 
+        $closedCashSessions = DB::table('cash_sessions')
+            ->where('business_id', $business->id)
+            ->where('status', 'closed')
+            ->where('closed_at', '>=', $from)
+            ->whereNotNull('cash_difference');
+        $cashOver = BigDecimal::of((string) (clone $closedCashSessions)->where('cash_difference', '>', 0)->sum('cash_difference'));
+        $cashShortSigned = BigDecimal::of((string) (clone $closedCashSessions)->where('cash_difference', '<', 0)->sum('cash_difference'));
+        $cashShort = $cashShortSigned->isNegative() ? $cashShortSigned->negated() : $cashShortSigned;
+        $cashVariance = BigDecimal::of((string) (clone $closedCashSessions)->sum('cash_difference'));
+
         return [
             'sales' => $this->decimal($netSales),
             'gross_sales' => $this->decimal($sales),
             'refunds' => $this->decimal($refunds),
             'expenses' => $this->decimal($expenses),
             'net' => $this->decimal($netSales->minus($expenses)),
-            'recent_expenses' => DB::table('expenses')->where('business_id', $business->id)->orderByDesc('expense_date')->limit(50)->get(),
+            'cash_reconciliation' => [
+                'open_sessions' => DB::table('cash_sessions')->where('business_id', $business->id)->where('status', 'open')->count(),
+                'closed_sessions' => (clone $closedCashSessions)->count(),
+                'cash_over' => $this->decimal($cashOver),
+                'cash_short' => $this->decimal($cashShort),
+                'net_variance' => $this->decimal($cashVariance),
+            ],
+            'recent_expenses' => DB::table('expenses')->where('business_id', $business->id)->orderByDesc('expense_date')->orderByDesc('created_at')->limit(50)->get(),
         ];
     }
 
