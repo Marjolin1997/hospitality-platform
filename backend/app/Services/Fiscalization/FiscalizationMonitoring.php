@@ -34,32 +34,47 @@ final class FiscalizationMonitoring
         $failed24h = (clone $invoiceAttempts24h)->where('status','failed')->count()
             + (clone $creditAttempts24h)->where('status','failed')->count();
 
-        $retryPending = DB::table('invoice_fiscalization_attempts')
+        $latestInvoiceAttempts = DB::table('invoice_fiscalization_attempts')
             ->where('business_id', $business->id)
-            ->where('status','retry_pending')
-            ->where('retryable', true)
-            ->count()
-            + DB::table('credit_note_fiscalization_attempts')
-                ->where('business_id', $business->id)
-                ->where('status','retry_pending')
-                ->where('retryable', true)
-                ->count();
+            ->select('invoice_id', DB::raw('MAX(attempt_no) as max_attempt'))
+            ->groupBy('invoice_id');
+
+        $latestCreditAttempts = DB::table('credit_note_fiscalization_attempts')
+            ->where('business_id', $business->id)
+            ->select('invoice_credit_note_id', DB::raw('MAX(attempt_no) as max_attempt'))
+            ->groupBy('invoice_credit_note_id');
+
+        $invoiceRetryQuery = DB::table('invoice_fiscalization_attempts as a')
+            ->joinSub($latestInvoiceAttempts, 'latest', function ($join): void {
+                $join->on('latest.invoice_id','=','a.invoice_id')
+                    ->on('latest.max_attempt','=','a.attempt_no');
+            })
+            ->where('a.business_id', $business->id)
+            ->where('a.status','retry_pending')
+            ->where('a.retryable', true);
+
+        $creditRetryQuery = DB::table('credit_note_fiscalization_attempts as a')
+            ->joinSub($latestCreditAttempts, 'latest', function ($join): void {
+                $join->on('latest.invoice_credit_note_id','=','a.invoice_credit_note_id')
+                    ->on('latest.max_attempt','=','a.attempt_no');
+            })
+            ->where('a.business_id', $business->id)
+            ->where('a.status','retry_pending')
+            ->where('a.retryable', true);
+
+        $retryPending = (clone $invoiceRetryQuery)->count() + (clone $creditRetryQuery)->count();
 
         $oldestRetry = collect([
-            DB::table('invoice_fiscalization_attempts')
-                ->where('business_id', $business->id)
-                ->where('status','retry_pending')
-                ->where('retryable', true)
-                ->min('next_retry_at'),
-            DB::table('credit_note_fiscalization_attempts')
-                ->where('business_id', $business->id)
-                ->where('status','retry_pending')
-                ->where('retryable', true)
-                ->min('next_retry_at'),
+            (clone $invoiceRetryQuery)->min('a.next_retry_at'),
+            (clone $creditRetryQuery)->min('a.next_retry_at'),
         ])->filter()->sort()->first();
 
         $recentFailures = collect()
             ->concat(DB::table('invoice_fiscalization_attempts as a')
+                ->joinSub($latestInvoiceAttempts, 'latest', function ($join): void {
+                    $join->on('latest.invoice_id','=','a.invoice_id')
+                        ->on('latest.max_attempt','=','a.attempt_no');
+                })
                 ->join('invoices as i','i.id','=','a.invoice_id')
                 ->where('a.business_id',$business->id)
                 ->whereIn('a.status',['failed','retry_pending'])
@@ -71,6 +86,10 @@ final class FiscalizationMonitoring
                     'a.http_status','a.next_retry_at','a.started_at',
                 ]))
             ->concat(DB::table('credit_note_fiscalization_attempts as a')
+                ->joinSub($latestCreditAttempts, 'latest', function ($join): void {
+                    $join->on('latest.invoice_credit_note_id','=','a.invoice_credit_note_id')
+                        ->on('latest.max_attempt','=','a.attempt_no');
+                })
                 ->join('invoice_credit_notes as c','c.id','=','a.invoice_credit_note_id')
                 ->where('a.business_id',$business->id)
                 ->whereIn('a.status',['failed','retry_pending'])
