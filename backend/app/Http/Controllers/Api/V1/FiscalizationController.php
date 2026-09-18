@@ -192,8 +192,6 @@ final class FiscalizationController extends Controller
         $row = Invoice::query()->forBusiness($business)->whereKey($invoice)->first();
         abort_unless($row, 404);
 
-        $guard->assertCanDispatch($business);
-
         $attempts = DB::table('invoice_fiscalization_attempts')
             ->where('business_id', $business->id)
             ->where('invoice_id', $row->id)
@@ -223,8 +221,6 @@ final class FiscalizationController extends Controller
         $business = app(Business::class);
         $row = InvoiceCreditNote::query()->forBusiness($business)->whereKey($creditNote)->first();
         abort_unless($row, 404);
-
-        $guard->assertCanDispatch($business);
 
         $attempts = DB::table('credit_note_fiscalization_attempts')
             ->where('business_id', $business->id)
