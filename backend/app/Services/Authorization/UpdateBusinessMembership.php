@@ -17,6 +17,11 @@ final class UpdateBusinessMembership
         int $performedByUserId,
     ): void {
         DB::transaction(function () use ($business, $userId, $roleId, $status, $performedByUserId): void {
+            DB::table('businesses')
+                ->where('id', $business->getKey())
+                ->lockForUpdate()
+                ->first();
+
             $targetRole = DB::table('roles')
                 ->where('business_id', $business->getKey())
                 ->where('id', $roleId)
