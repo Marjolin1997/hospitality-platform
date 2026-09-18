@@ -29,8 +29,7 @@ final class UpdateBusinessMembership
                 abort(404);
             }
 
-            $removesActiveOwner = $membership->status === 'active'
-                && $membership->role_slug === 'owner'
+            $removesActiveOwner = $this->isActiveBusinessOwner($membership, $business)
                 && ($status !== 'active' || $targetRole->slug !== 'owner');
 
             if ($removesActiveOwner) {
@@ -47,8 +46,7 @@ final class UpdateBusinessMembership
                 $membership = $this->membership($business, $userId, true);
 
                 $stillRemovesActiveOwner = $membership
-                    && $membership->status === 'active'
-                    && $membership->role_slug === 'owner'
+                    && $this->isActiveBusinessOwner($membership, $business)
                     && ($status !== 'active' || $targetRole->slug !== 'owner');
 
                 if ($stillRemovesActiveOwner && $activeOwnerIds->count() <= 1) {
@@ -77,13 +75,26 @@ final class UpdateBusinessMembership
             ->leftJoin('roles as r', 'r.id', '=', 'bu.role_id')
             ->where('bu.business_id', $business->getKey())
             ->where('bu.user_id', $userId)
-            ->select('bu.user_id', 'bu.status', 'bu.role_id', 'r.slug as role_slug');
+            ->select(
+                'bu.user_id',
+                'bu.status',
+                'bu.role_id',
+                'r.slug as role_slug',
+                'r.business_id as role_business_id',
+            );
 
         if ($lock) {
             $query->lockForUpdate();
         }
 
         return $query->first();
+    }
+
+    private function isActiveBusinessOwner(object $membership, Business $business): bool
+    {
+        return $membership->status === 'active'
+            && $membership->role_slug === 'owner'
+            && (string) $membership->role_business_id === (string) $business->getKey();
     }
 
     private function lockMembership(Business $business, int $userId): void
