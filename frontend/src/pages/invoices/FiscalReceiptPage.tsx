@@ -11,7 +11,7 @@ type InvoiceReceipt={id:string;number:string;fiscal_invoice_number:string|null;f
 type CreditReceipt={id:string;number:string;fiscal_invoice_number:string|null;fiscalization_status:string;currency:string;grand_total:string;tax_total:string;reason:string;fiscal_operator_code_snapshot:string|null;fiscal_business_unit_code_snapshot:string|null;fiscal_tcr_code_snapshot:string|null;nslf:string|null;nivf:string|null;verification_url:string|null;qr_payload:string|null;issued_at:string|null;fiscalized_at:string|null;original_invoice_nslf_snapshot:string|null;lines:Line[];payments:Payment[];original_invoice:InvoiceReceipt};
 
 const fixed=(v:string|number)=>Number(v||0).toFixed(2);
-const qty=(v:string)=>Number(v||0).toFixed(3).replace(/0+$/,'').replace(/.$/,'');
+const qty=(v:string)=>Number(v||0).toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
 function when(value:string|null,tz:string){return value?new Intl.DateTimeFormat('sq-AL',{timeZone:tz,dateStyle:'short',timeStyle:'medium'}).format(new Date(value)):'—';}
 
 export function FiscalReceiptPage(){
@@ -19,12 +19,16 @@ export function FiscalReceiptPage(){
   const isCredit=Boolean(creditNoteId);
   const {activeBusiness}=useAuth();
   const location=useLocation();
-  const q=useQuery({
+  const q=useQuery<InvoiceReceipt|CreditReceipt>({
     queryKey:['fiscal-receipt',isCredit?'credit':'invoice',creditNoteId||invoiceId],
     enabled:Boolean(creditNoteId||invoiceId),
-    queryFn:()=>isCredit
-      ?api.get<{data:CreditReceipt}>(`/invoice-credit-notes/${creditNoteId}`).then(r=>r.data.data)
-      :api.get<{data:InvoiceReceipt}>(`/invoices/${invoiceId}`).then(r=>r.data.data),
+    queryFn:async ():Promise<InvoiceReceipt|CreditReceipt>=>{
+      if(isCredit){
+        return api.get<{data:CreditReceipt}>(`/invoice-credit-notes/${creditNoteId}`).then(r=>r.data.data);
+      }
+
+      return api.get<{data:InvoiceReceipt}>(`/invoices/${invoiceId}`).then(r=>r.data.data);
+    },
   });
   if(q.isLoading)return <main className="receipt-state">Duke përgatitur kuponin…</main>;
   if(q.isError||!q.data)return <main className="receipt-state error">Kuponi nuk mund të ngarkohej.</main>;
