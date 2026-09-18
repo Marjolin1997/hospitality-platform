@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\IssueInvoiceCreditNoteRequest;
 use App\Models\Business;
 use App\Services\Invoicing\IssueInvoice;
 use App\Services\Invoicing\IssueInvoiceCreditNote;
+use App\Services\Fiscalization\FiscalPaymentMapper;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -55,7 +56,7 @@ final class InvoiceController extends Controller
         return response()->json(['data' => $rows]);
     }
 
-    public function show(string $invoice): JsonResponse
+    public function show(string $invoice, FiscalPaymentMapper $paymentMapper): JsonResponse
     {
         $business = app(Business::class);
         $row = DB::table('invoices')->where('business_id', $business->id)->where('id', $invoice)->first();
@@ -82,6 +83,10 @@ final class InvoiceController extends Controller
         if (! $profile?->software_code) $missing[] = 'Certified software code';
         if (! $profile?->certificate_secret_ref) $missing[] = 'Electronic certificate reference';
         if ((float) $row->discount_total > 0) $missing[] = 'Fiscal line-level allocation of the order discount';
+
+        if ($paymentMapper->mixesCashAndNonCash($row->payments)) {
+            $missing[] = 'Split CASH and NONCASH payment methods into fiscally compatible documents';
+        }
 
         $cashLike = collect($row->payments)->contains(fn ($payment) => in_array($payment->method, ['cash','card'], true));
         if ($cashLike && ! $row->fiscal_tcr_code_snapshot) $missing[] = 'Fiscal device / TCR code';
