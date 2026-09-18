@@ -51,7 +51,7 @@ final class BusinessLocationController extends Controller
             ->orderBy('name')
             ->get();
 
-        $activeCount = $rows->where('is_active', true)->count();
+        $activeCount = $rows->filter(fn (object $row): bool => (bool) $row->is_active)->count();
 
         $rows->transform(function (object $row) use ($activeCount): object {
             $row->is_active = (bool) $row->is_active;
