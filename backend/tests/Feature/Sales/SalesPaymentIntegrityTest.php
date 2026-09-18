@@ -223,12 +223,12 @@ test('foreign currency payment uses inverse rate and enforces the base remaining
     $headers = spiHeaders($business);
 
     DB::table('exchange_rates')->insert([
-        'id' => (string) Str::ulid(),
         'base_currency' => 'EUR',
         'quote_currency' => 'USD',
         'rate' => '1.2500000000',
         'source' => 'test',
         'effective_at' => now()->subMinute(),
+        'fetched_at' => now(),
         'created_at' => now(),
         'updated_at' => now(),
     ]);
