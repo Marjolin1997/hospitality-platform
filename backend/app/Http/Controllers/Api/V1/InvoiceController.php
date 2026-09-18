@@ -130,6 +130,43 @@ final class InvoiceController extends Controller
         return response()->json(['data' => $row]);
     }
 
+    public function showCreditNote(string $creditNote): JsonResponse
+    {
+        $business = app(Business::class);
+
+        $credit = DB::table('invoice_credit_notes')
+            ->where('business_id', $business->id)
+            ->where('id', $creditNote)
+            ->first();
+        abort_unless($credit, 404);
+
+        $credit->lines = DB::table('invoice_credit_note_lines')
+            ->where('business_id', $business->id)
+            ->where('invoice_credit_note_id', $credit->id)
+            ->orderBy('position')
+            ->get();
+
+        $credit->original_invoice = DB::table('invoices')
+            ->where('business_id', $business->id)
+            ->where('id', $credit->invoice_id)
+            ->first();
+        abort_unless($credit->original_invoice, 404);
+
+        $credit->payments = DB::table('invoice_payment_snapshots')
+            ->where('business_id', $business->id)
+            ->where('invoice_id', $credit->invoice_id)
+            ->orderBy('position')
+            ->get();
+
+        $credit->refunded_total = (string) DB::table('payment_refunds')
+            ->where('business_id', $business->id)
+            ->where('invoice_credit_note_id', $credit->id)
+            ->where('status', 'completed')
+            ->sum('amount_base');
+
+        return response()->json(['data' => $credit]);
+    }
+
     public function store(IssueInvoiceRequest $request, IssueInvoice $issue): JsonResponse
     {
         $invoice = $issue->execute(app(Business::class), $request->user(), $request->validated());
