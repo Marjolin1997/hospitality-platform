@@ -183,3 +183,10 @@ body{color:var(--ui-text);background:var(--ui-bg);-webkit-font-smoothing:antiali
 .owner-continuity-note strong,.owner-continuity-note span{display:block}.owner-continuity-note strong{min-width:150px;color:#35462e;font-size:10px;text-transform:uppercase;letter-spacing:.045em}.owner-continuity-note span{color:#728069;font-size:10px;line-height:1.5}
 .staff-identity{display:flex;align-items:center;gap:10px;min-width:180px}.staff-avatar{flex:0 0 auto;width:32px;height:32px;display:grid;place-items:center;border:1px solid #dfe7e2;border-radius:10px;background:linear-gradient(145deg,#f5f8f6,#e9efec);color:#415249;font-size:9px;font-weight:850;letter-spacing:.025em}.staff-identity>div{display:grid;gap:2px}.staff-identity small{color:#8a9690;font-size:9px}.staff-table .status-select{min-width:112px!important}
 @media(max-width:680px){.owner-continuity-note{display:grid;gap:6px}.owner-continuity-note strong{min-width:0}}
+
+
+/* Invoice workflow discoverability */
+.invoice-list-heading{align-items:flex-end}.invoice-toolbar{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap}.invoice-toolbar .compact-search{width:290px;min-width:240px;height:40px}.invoice-toolbar>select{width:auto;min-width:156px;min-height:40px;padding:8px 32px 8px 10px;font-size:10px;font-weight:750}
+.credit-note-cell{display:grid;justify-items:start;gap:4px;min-width:145px}.credit-note-cell .status-badge{margin-top:2px}
+@media(max-width:900px){.invoice-list-heading{align-items:stretch;flex-direction:column}.invoice-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%}.invoice-toolbar .compact-search{width:100%;min-width:0}}
+@media(max-width:560px){.invoice-toolbar{grid-template-columns:1fr}.invoice-toolbar>select{width:100%}}
