@@ -41,6 +41,8 @@ return new class extends Migration {
         Schema::table('invoices', function (Blueprint $table): void {
             $table->string('fiscalization_status', 24)->default('not_fiscalized')->after('status');
             $table->string('fiscal_invoice_type', 24)->nullable()->after('fiscalization_status');
+            $table->string('fiscal_invoice_number', 64)->nullable()->after('fiscal_invoice_type');
+            $table->unsignedBigInteger('fiscal_ordinal_number')->nullable()->after('fiscal_invoice_number');
             $table->string('fiscal_operator_code_snapshot', 64)->nullable()->after('location_address_snapshot');
             $table->string('fiscal_business_unit_code_snapshot', 64)->nullable()->after('fiscal_operator_code_snapshot');
             $table->string('fiscal_tcr_code_snapshot', 64)->nullable()->after('fiscal_business_unit_code_snapshot');
@@ -114,7 +116,7 @@ return new class extends Migration {
             $table->dropIndex('invoices_business_fiscal_status_idx');
             $table->dropIndex('invoices_business_nivf_idx');
             $table->dropColumn([
-                'fiscalization_status','fiscal_invoice_type','fiscal_operator_code_snapshot',
+                'fiscalization_status','fiscal_invoice_type','fiscal_invoice_number','fiscal_ordinal_number','fiscal_operator_code_snapshot',
                 'fiscal_business_unit_code_snapshot','fiscal_tcr_code_snapshot','nslf','nivf',
                 'verification_url','qr_payload','fiscalized_at','fiscalization_attempts','fiscalization_error',
             ]);
