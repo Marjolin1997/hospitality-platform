@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Business;
+use App\Models\FiscalizationProfile;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -237,6 +238,56 @@ test('location disable preserves one active branch and blocks live operational d
         ->assertJsonPath('data.is_active', true);
 
     expect(DB::table('business_location_audits')->where('location_id', $second)->where('action', 'status_changed')->count())->toBe(2);
+});
+
+test('location topology changes invalidate a previously fresh fiscal preflight', function (): void {
+    $business = blmBusiness('Location Fiscal Topology');
+    $user = blmUser($business);
+    $headers = blmHeaders($user, $business);
+
+    $this->postJson('/api/v1/management/locations', [
+        'name' => 'Main',
+        'code' => 'MAIN',
+        'type' => 'bar',
+        'address' => null,
+    ], $headers)->assertCreated();
+
+    $profile = FiscalizationProfile::query()->create([
+        'business_id' => $business->getKey(),
+        'provider' => 'direct_dpt',
+        'environment' => 'production',
+        'status' => 'active',
+        'software_code' => 'aa123aa123',
+        'endpoint' => 'https://prod.example.test',
+        'preflight_checked_at' => now(),
+        'preflight_status' => 'ready',
+        'production_activated_at' => now(),
+        'production_activated_by_user_id' => $user->id,
+    ]);
+
+    $second = $this->postJson('/api/v1/management/locations', [
+        'name' => 'Terrace',
+        'code' => 'TERRACE',
+        'type' => 'cafe',
+        'address' => null,
+    ], $headers)->assertCreated()->json('data.id');
+
+    $profile->refresh();
+    expect($profile->preflight_checked_at)->toBeNull()
+        ->and($profile->preflight_status)->toBeNull()
+        ->and($profile->production_activated_at)->not->toBeNull();
+
+    $profile->forceFill([
+        'preflight_checked_at' => now(),
+        'preflight_status' => 'ready',
+    ])->save();
+
+    $this->patchJson("/api/v1/management/locations/{$second}/status", ['is_active' => false], $headers)
+        ->assertOk();
+
+    $profile->refresh();
+    expect($profile->preflight_checked_at)->toBeNull()
+        ->and($profile->preflight_status)->toBeNull();
 });
 
 test('location mutation cannot cross tenant boundaries', function (): void {
