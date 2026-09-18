@@ -44,9 +44,12 @@ final class FiscalCertificateInspector
             throw new RuntimeException('Fiscal certificate SHA-256 fingerprint could not be generated.');
         }
 
-        $validNow = $now->addMinutes(5)->greaterThanOrEqualTo($notBefore)
-            && $now->lessThanOrEqualTo($notAfter);
-        $secondsRemaining = $notAfter->getTimestamp() - $now->getTimestamp();
+        $clockSkewSeconds = max(0, (int) config('fiscalization.certificate_clock_skew_seconds', 300));
+        $nowTs = $now->getTimestamp();
+
+        $validNow = $nowTs >= ($notBeforeTs - $clockSkewSeconds)
+            && $nowTs <= $notAfterTs;
+        $secondsRemaining = $notAfterTs - $nowTs;
 
         return [
             'valid_now' => $validNow,
