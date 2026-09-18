@@ -13,6 +13,7 @@ final class FiscalizeInvoice
         private readonly FiscalizationGateway $gateway,
         private readonly FiscalizationAttemptRecorder $attempts,
         private readonly QrVerificationUrlGenerator $qr,
+        private readonly FiscalizationDispatchGuard $dispatchGuard,
     ) {}
 
     /**
@@ -20,6 +21,7 @@ final class FiscalizeInvoice
      */
     public function execute(Business $business, string $invoiceId, bool $subsequentDelivery = false): array
     {
+        $this->dispatchGuard->assertCanDispatch($business);
         $prepared = $this->factory->prepare($business, $invoiceId, $subsequentDelivery);
         $submission = $prepared->submission;
         $profile = $prepared->profile;
