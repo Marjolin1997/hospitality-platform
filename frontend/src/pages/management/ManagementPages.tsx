@@ -111,7 +111,7 @@ export function SettingsPage(){
  useEffect(()=>{if(fiscalSetup.data)setSetupDraft(structuredClone(fiscalSetup.data))},[fiscalSetup.data]);
  const save=useMutation({mutationFn:(data:any)=>api.put('/settings',data),onSuccess:()=>qc.invalidateQueries({queryKey:['settings',activeBusiness?.id]})});
  const saveFiscal=useMutation({mutationFn:(data:any)=>api.put('/fiscalization/profile',data),onSuccess:()=>qc.invalidateQueries({queryKey:['fiscalization-profile',activeBusiness?.id]})});
- const saveFiscalSetup=useMutation({mutationFn:(data:FiscalSetup)=>api.put<{data:FiscalSetup}>('/fiscalization/setup',{locations:data.locations.map(x=>({id:x.id,fiscal_business_unit_code:x.fiscal_business_unit_code||null})),cash_registers:data.cash_registers.map(x=>({id:x.id,fiscal_tcr_code:x.fiscal_tcr_code||null})),operators:data.operators.map(x=>({user_id:x.user_id,fiscal_operator_code:x.fiscal_operator_code||null}))}).then(r=>r.data.data),onSuccess:async(data)=>{setSetupDraft(data);runPreflight.reset();await Promise.all([qc.invalidateQueries({queryKey:['fiscalization-setup',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['fiscalization-profile',activeBusiness?.id]})])}});
+ const saveFiscalSetup=useMutation({mutationFn:(data:FiscalSetup)=>api.put<{data:FiscalSetup}>('/fiscalization/setup',{locations:data.locations.map(x=>({id:x.id,fiscal_business_unit_code:x.fiscal_business_unit_code||null})),cash_registers:data.cash_registers.map(x=>({id:x.id,fiscal_tcr_code:x.fiscal_tcr_code||null})),operators:data.operators.map(x=>({user_id:x.user_id,fiscal_operator_code:x.fiscal_operator_code||null}))}).then(r=>r.data.data),onSuccess:async(data)=>{setSetupDraft(data);await Promise.all([qc.invalidateQueries({queryKey:['fiscalization-setup',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['fiscalization-profile',activeBusiness?.id]})])}});
  const runPreflight=useMutation({mutationFn:()=>api.post<{data:FiscalPreflight}>('/fiscalization/preflight').then(r=>r.data.data),onSuccess:async()=>{await Promise.all([qc.invalidateQueries({queryKey:['fiscalization-profile',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['fiscalization-monitoring',activeBusiness?.id]})])}});
  const activateProduction=useMutation({mutationFn:()=>api.post<{data:FiscalizationProfile}>('/fiscalization/activate-production').then(r=>r.data.data),onSuccess:async()=>{await Promise.all([qc.invalidateQueries({queryKey:['fiscalization-profile',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['fiscalization-monitoring',activeBusiness?.id]})])}});
  if(q.isLoading)return <Loading/>; if(q.isError)return <ErrorState/>; const d=q.data!;
@@ -197,7 +197,7 @@ export function SettingsPage(){
      </div>
      {saveFiscalSetup.isError&&<p className="error-state">{apiMessage(saveFiscalSetup.error)}</p>}
      {saveFiscalSetup.isSuccess&&<span className="save-confirmation">Fiscal identity matrix saved.</span>}
-     {can('fiscalization.manage')&&<button className="primary-button" disabled={saveFiscalSetup.isPending} onClick={()=>setupDraft&&saveFiscalSetup.mutate(setupDraft)}>{saveFiscalSetup.isPending?'Saving fiscal codes…':'Save fiscal setup'}</button>}
+     {can('fiscalization.manage')&&<button className="primary-button" disabled={saveFiscalSetup.isPending} onClick={()=>{runPreflight.reset();if(setupDraft)saveFiscalSetup.mutate(setupDraft)}}>{saveFiscalSetup.isPending?'Saving fiscal codes…':'Save fiscal setup'}</button>}
    </>}
  </div>}</>
 }
