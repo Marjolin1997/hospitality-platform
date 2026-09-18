@@ -1,5 +1,5 @@
 import { BarChart3, Boxes, Coffee, FileText, LayoutDashboard, LogOut, Menu, ReceiptText, Settings, ShoppingCart, Users, WalletCards, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../features/auth/AuthProvider';
 
@@ -23,6 +23,18 @@ export function AppShell(){
   const visibleNavigation=navigation.filter(item=>item.permissions.length===0||canAny([...item.permissions]));
   const canUseCashRegister=canAny(['cash_sessions.open','cash_sessions.close','payments.collect']);
   const sections=[...new Set(visibleNavigation.map(item=>item.section))];
+
+  useEffect(()=>{
+    if(!mobileNavOpen)return;
+    const previousOverflow=document.body.style.overflow;
+    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==='Escape')setMobileNavOpen(false)};
+    document.body.style.overflow='hidden';
+    window.addEventListener('keydown',closeOnEscape);
+    return ()=>{
+      document.body.style.overflow=previousOverflow;
+      window.removeEventListener('keydown',closeOnEscape);
+    };
+  },[mobileNavOpen]);
 
   return <div className="app-shell">
     <a className="skip-link" href="#workspace-content">Skip to workspace</a>
