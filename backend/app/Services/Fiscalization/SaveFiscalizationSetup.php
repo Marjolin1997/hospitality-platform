@@ -59,6 +59,14 @@ final class SaveFiscalizationSetup
                         ->update(['fiscal_operator_code' => $row['fiscal_operator_code'] ?? null]);
                 }
 
+                DB::table('fiscalization_profiles')
+                    ->where('business_id', $business->id)
+                    ->update([
+                        'preflight_checked_at' => null,
+                        'preflight_status' => null,
+                        'updated_at' => now(),
+                    ]);
+
                 return $this->read($business);
             }, attempts: 3);
         } catch (QueryException $e) {
