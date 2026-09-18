@@ -103,6 +103,31 @@ final class OperationsService
         });
     }
 
+    public function createExpense(Business $business, array $data, int $userId): object
+    {
+        return DB::transaction(function () use ($business, $data, $userId): object {
+            $id = (string) Str::ulid();
+            $amount = BigDecimal::of((string) $data['amount'])->toScale(self::SCALE, RoundingMode::HALF_UP);
+
+            DB::table('expenses')->insert([
+                'id' => $id,
+                'business_id' => $business->id,
+                'location_id' => $data['location_id'] ?? null,
+                'created_by_user_id' => $userId,
+                'category' => trim($data['category']),
+                'description' => trim($data['description']),
+                'amount' => (string) $amount,
+                'currency' => $business->currency,
+                'expense_date' => $data['expense_date'],
+                'status' => 'posted',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            return DB::table('expenses')->where('business_id', $business->id)->where('id', $id)->first();
+        }, attempts: 3);
+    }
+
     public function financeOverview(Business $business): array
     {
         $from = now($business->timezone)->startOfMonth()->utc();
