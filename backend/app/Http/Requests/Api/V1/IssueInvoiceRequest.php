@@ -14,6 +14,7 @@ final class IssueInvoiceRequest extends FormRequest
             'order_id' => ['required','string'],
             'customer_name' => ['nullable','string','max:255'],
             'customer_tax_number' => ['nullable','string','max:80'],
+            'cash_register_id' => ['nullable','string'],
         ];
     }
 
