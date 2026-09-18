@@ -3,7 +3,10 @@
 use App\Models\Business;
 use App\Models\FiscalizationProfile;
 use App\Models\Location;
+use App\Models\Permission;
+use App\Models\Role;
 use App\Models\User;
+use Database\Seeders\PermissionSeeder;
 use App\Services\Fiscalization\ActivateProductionFiscalization;
 use App\Services\Fiscalization\FiscalCertificateInspector;
 use App\Services\Fiscalization\FiscalizationMonitoring;
@@ -17,6 +20,8 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 uses(RefreshDatabase::class);
+
+beforeEach(fn () => $this->seed(PermissionSeeder::class));
 
 function frtCredentials(int $days = 365): array
 {
@@ -67,9 +72,20 @@ function frtFixture(string $environment = 'test'): array
         'password' => bcrypt('password'),
     ]);
 
+    $role = Role::query()->create([
+        'business_id' => $business->id,
+        'name' => 'Fiscal Issuer',
+        'slug' => 'fiscal-issuer-'.Str::lower(Str::random(6)),
+        'is_system' => false,
+    ]);
+    $role->permissions()->sync(
+        Permission::query()->where('key','fiscalization.issue')->pluck('id')
+    );
+
     DB::table('business_user')->insert([
         'business_id' => $business->id,
         'user_id' => $user->id,
+        'role_id' => $role->id,
         'status' => 'active',
         'fiscal_operator_code' => 'cc123cc123',
         'created_at' => now(),
