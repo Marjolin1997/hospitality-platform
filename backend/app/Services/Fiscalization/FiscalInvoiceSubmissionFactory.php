@@ -259,7 +259,36 @@ final class FiscalInvoiceSubmissionFactory
             ])->save();
 
             return new PreparedFiscalInvoice(
-                new FiscalInvoiceSubmission(...$base, payloadHash: $payloadHash),
+                new FiscalInvoiceSubmission(
+                    invoiceId: $base['invoiceId'],
+                    businessId: $base['businessId'],
+                    environment: $base['environment'],
+                    requestUuid: $base['requestUuid'],
+                    sendDateTime: $base['sendDateTime'],
+                    issueDateTime: $base['issueDateTime'],
+                    subsequentDeliveryType: $base['subsequentDeliveryType'],
+                    invoiceType: $base['invoiceType'],
+                    invoiceNumber: $base['invoiceNumber'],
+                    invoiceOrdinal: $base['invoiceOrdinal'],
+                    issuerNuis: $base['issuerNuis'],
+                    isIssuerInVat: $base['isIssuerInVat'],
+                    businessUnitCode: $base['businessUnitCode'],
+                    tcrCode: $base['tcrCode'],
+                    operatorCode: $base['operatorCode'],
+                    softwareCode: $base['softwareCode'],
+                    currency: $base['currency'],
+                    totalWithoutVat: $base['totalWithoutVat'],
+                    totalVat: $base['totalVat'],
+                    totalPrice: $base['totalPrice'],
+                    iic: $base['iic'],
+                    iicSignature: $base['iicSignature'],
+                    seller: $base['seller'],
+                    buyer: $base['buyer'],
+                    items: $base['items'],
+                    sameTaxes: $base['sameTaxes'],
+                    payments: $base['payments'],
+                    payloadHash: $payloadHash,
+                ),
                 $profile,
             );
         }, attempts: 3);
