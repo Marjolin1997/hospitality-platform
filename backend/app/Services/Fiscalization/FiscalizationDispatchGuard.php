@@ -34,9 +34,28 @@ final class FiscalizationDispatchGuard
             ]);
         }
 
+        if ($profile->certificate_not_before !== null && $profile->certificate_not_before->isFuture()) {
+            throw ValidationException::withMessages([
+                'fiscalization' => 'Fiscal certificate is not valid yet. Run production preflight again after its validity start.',
+            ]);
+        }
+
         if ($profile->certificate_not_after !== null && $profile->certificate_not_after->isPast()) {
             throw ValidationException::withMessages([
                 'fiscalization' => 'Fiscal certificate has expired. Replace it and run production preflight again.',
+            ]);
+        }
+
+        $caBundle = config('fiscalization.dpt_ca_bundle');
+        if (! is_string($caBundle) || $caBundle === '' || ! is_readable($caBundle)) {
+            throw ValidationException::withMessages([
+                'fiscalization' => 'Production DPT/AKSHI CA trust bundle is not available.',
+            ]);
+        }
+
+        if (config('queue.default') === 'sync') {
+            throw ValidationException::withMessages([
+                'fiscalization' => 'Production fiscalization requires an asynchronous queue driver.',
             ]);
         }
 
