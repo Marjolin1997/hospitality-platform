@@ -9,6 +9,7 @@ return new class extends Migration {
     {
         Schema::table('fiscalization_profiles', function (Blueprint $table): void {
             $table->string('certificate_password_secret_ref')->nullable()->after('certificate_secret_ref');
+            $table->boolean('is_issuer_in_vat')->nullable()->after('certificate_password_secret_ref');
         });
 
         Schema::create('business_fiscal_invoice_counters', function (Blueprint $table): void {
@@ -39,7 +40,7 @@ return new class extends Migration {
         Schema::dropIfExists('business_fiscal_invoice_counters');
 
         Schema::table('fiscalization_profiles', function (Blueprint $table): void {
-            $table->dropColumn('certificate_password_secret_ref');
+            $table->dropColumn(['certificate_password_secret_ref','is_issuer_in_vat']);
         });
     }
 };
