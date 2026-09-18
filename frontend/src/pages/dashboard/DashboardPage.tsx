@@ -76,7 +76,7 @@ export function DashboardPage() {
   return <section className="dashboard-page">
     <div className="page-heading dashboard-heading">
       <div><span className="eyebrow">LIVE OVERVIEW</span><h1>{greeting()}</h1><p>{activeLocation?.name??'Workspace'} · operational health, service flow and exceptions from live tenant data.</p></div>
-      <div className="dashboard-heading-actions"><span className="live-pill"><span className="status-dot"/> Live operations</span><button className="secondary-button" onClick={refetchAll} disabled={isRefreshing}><RefreshCw size={15} className={isRefreshing?'spin':''}/>{isRefreshing?'Refreshing…':'Refresh'}</button></div>
+      <div className="dashboard-heading-actions"><span className="live-pill"><span className="status-dot"/> Live operations</span><button type="button" className="secondary-button" onClick={refetchAll} disabled={isRefreshing}><RefreshCw size={15} className={isRefreshing?'spin':''}/>{isRefreshing?'Refreshing…':'Refresh'}</button></div>
     </div>
 
     <div className="metric-grid dashboard-metric-grid">
@@ -88,7 +88,7 @@ export function DashboardPage() {
 
     <div className="dashboard-grid">
       <article className="panel dashboard-live-panel">
-        <div className="panel-heading"><div><h2>Live service</h2><p>Table occupancy and active orders at {activeLocation?.name??'the current location'}.</p></div><button className="text-button" onClick={()=>navigate('/pos')}>Open POS <ArrowUpRight size={14}/></button></div>
+        <div className="panel-heading"><div><h2>Live service</h2><p>Table occupancy and active orders at {activeLocation?.name??'the current location'}.</p></div><button type="button" className="text-button" onClick={()=>navigate('/pos')}>Open POS <ArrowUpRight size={14}/></button></div>
         {!can('orders.view')?<div className="management-empty">Order visibility is not available for your role.</div>:venue.isError||orders.isError?<div className="error-state">Live service data could not be refreshed.</div>:<>
           {(venue.data??[]).map(area=>{const tableIds=new Set(area.tables.map(table=>table.id));const areaOrders=locationOrders.filter(order=>order.venue_table_id&&tableIds.has(order.venue_table_id));const occupied=area.tables.filter(table=>table.is_active&&occupiedTableIds.has(table.id)).length;const activeTables=area.tables.filter(table=>table.is_active).length;return <div className="service-row" key={area.id}><div><strong>{area.name}</strong><span>{occupied} / {activeTables} tables occupied</span></div><b>{areaOrders.length} orders</b></div>})}
           <div className="service-row"><div><strong>Counter & takeaway</strong><span>Orders without a service table</span></div><b>{quickOrders} orders</b></div>
@@ -97,9 +97,9 @@ export function DashboardPage() {
 
       <article className="panel dashboard-attention-panel">
         <div className="panel-heading"><div><h2>Needs attention</h2><p>Operational signals that may need action now.</p></div><Clock3 size={19}/></div>
-        {can('orders.view')&&<button className={`attention-row ${prepItems.length?'warning':''}`} onClick={()=>navigate('/bar')}><Coffee size={17}/><span><strong>{prepItems.length} preparation ticket{prepItems.length===1?'':'s'}</strong><small>{prepItems.filter(item=>item.preparation_status==='ready').length} ready · open queue</small></span><ArrowUpRight size={14}/></button>}
-        {can('inventory.view')&&<button className={`attention-row ${lowStock.length?'danger':''}`} onClick={()=>navigate('/inventory')}><Boxes size={17}/><span><strong>{lowStock.length} low-stock item{lowStock.length===1?'':'s'}</strong><small>{lowStock.length?lowStock.slice(0,3).map(item=>item.name).join(', '):'Inventory is above reorder levels'}</small></span><ArrowUpRight size={14}/></button>}
-        {can('payments.collect')&&<button className="attention-row" onClick={()=>navigate('/cash-register')}><WalletCards size={17}/><span><strong>{cashSessions.data?.length??0} open cash shift{(cashSessions.data?.length??0)===1?'':'s'}</strong><small>Review drawer and reconciliation</small></span><ArrowUpRight size={14}/></button>}
+        {can('orders.view')&&<button type="button" className={`attention-row ${prepItems.length?'warning':''}`} onClick={()=>navigate('/bar')}><Coffee size={17}/><span><strong>{prepItems.length} preparation ticket{prepItems.length===1?'':'s'}</strong><small>{prepItems.filter(item=>item.preparation_status==='ready').length} ready · open queue</small></span><ArrowUpRight size={14}/></button>}
+        {can('inventory.view')&&<button type="button" className={`attention-row ${lowStock.length?'danger':''}`} onClick={()=>navigate('/inventory')}><Boxes size={17}/><span><strong>{lowStock.length} low-stock item{lowStock.length===1?'':'s'}</strong><small>{lowStock.length?lowStock.slice(0,3).map(item=>item.name).join(', '):'Inventory is above reorder levels'}</small></span><ArrowUpRight size={14}/></button>}
+        {can('payments.collect')&&<button type="button" className="attention-row" onClick={()=>navigate('/cash-register')}><WalletCards size={17}/><span><strong>{cashSessions.data?.length??0} open cash shift{(cashSessions.data?.length??0)===1?'':'s'}</strong><small>Review drawer and reconciliation</small></span><ArrowUpRight size={14}/></button>}
         {!can('orders.view')&&!can('inventory.view')&&!can('payments.collect')&&<div className="management-empty">No operational modules are available for this role.</div>}
       </article>
     </div>
