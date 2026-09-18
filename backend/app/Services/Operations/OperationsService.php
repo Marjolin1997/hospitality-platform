@@ -60,6 +60,107 @@ final class OperationsService
         return $product;
     }
 
+    public function saveCategory(Business $business, array $data): object
+    {
+        return DB::transaction(function () use ($business, $data): object {
+            $name = trim($data['name']);
+            $duplicate = DB::table('product_categories')
+                ->where('business_id', $business->id)
+                ->where('name', $name);
+
+            if (! empty($data['id'])) {
+                $duplicate->where('id', '!=', $data['id']);
+            }
+
+            if ($duplicate->exists()) {
+                throw ValidationException::withMessages([
+                    'name' => 'A category with this name already exists in this business.',
+                ]);
+            }
+
+            $payload = [
+                'name' => $name,
+                'color' => $data['color'] ?? null,
+                'sort_order' => (int) $data['sort_order'],
+                'updated_at' => now(),
+            ];
+
+            if (! empty($data['id'])) {
+                $query = DB::table('product_categories')
+                    ->where('business_id', $business->id)
+                    ->where('id', $data['id']);
+
+                abort_unless($query->exists(), 404);
+                $query->update($payload);
+                $id = $data['id'];
+            } else {
+                $id = (string) Str::ulid();
+                DB::table('product_categories')->insert([
+                    'id' => $id,
+                    'business_id' => $business->id,
+                    ...$payload,
+                    'is_active' => true,
+                    'created_at' => now(),
+                ]);
+            }
+
+            $category = DB::table('product_categories')
+                ->where('business_id', $business->id)
+                ->where('id', $id)
+                ->first();
+
+            $category->is_active = (bool) $category->is_active;
+
+            return $category;
+        }, attempts: 3);
+    }
+
+    public function setCategoryStatus(Business $business, string $categoryId, bool $isActive): object
+    {
+        return DB::transaction(function () use ($business, $categoryId, $isActive): object {
+            $category = DB::table('product_categories')
+                ->where('business_id', $business->id)
+                ->where('id', $categoryId)
+                ->lockForUpdate()
+                ->first();
+
+            abort_unless($category, 404);
+
+            if (! $isActive) {
+                $hasActiveProducts = DB::table('products')
+                    ->where('business_id', $business->id)
+                    ->where('product_category_id', $categoryId)
+                    ->where('is_active', true)
+                    ->exists();
+
+                if ($hasActiveProducts) {
+                    throw ValidationException::withMessages([
+                        'category' => 'Move or disable active products before disabling this category.',
+                    ]);
+                }
+            }
+
+            if ((bool) $category->is_active !== $isActive) {
+                DB::table('product_categories')
+                    ->where('business_id', $business->id)
+                    ->where('id', $categoryId)
+                    ->update([
+                        'is_active' => $isActive,
+                        'updated_at' => now(),
+                    ]);
+            }
+
+            $updated = DB::table('product_categories')
+                ->where('business_id', $business->id)
+                ->where('id', $categoryId)
+                ->first();
+
+            $updated->is_active = (bool) $updated->is_active;
+
+            return $updated;
+        }, attempts: 3);
+    }
+
     public function adjustInventory(Business $business, string $locationId, array $data, int $userId): void
     {
         abort_unless(
