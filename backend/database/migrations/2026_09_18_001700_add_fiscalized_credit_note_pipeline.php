@@ -7,24 +7,54 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::table('invoice_credit_notes', function (Blueprint $table): void {
-            $table->string('fiscal_invoice_type', 24)->nullable()->after('fiscalization_status');
-            $table->string('fiscal_operator_code_snapshot', 64)->nullable()->after('original_invoice_nslf_snapshot');
-            $table->string('fiscal_business_unit_code_snapshot', 64)->nullable()->after('fiscal_operator_code_snapshot');
-            $table->string('fiscal_tcr_code_snapshot', 64)->nullable()->after('fiscal_business_unit_code_snapshot');
-            $table->timestamp('original_invoice_issued_at_snapshot')->nullable()->after('fiscal_tcr_code_snapshot');
-        });
+        $creditColumns = [
+            'fiscal_invoice_type' => fn (Blueprint $table) => $table->string('fiscal_invoice_type', 24)->nullable()->after('fiscalization_status'),
+            'fiscal_operator_code_snapshot' => fn (Blueprint $table) => $table->string('fiscal_operator_code_snapshot', 64)->nullable()->after('original_invoice_nslf_snapshot'),
+            'fiscal_business_unit_code_snapshot' => fn (Blueprint $table) => $table->string('fiscal_business_unit_code_snapshot', 64)->nullable()->after('fiscal_operator_code_snapshot'),
+            'fiscal_tcr_code_snapshot' => fn (Blueprint $table) => $table->string('fiscal_tcr_code_snapshot', 64)->nullable()->after('fiscal_business_unit_code_snapshot'),
+            'original_invoice_issued_at_snapshot' => fn (Blueprint $table) => $table->timestamp('original_invoice_issued_at_snapshot')->nullable()->after('fiscal_tcr_code_snapshot'),
+        ];
 
-        Schema::table('invoice_credit_note_lines', function (Blueprint $table): void {
-            $table->string('unit_code_snapshot', 16)->default('C62')->after('sku_snapshot');
-            $table->string('unit_label_snapshot', 64)->default('Copë')->after('unit_code_snapshot');
-            $table->decimal('discount_percent', 9, 4)->default(0)->after('unit_price');
-        });
+        foreach ($creditColumns as $column => $addColumn) {
+            if (! Schema::hasColumn('invoice_credit_notes', $column)) {
+                Schema::table('invoice_credit_notes', $addColumn);
+            }
+        }
+
+        $lineColumns = [
+            'unit_code_snapshot' => fn (Blueprint $table) => $table->string('unit_code_snapshot', 16)->default('C62')->after('sku_snapshot'),
+            'unit_label_snapshot' => fn (Blueprint $table) => $table->string('unit_label_snapshot', 64)->default('Copë')->after('unit_code_snapshot'),
+            'discount_percent' => fn (Blueprint $table) => $table->decimal('discount_percent', 9, 4)->default(0)->after('unit_price'),
+        ];
+
+        foreach ($lineColumns as $column => $addColumn) {
+            if (! Schema::hasColumn('invoice_credit_note_lines', $column)) {
+                Schema::table('invoice_credit_note_lines', $addColumn);
+            }
+        }
+
+        if (Schema::hasTable('credit_note_fiscalization_attempts')) {
+            // A previous failed MySQL DDL attempt may leave a residue while the migration
+            // itself remains pending. This table cannot contain valid application data
+            // before the migration is recorded, so rebuild it deterministically.
+            Schema::drop('credit_note_fiscalization_attempts');
+        }
 
         Schema::create('credit_note_fiscalization_attempts', function (Blueprint $table): void {
             $table->ulid('id')->primary();
-            $table->foreignUlid('business_id')->constrained()->restrictOnDelete();
-            $table->foreignUlid('invoice_credit_note_id')->constrained('invoice_credit_notes')->restrictOnDelete();
+
+            $table->ulid('business_id');
+            $table->foreign('business_id', 'credit_fiscal_business_fk')
+                ->references('id')
+                ->on('businesses')
+                ->restrictOnDelete();
+
+            $table->ulid('invoice_credit_note_id');
+            $table->foreign('invoice_credit_note_id', 'credit_fiscal_note_fk')
+                ->references('id')
+                ->on('invoice_credit_notes')
+                ->restrictOnDelete();
+
             $table->unsignedSmallInteger('attempt_no');
             $table->string('provider', 32);
             $table->string('environment', 16);
@@ -42,6 +72,7 @@ return new class extends Migration {
             $table->timestamp('started_at');
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();
+
             $table->unique(['invoice_credit_note_id','attempt_no'], 'credit_fiscal_attempt_no_uq');
             $table->index(['business_id','status','started_at'], 'credit_fiscal_attempt_status_idx');
             $table->index(['status','retryable','next_retry_at'], 'credit_fiscal_retry_queue_idx');
@@ -52,15 +83,22 @@ return new class extends Migration {
     {
         Schema::dropIfExists('credit_note_fiscalization_attempts');
 
-        Schema::table('invoice_credit_note_lines', function (Blueprint $table): void {
-            $table->dropColumn(['unit_code_snapshot','unit_label_snapshot','discount_percent']);
-        });
+        foreach (['discount_percent','unit_label_snapshot','unit_code_snapshot'] as $column) {
+            if (Schema::hasColumn('invoice_credit_note_lines', $column)) {
+                Schema::table('invoice_credit_note_lines', fn (Blueprint $table) => $table->dropColumn($column));
+            }
+        }
 
-        Schema::table('invoice_credit_notes', function (Blueprint $table): void {
-            $table->dropColumn([
-                'fiscal_invoice_type','fiscal_operator_code_snapshot','fiscal_business_unit_code_snapshot',
-                'fiscal_tcr_code_snapshot','original_invoice_issued_at_snapshot',
-            ]);
-        });
+        foreach ([
+            'original_invoice_issued_at_snapshot',
+            'fiscal_tcr_code_snapshot',
+            'fiscal_business_unit_code_snapshot',
+            'fiscal_operator_code_snapshot',
+            'fiscal_invoice_type',
+        ] as $column) {
+            if (Schema::hasColumn('invoice_credit_notes', $column)) {
+                Schema::table('invoice_credit_notes', fn (Blueprint $table) => $table->dropColumn($column));
+            }
+        }
     }
 };
