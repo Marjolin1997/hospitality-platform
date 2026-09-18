@@ -84,8 +84,9 @@ final class SaveFiscalizationSetup
     {
         $locations = DB::table('locations')
             ->where('business_id', $business->id)
+            ->orderByDesc('is_active')
             ->orderBy('name')
-            ->get(['id','name','code','fiscal_business_unit_code']);
+            ->get(['id','name','code','is_active','fiscal_business_unit_code']);
 
         $registers = DB::table('cash_registers as cr')
             ->join('locations as l', function ($join) use ($business): void {
@@ -95,7 +96,7 @@ final class SaveFiscalizationSetup
             ->orderBy('l.name')->orderBy('cr.name')
             ->get([
                 'cr.id','cr.location_id','cr.name','cr.code','cr.is_active','cr.fiscal_tcr_code',
-                'l.name as location_name',
+                'l.name as location_name','l.is_active as location_is_active',
             ]);
 
         $operators = DB::table('business_user as bu')
@@ -115,10 +116,10 @@ final class SaveFiscalizationSetup
             'cash_registers' => $registers,
             'operators' => $operators,
             'summary' => [
-                'locations_ready' => $locations->whereNotNull('fiscal_business_unit_code')->count(),
-                'locations_total' => $locations->count(),
-                'registers_ready' => $registers->whereNotNull('fiscal_tcr_code')->count(),
-                'registers_total' => $registers->count(),
+                'locations_ready' => $locations->filter(fn ($row) => (bool) $row->is_active && filled($row->fiscal_business_unit_code))->count(),
+                'locations_total' => $locations->filter(fn ($row) => (bool) $row->is_active)->count(),
+                'registers_ready' => $registers->filter(fn ($row) => (bool) $row->is_active && (bool) $row->location_is_active && filled($row->fiscal_tcr_code))->count(),
+                'registers_total' => $registers->filter(fn ($row) => (bool) $row->is_active && (bool) $row->location_is_active)->count(),
                 'operators_ready' => $operators->whereNotNull('fiscal_operator_code')->count(),
                 'operators_total' => $operators->count(),
             ],
