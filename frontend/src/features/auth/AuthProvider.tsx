@@ -24,6 +24,7 @@ type AuthContextValue = {
   canAny(permissions:string[]):boolean;
   login(email:string,password:string):Promise<void>;
   logout():Promise<void>;
+  refreshUser():Promise<void>;
   selectBusiness(id:string):void;
   selectLocation(id:string):void;
 };
@@ -50,6 +51,7 @@ export function AuthProvider({children}:{children:ReactNode}) {
     canAny: permissions => permissions.some(permission => permissionSet.has(permission)),
     login: async (email,password) => { await initializeCsrf(); const r=await api.post<{data:AuthUser}>('/auth/login',{email,password}); setUser(r.data.data); },
     logout: async () => { await api.post('/auth/logout'); clearWorkspaceContext(); setUser(null); setBusinessId(null); setLocationId(null); },
+    refreshUser: async () => { const r=await api.get<{data:AuthUser}>('/auth/me'); setUser(r.data.data); },
     selectBusiness: id => { const b=user?.businesses.find(x=>x.id===id); if(!b)return; setBusinessId(id); setActiveBusinessId(id); const loc=b.locations[0]; if(loc){setLocationId(loc.id);setActiveLocationId(loc.id);} },
     selectLocation: id => { if(!activeBusiness?.locations.some(l=>l.id===id))return; setLocationId(id); setActiveLocationId(id); },
   }),[user,loading,activeBusiness,activeLocation,permissionSet]);
