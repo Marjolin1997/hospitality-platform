@@ -363,3 +363,32 @@ test('multiple open registers are explicit and cash is posted only to the select
     $drawerB=collect($rows)->firstWhere('id',$sessionB);
     expect($drawerB['expected_cash_live'])->toBe('30.0000');
 });
+
+
+test('physical cash rejects foreign currency and excessive monetary precision', function (): void {
+    $business=spiBusiness();$location=spiLocation($business);$user=spiUser($business);$order=spiOrder($business,$location,$user,'100.0000');$headers=spiHeaders($business);
+    $register=(string)Str::ulid();
+    DB::table('cash_registers')->insert(['id'=>$register,'business_id'=>$business->id,'location_id'=>$location->id,'name'=>'Base Drawer','code'=>'BASE','is_active'=>true,'created_at'=>now(),'updated_at'=>now()]);
+    $session=$this->postJson('/api/v1/cash-sessions',['location_id'=>$location->id,'cash_register_id'=>$register,'opening_cash'=>'50.0000'],$headers)->assertCreated()->json('data.id');
+
+    DB::table('exchange_rates')->insert([
+        'base_currency'=>'EUR','quote_currency'=>'USD','rate'=>'1.2500000000','source'=>'test',
+        'effective_at'=>now()->subMinute(),'fetched_at'=>now(),'created_at'=>now(),'updated_at'=>now(),
+    ]);
+
+    $this->postJson("/api/v1/orders/{$order}/payments",[
+        'location_id'=>$location->id,'cash_session_id'=>$session,'method'=>'cash','currency'=>'USD',
+        'amount'=>'10.0000','tendered_amount'=>'10.0000','idempotency_key'=>'cash-'.Str::uuid(),
+    ],$headers)->assertStatus(422)->assertJsonValidationErrors('currency');
+
+    $this->postJson("/api/v1/cash-sessions/{$session}/movements",[
+        'location_id'=>$location->id,'type'=>'cash_in','amount'=>'10.0000','currency'=>'USD','reason'=>'Foreign notes',
+    ],$headers)->assertStatus(422)->assertJsonValidationErrors('currency');
+
+    $this->postJson("/api/v1/orders/{$order}/payments",[
+        'location_id'=>$location->id,'method'=>'card','currency'=>'EUR',
+        'amount'=>'10.00001','idempotency_key'=>'card-'.Str::uuid(),
+    ],$headers)->assertStatus(422)->assertJsonValidationErrors('amount');
+
+    expect(DB::table('cash_movements')->where('cash_session_id',$session)->count())->toBe(0);
+});
