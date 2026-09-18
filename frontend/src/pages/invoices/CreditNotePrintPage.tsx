@@ -79,7 +79,7 @@ export function CreditNotePrintPage(){
       </section>
 
       <section className="invoice-box invoice-party-grid">
-        <span>Data dhe ora e lëshimit:</span><strong>{fiscalDate(credit.fiscalized_at||credit.issued_at,timeZone)}</strong>
+        <span>Data dhe ora e lëshimit:</span><strong>{fiscalDate(credit.issued_at,timeZone)}</strong>
         <span>Numri i dokumentit:</span><strong>{credit.fiscal_invoice_number??credit.number}</strong>
         <span>Fatura origjinale:</span><strong>{original.fiscal_invoice_number??credit.invoice_number_snapshot}</strong>
         <span>NSLF origjinal:</span><strong>{credit.original_invoice_nslf_snapshot??original.nslf??'—'}</strong>
