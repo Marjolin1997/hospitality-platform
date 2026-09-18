@@ -82,6 +82,7 @@ test('operational role templates enforce least privilege contracts', function ()
     $waiter = rbacBusinessRole($business, 'waiter');
     $bartender = rbacBusinessRole($business, 'bartender');
     $cashier = rbacBusinessRole($business, 'cashier');
+    $finance = rbacBusinessRole($business, 'finance');
 
     expect(rbacRolePermissionKeys($owner))->toBe(Permission::query()->orderBy('key')->pluck('key')->all())
         ->and(rbacRolePermissionKeys($manager))->toContain('orders.prepare', 'orders.split', 'orders.merge')
@@ -90,7 +91,9 @@ test('operational role templates enforce least privilege contracts', function ()
         ->and(rbacRolePermissionKeys($bartender))->toContain('orders.view', 'orders.prepare', 'products.view')
         ->and(rbacRolePermissionKeys($bartender))->not->toContain('orders.create', 'orders.split', 'orders.merge', 'payments.collect')
         ->and(rbacRolePermissionKeys($cashier))->toContain('orders.view', 'payments.collect', 'payments.refund')
-        ->and(rbacRolePermissionKeys($cashier))->not->toContain('orders.prepare', 'orders.split', 'orders.merge');
+        ->and(rbacRolePermissionKeys($cashier))->not->toContain('orders.prepare', 'orders.split', 'orders.merge', 'expenses.approve')
+        ->and(rbacRolePermissionKeys($manager))->toContain('expenses.create', 'expenses.approve')
+        ->and(rbacRolePermissionKeys($finance))->toContain('finance.view', 'expenses.create', 'expenses.approve');
 });
 
 test('reprovisioning synchronizes newly introduced operational permissions into existing business roles', function (): void {
