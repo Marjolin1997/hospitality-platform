@@ -15,6 +15,7 @@ final class ManageBusinessRole
     {
         return DB::transaction(function () use ($business, $data, $performedByUserId): Role {
             [$permissionIds, $permissionKeys] = $this->resolvePermissions($data['permissions']);
+            $this->assertActorCanGrant($business, $performedByUserId, $permissionKeys);
             $name = trim($data['name']);
             $this->assertUniqueName($business, $name);
 
@@ -59,6 +60,9 @@ final class ManageBusinessRole
                 ->orderBy('key')
                 ->pluck('key')
                 ->all();
+
+            $this->assertActorCanManageRole($business, $performedByUserId, $previousPermissions);
+            $this->assertActorCanGrant($business, $performedByUserId, $permissionKeys);
 
             $nextName = trim($data['name']);
             $this->assertUniqueName($business, $nextName, $role->getKey());
@@ -114,6 +118,8 @@ final class ManageBusinessRole
                 ->pluck('key')
                 ->all();
 
+            $this->assertActorCanManageRole($business, $performedByUserId, $previousPermissions);
+
             $this->audit(
                 $business,
                 $role,
@@ -127,6 +133,71 @@ final class ManageBusinessRole
 
             $role->delete();
         }, 3);
+    }
+
+    public function assignablePermissionKeys(Business $business, int $userId): array
+    {
+        return $this->actorPermissionKeys($business, $userId, false);
+    }
+
+    private function assertActorCanGrant(Business $business, int $userId, array $requestedPermissions): void
+    {
+        $allowed = $this->actorPermissionKeys($business, $userId, true);
+        $forbidden = array_values(array_diff($requestedPermissions, $allowed));
+
+        if ($forbidden !== []) {
+            throw ValidationException::withMessages([
+                'permissions' => 'You cannot grant permissions that your own business role does not have.',
+            ]);
+        }
+    }
+
+    private function assertActorCanManageRole(Business $business, int $userId, array $rolePermissions): void
+    {
+        $allowed = $this->actorPermissionKeys($business, $userId, true);
+
+        if (array_diff($rolePermissions, $allowed) !== []) {
+            throw ValidationException::withMessages([
+                'role' => 'You cannot modify a role that contains permissions above your own access level.',
+            ]);
+        }
+    }
+
+    private function actorPermissionKeys(Business $business, int $userId, bool $lock): array
+    {
+        $membershipQuery = DB::table('business_user')
+            ->where('business_id', $business->getKey())
+            ->where('user_id', $userId)
+            ->where('status', 'active');
+
+        if ($lock) {
+            $membershipQuery->lockForUpdate();
+        }
+
+        $membership = $membershipQuery->first();
+
+        if (! $membership || ! $membership->role_id) {
+            return [];
+        }
+
+        $roleQuery = DB::table('roles')
+            ->where('business_id', $business->getKey())
+            ->where('id', $membership->role_id);
+
+        if ($lock) {
+            $roleQuery->lockForUpdate();
+        }
+
+        if (! $roleQuery->exists()) {
+            return [];
+        }
+
+        return DB::table('permission_role as pr')
+            ->join('permissions as p', 'p.id', '=', 'pr.permission_id')
+            ->where('pr.role_id', $membership->role_id)
+            ->orderBy('p.key')
+            ->pluck('p.key')
+            ->all();
     }
 
     private function assertUniqueName(Business $business, string $name, ?string $exceptRoleId = null): void
