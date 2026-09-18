@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\ExchangeRate;
 use App\Services\Finance\CurrencyConverter;
 use DomainException;
 use Illuminate\Http\JsonResponse;
@@ -14,25 +13,25 @@ class ExchangeRateController extends Controller
 {
     private const SUPPORTED = ['ALL', 'EUR', 'USD', 'GBP'];
 
-    public function index(): JsonResponse
+    public function index(CurrencyConverter $converter): JsonResponse
     {
-        $rates = collect(['EUR', 'USD', 'GBP'])->mapWithKeys(function (string $currency) {
-            $rate = ExchangeRate::query()
-                ->where('base_currency', $currency)
-                ->where('quote_currency', 'ALL')
-                ->where('effective_at', '<=', now())
-                ->latest('effective_at')
-                ->first();
+        $business = app(\App\Models\Business::class);
+        $rates = collect(self::SUPPORTED)->reject(fn (string $currency) => $currency === $business->currency)
+            ->mapWithKeys(function (string $currency) use ($business, $converter) {
+                try {
+                    $conversion = $converter->convert('1', $currency, $business->currency);
+                    return [$currency => [
+                        'rate' => $conversion['rate'],
+                        'source' => $conversion['source'],
+                        'effective_at' => $conversion['effective_at'],
+                        'inverse' => (bool) ($conversion['inverse'] ?? false),
+                    ]];
+                } catch (DomainException) {
+                    return [$currency => null];
+                }
+            });
 
-            return [$currency => $rate ? [
-                'rate' => $rate->rate,
-                'source' => $rate->source,
-                'effective_at' => $rate->effective_at,
-                'fetched_at' => $rate->fetched_at,
-            ] : null];
-        });
-
-        return response()->json(['data' => ['base_currency' => 'ALL', 'rates' => $rates]]);
+        return response()->json(['data' => ['base_currency' => $business->currency, 'rates' => $rates]]);
     }
 
     public function convert(Request $request, CurrencyConverter $converter): JsonResponse
