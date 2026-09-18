@@ -17,6 +17,7 @@ final class OpenCashSession
             $register = CashRegister::query()
                 ->forBusiness($business)
                 ->whereKey($payload['cash_register_id'])
+                ->where('location_id', $payload['location_id'])
                 ->where('is_active', true)
                 ->lockForUpdate()
                 ->first();
