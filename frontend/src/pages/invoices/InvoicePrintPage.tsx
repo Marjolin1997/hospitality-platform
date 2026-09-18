@@ -60,9 +60,9 @@ export function InvoicePrintPage(){
     return acc;
   },{})).sort((a,b)=>a.rate-b.rate);
   const cashLike=invoice.payments.some(p=>['cash','card'].includes(p.method));
-  const invoiceType=invoice.fiscal_invoice_type==='cash'||(!invoice.fiscal_invoice_type&&cashLike)
+  const invoiceType=invoice.fiscal_invoice_type==='CASH'||(!invoice.fiscal_invoice_type&&cashLike)
     ?'Fatura e parave të gatshme'
-    :invoice.fiscal_invoice_type==='non_cash'?'Faturë pa para në dorë':'Në pritje të klasifikimit fiskal';
+    :invoice.fiscal_invoice_type==='NONCASH'?'Faturë pa para në dorë':'Në pritje të klasifikimit fiskal';
   const qrValue=invoice.verification_url||invoice.qr_payload||'';
   const seller=invoice.business_legal_name_snapshot||invoice.business_name_snapshot||'—';
 
