@@ -53,10 +53,10 @@ export function PaymentPanel({ orderId, grandTotal, paidTotal, baseCurrency, pay
   return <section className="payment-panel">
     <header><div><span className="eyebrow">PAYMENT</span><h2>{format(remaining,baseCurrency)} remaining</h2></div><span className="status-pill">Partial & mixed enabled</span></header>
     {allowCollect&&remaining>0&&<><div className="payment-methods" role="group" aria-label="Payment method">
-      {methods.map(({value,label,icon:Icon}) => <button type="button" key={value} className={method === value ? 'active' : ''} aria-pressed={method===value} onClick={() => setMethod(value)}><Icon size={15}/><span>{label}</span></button>)}
+      {methods.map(({value,label,icon:Icon}) => <button type="button" key={value} className={method === value ? 'active' : ''} aria-pressed={method===value} onClick={() => {setMethod(value);if(value==='cash'){setCurrency(baseCurrency);setTendered('')}}}><Icon size={15}/><span>{label}</span></button>)}
     </div>
     <div className="payment-fields">
-      <label><span>Currency</span><select value={currency} onChange={e => {setCurrency(e.target.value as Currency);setTendered('')}}>{['ALL','EUR','USD','GBP'].map(c => <option key={c}>{c}</option>)}</select></label>
+      <label><span>Currency</span><select disabled={method==='cash'} value={currency} onChange={e => {setCurrency(e.target.value as Currency);setTendered('')}}>{['ALL','EUR','USD','GBP'].map(c => <option key={c}>{c}</option>)}</select>{method==='cash'&&<small>Cash is reconciled in the business base currency.</small>}</label>
       <label><span>Amount</span><input type="number" min="0.01" step="0.01" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} /></label>
       {method === 'cash' && <><label><span>Cash register</span><select value={cashSessionId} onChange={e=>setCashSessionId(e.target.value)}><option value="">Select open register</option>{(sessions.data??[]).map(s=><option key={s.id} value={s.id}>{s.register?.name??'Register'} · {format(Number(s.expected_cash_live??s.opening_cash),s.base_currency)}</option>)}</select></label><label><span>Cash received</span><input type="number" min="0" step="0.01" inputMode="decimal" value={tendered} onChange={e => setTendered(e.target.value)} placeholder={amount} /></label></>}
     </div>
