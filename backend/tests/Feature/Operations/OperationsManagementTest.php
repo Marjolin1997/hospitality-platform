@@ -208,4 +208,78 @@ test('invoice credit notes remain tenant isolated',function():void{
 
 test('staff update rejects roles and memberships from another business',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$owner=omtUser($a);$foreignUser=omtUser($b);$headers=omtHeaders($owner,$a);$foreignRole=DB::table('business_user')->where('business_id',$b->id)->where('user_id',$foreignUser->id)->value('role_id');$this->patchJson('/api/v1/staff/'.$owner->id,['role_id'=>$foreignRole,'status'=>'active'],$headers)->assertStatus(422);$this->patchJson('/api/v1/staff/'.$foreignUser->id,['role_id'=>DB::table('business_user')->where('business_id',$a->id)->where('user_id',$owner->id)->value('role_id'),'status'=>'active'],$headers)->assertNotFound();});
 
+test('staff update preserves at least one active owner while allowing a safe owner handoff', function (): void {
+    $business = omtBusiness('Owner guard');
+
+    $ownerRole = Role::query()->create([
+        'business_id' => $business->id,
+        'name' => 'Owner',
+        'slug' => 'owner',
+        'is_system' => true,
+    ]);
+    $managerRole = Role::query()->create([
+        'business_id' => $business->id,
+        'name' => 'Manager',
+        'slug' => 'manager',
+        'is_system' => true,
+    ]);
+    $ownerRole->permissions()->sync(Permission::query()->pluck('id'));
+    $managerRole->permissions()->sync(
+        Permission::query()->where('key', 'users.view')->pluck('id')
+    );
+
+    $owner = User::query()->create([
+        'name' => 'Primary Owner',
+        'email' => 'primary-owner@example.test',
+        'password' => bcrypt('password'),
+    ]);
+    $owner->businesses()->attach($business->id, [
+        'role_id' => $ownerRole->id,
+        'status' => 'active',
+    ]);
+
+    $headers = omtHeaders($owner, $business);
+
+    $this->patchJson('/api/v1/staff/'.$owner->id, [
+        'role_id' => $managerRole->id,
+        'status' => 'active',
+    ], $headers)->assertStatus(422)->assertJsonValidationErrors('user');
+
+    $this->patchJson('/api/v1/staff/'.$owner->id, [
+        'role_id' => $ownerRole->id,
+        'status' => 'inactive',
+    ], $headers)->assertStatus(422)->assertJsonValidationErrors('user');
+
+    expect(DB::table('business_user')
+        ->where('business_id', $business->id)
+        ->where('user_id', $owner->id)
+        ->value('role_id'))->toBe($ownerRole->id);
+
+    $coOwner = User::query()->create([
+        'name' => 'Secondary Owner',
+        'email' => 'secondary-owner@example.test',
+        'password' => bcrypt('password'),
+    ]);
+    $coOwner->businesses()->attach($business->id, [
+        'role_id' => $ownerRole->id,
+        'status' => 'active',
+    ]);
+
+    $this->patchJson('/api/v1/staff/'.$owner->id, [
+        'role_id' => $managerRole->id,
+        'status' => 'active',
+    ], $headers)->assertOk();
+
+    expect(DB::table('business_user')
+        ->where('business_id', $business->id)
+        ->where('user_id', $owner->id)
+        ->value('role_id'))->toBe($managerRole->id)
+        ->and(DB::table('business_user as bu')
+            ->join('roles as r', 'r.id', '=', 'bu.role_id')
+            ->where('bu.business_id', $business->id)
+            ->where('bu.status', 'active')
+            ->where('r.slug', 'owner')
+            ->count())->toBe(1);
+});
+
 test('settings remain isolated by business',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$userA=omtUser($a);$userB=omtUser($b);$this->putJson('/api/v1/settings',['receipt_footer'=>'A footer','service_charge_enabled'=>true,'low_stock_alerts'=>true],omtHeaders($userA,$a))->assertOk();$this->putJson('/api/v1/settings',['receipt_footer'=>'B footer','service_charge_enabled'=>false,'low_stock_alerts'=>false],omtHeaders($userB,$b))->assertOk();$this->getJson('/api/v1/settings',omtHeaders($userA,$a))->assertOk()->assertJsonPath('data.settings.receipt_footer','A footer')->assertJsonPath('data.settings.service_charge_enabled',true);});
