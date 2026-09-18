@@ -365,6 +365,17 @@ test('current cash session cannot expose another business session', function ():
         ->assertOk()->assertJsonPath('data', null);
 });
 
+test('open cash sessions endpoint never exposes another business drawer', function (): void {
+    $a=teiBusiness('Business A');$b=teiBusiness('Business B');$la=teiLocation($a,'A1');$lb=teiLocation($b,'B1');
+    $user=teiUserWithAllPermissions($a,'open-sessions@example.test');
+    $registerA=teiCashRegister($a,$la,'A-OPEN');$registerB=teiCashRegister($b,$lb,'B-OPEN');
+    $sessionA=teiCashSession($a,$la,$user,$registerA);$sessionB=teiCashSession($b,$lb,$user,$registerB);
+
+    $response=$this->withHeaders(teiActingAs($user,$a))->getJson('/api/v1/cash-sessions/open?location_id='.$la->getKey())
+        ->assertOk()->assertJsonCount(1,'data');
+    expect(collect($response->json('data'))->pluck('id')->all())->toContain($sessionA)->not->toContain($sessionB);
+});
+
 test('collect payment cannot target an order from another business', function (): void {
     $a = teiBusiness('Business A'); $b = teiBusiness('Business B');
     $lb = teiLocation($b, 'B1');
