@@ -14,6 +14,7 @@ final class ManageBusinessRole
     public function create(Business $business, array $data, int $performedByUserId): Role
     {
         return DB::transaction(function () use ($business, $data, $performedByUserId): Role {
+            DB::table('businesses')->where('id', $business->getKey())->lockForUpdate()->first();
             [$permissionIds, $permissionKeys] = $this->resolvePermissions($data['permissions']);
             $this->assertActorCanGrant($business, $performedByUserId, $permissionKeys);
             $name = trim($data['name']);
@@ -46,6 +47,8 @@ final class ManageBusinessRole
     public function update(Business $business, string $roleId, array $data, int $performedByUserId): Role
     {
         return DB::transaction(function () use ($business, $roleId, $data, $performedByUserId): Role {
+            DB::table('businesses')->where('id', $business->getKey())->lockForUpdate()->first();
+
             $role = Role::query()
                 ->where('business_id', $business->getKey())
                 ->whereKey($roleId)
