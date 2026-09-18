@@ -37,7 +37,7 @@ final class InvoiceController extends Controller
         return response()->json(['data' => $rows]);
     }
 
-    public function eligibleOrders(): JsonResponse
+    public function eligibleOrders(FiscalPaymentMapper $paymentMapper): JsonResponse
     {
         $business = app(Business::class);
 
@@ -52,6 +52,18 @@ final class InvoiceController extends Controller
             ->orderByDesc('o.updated_at')
             ->limit(100)
             ->get();
+
+        $payments = DB::table('payments')
+            ->where('business_id', $business->id)
+            ->whereIn('order_id', $rows->pluck('id'))
+            ->where('status', 'completed')
+            ->orderBy('paid_at')
+            ->get()
+            ->groupBy('order_id');
+
+        $rows->each(function ($order) use ($payments, $paymentMapper): void {
+            $order->fiscal_invoice_type = $paymentMapper->invoiceType($payments->get($order->id, collect()));
+        });
 
         return response()->json(['data' => $rows]);
     }
