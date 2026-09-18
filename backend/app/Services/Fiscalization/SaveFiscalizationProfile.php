@@ -40,13 +40,15 @@ final class SaveFiscalizationProfile
 
             $softwareCode = $payload['software_code'] ?? null;
             $endpoint = $payload['endpoint'] ?? null;
-            $status = $softwareCode && $endpoint && $secretRef ? 'configured' : 'unconfigured';
+            $isIssuerInVat = array_key_exists('is_issuer_in_vat', $payload) ? $payload['is_issuer_in_vat'] : $profile?->is_issuer_in_vat;
+            $status = $softwareCode && $endpoint && $secretRef && $isIssuerInVat !== null ? 'configured' : 'unconfigured';
 
             $values = [
                 'provider' => $payload['provider'],
                 'environment' => $payload['environment'],
                 'status' => $status,
                 'software_code' => $softwareCode,
+                'is_issuer_in_vat' => $isIssuerInVat,
                 'certificate_secret_ref' => $secretRef,
                 'certificate_password_secret_ref' => $passwordRef,
                 'endpoint' => $endpoint,
