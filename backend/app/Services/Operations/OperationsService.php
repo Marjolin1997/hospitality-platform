@@ -35,9 +35,15 @@ final class OperationsService
                     ->lockForUpdate()
                     ->first();
 
-                if (! $category || ! (bool) $category->is_active) {
+                $keepsInactiveCategorySafely = $category
+                    && ! (bool) $category->is_active
+                    && $existing
+                    && (string) $existing->product_category_id === (string) $category->id
+                    && ! (bool) $data['is_active'];
+
+                if (! $category || (! (bool) $category->is_active && ! $keepsInactiveCategorySafely)) {
                     throw ValidationException::withMessages([
-                        'category_id' => 'Select an active category from this business.',
+                        'category_id' => 'Select an active category, or keep this product inactive in its existing inactive category.',
                     ]);
                 }
             }
