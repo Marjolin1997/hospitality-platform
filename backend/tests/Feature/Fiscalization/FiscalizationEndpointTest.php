@@ -251,3 +251,77 @@ test('fiscal health endpoints separate view manage and production activation per
     $activator=fetUser($business,['fiscalization.view','fiscalization.activate_production']);
     $this->postJson('/api/v1/fiscalization/activate-production',[], $headers)->assertNotFound();
 });
+
+
+function fetReadinessCredentials(): array
+{
+    $key=openssl_pkey_new(['private_key_bits'=>2048,'private_key_type'=>OPENSSL_KEYTYPE_RSA]);
+    $csr=openssl_csr_new([
+        'countryName'=>'AL',
+        'organizationName'=>'Endpoint Readiness',
+        'commonName'=>'Endpoint Readiness Certificate',
+    ],$key,['digest_alg'=>'sha256']);
+    $certificate=openssl_csr_sign($csr,null,$key,365,['digest_alg'=>'sha256']);
+    $pkcs12='';
+    openssl_pkcs12_export($certificate,$pkcs12,$key,'endpoint-password');
+
+    return ['pkcs12'=>base64_encode($pkcs12),'password'=>'endpoint-password'];
+}
+
+test('owner-only production activation endpoint succeeds only after TEST verification and production preflight', function (): void {
+    $credentials=fetReadinessCredentials();
+    putenv('FET_P12='.$credentials['pkcs12']);
+    putenv('FET_PASSWORD='.$credentials['password']);
+    $ca=tempnam(sys_get_temp_dir(),'fet-ca-');
+    file_put_contents($ca,'test-ca');
+
+    try {
+        $business=fetBusiness('Endpoint Production Activation');
+        $user=fetUser($business,['fiscalization.view','fiscalization.manage','fiscalization.activate_production']);
+        [,,$orderId,$locationId]=fetDocuments($business,$user);
+
+        DB::table('locations')->where('id',$locationId)->update([
+            'fiscal_business_unit_code'=>'bb123bb123',
+            'updated_at'=>now(),
+        ]);
+        DB::table('business_user')
+            ->where('business_id',$business->id)
+            ->where('user_id',$user->id)
+            ->update(['fiscal_operator_code'=>'cc123cc123']);
+        DB::table('cash_registers')->insert([
+            'id'=>(string)Str::ulid(),'business_id'=>$business->id,'location_id'=>$locationId,
+            'name'=>'Main','code'=>'MAIN','fiscal_tcr_code'=>'aa123aa123','is_active'=>true,
+            'created_at'=>now(),'updated_at'=>now(),
+        ]);
+
+        DB::table('fiscalization_profiles')->insert([
+            'id'=>(string)Str::ulid(),'business_id'=>$business->id,'provider'=>'direct_dpt',
+            'environment'=>'production','status'=>'configured','software_code'=>'dd123dd123',
+            'certificate_secret_ref'=>'env:FET_P12','certificate_password_secret_ref'=>'env:FET_PASSWORD',
+            'is_issuer_in_vat'=>true,'endpoint'=>'https://prod-dpt.example.test/service',
+            'last_test_verified_at'=>now(),'last_verified_at'=>now(),
+            'created_at'=>now(),'updated_at'=>now(),
+        ]);
+
+        config()->set('fiscalization.production_endpoint','https://prod-dpt.example.test/service');
+        config()->set('fiscalization.dpt_ca_bundle',$ca);
+        config()->set('queue.default','redis');
+
+        $headers=['X-Business-Id'=>$business->id];
+
+        $this->postJson('/api/v1/fiscalization/preflight',[],$headers)->assertOk()
+            ->assertJsonPath('data.status','ready')
+            ->assertJsonPath('data.can_activate_production',true);
+
+        $this->postJson('/api/v1/fiscalization/activate-production',[],$headers)->assertOk()
+            ->assertJsonPath('data.status','active')
+            ->assertJsonPath('data.environment','production');
+
+        expect(DB::table('fiscalization_profiles')->where('business_id',$business->id)->value('production_activated_at'))
+            ->not->toBeNull();
+    } finally {
+        @unlink($ca);
+        putenv('FET_P12');
+        putenv('FET_PASSWORD');
+    }
+});
