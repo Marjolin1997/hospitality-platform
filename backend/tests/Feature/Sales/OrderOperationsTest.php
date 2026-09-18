@@ -37,7 +37,7 @@ test('table move is tenant location occupancy and audit safe', function(){ [$b,$
 
 test('any active payment attempt freezes every commercial mutation and preparation send', function(){
     [$b,$l,$u,$h]=ooContext(); $p=ooProduct($b); [$o,$i]=ooOrder($b,$l,$u,$p,'payment_due'); $p2=ooProduct($b,'Tea','5.0000'); $from=ooTable($b,$l,'T1'); $to=ooTable($b,$l,'T2'); DB::table('orders')->where('id',$o)->update(['type'=>'table','venue_table_id'=>$from]);
-    DB::table('payments')->insert(['id'=>(string)Str::ulid(),'business_id'=>$b->id,'order_id'=>$o,'collected_by_user_id'=>$u->id,'method'=>'card','status'=>'pending','amount'=>'1.0000','currency'=>'EUR','amount_base'=>'1.0000','base_currency'=>'EUR','exchange_rate'=>'1.0000000000','idempotency_key'=>'ops-'.Str::uuid(),'created_at'=>now(),'updated_at'=>now()]);
+    DB::table('payments')->insert(['id'=>(string)Str::ulid(),'business_id'=>$b->id,'order_id'=>$o,'collected_by_user_id'=>$u->id,'method'=>'card','status'=>'pending','amount'=>'1.0000','currency'=>'EUR','amount_base'=>'1.0000','base_currency'=>'EUR','exchange_rate'=>'1.0000000000','idempotency_key'=>'ops-'.Str::uuid(),'paid_at'=>now(),'created_at'=>now(),'updated_at'=>now()]);
     $this->postJson("/api/v1/orders/$o/items",['product_id'=>$p2,'quantity'=>'1'],$h)->assertStatus(422);
     $this->patchJson("/api/v1/order-items/$i",['quantity'=>'2'],$h)->assertStatus(422);
     $this->deleteJson("/api/v1/order-items/$i",['reason'=>'Too late removal'],$h)->assertStatus(422);
