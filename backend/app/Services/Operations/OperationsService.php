@@ -26,6 +26,8 @@ final class OperationsService
             'sku' => isset($data['sku']) && trim((string)$data['sku']) !== '' ? trim((string)$data['sku']) : null,
             'sale_price' => $this->decimal($data['sale_price']),
             'tax_rate' => $this->decimal($data['tax_rate']),
+            'unit_code' => trim($data['unit_code']),
+            'unit_label' => trim($data['unit_label']),
             'preparation_station' => $data['preparation_station'] ?? null,
             'tracks_stock' => $data['tracks_stock'],
             'is_active' => $data['is_active'],
