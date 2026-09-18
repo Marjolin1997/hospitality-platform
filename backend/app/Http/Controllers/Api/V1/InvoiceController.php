@@ -81,6 +81,7 @@ final class InvoiceController extends Controller
         if (! $profile || $profile->status !== 'active') $missing[] = 'Active fiscalization profile';
         if (! $profile?->software_code) $missing[] = 'Certified software code';
         if (! $profile?->certificate_secret_ref) $missing[] = 'Electronic certificate reference';
+        if ((float) $row->discount_total > 0) $missing[] = 'Fiscal line-level allocation of the order discount';
 
         $cashLike = collect($row->payments)->contains(fn ($payment) => in_array($payment->method, ['cash','card'], true));
         if ($cashLike && ! $row->fiscal_tcr_code_snapshot) $missing[] = 'Fiscal device / TCR code';
