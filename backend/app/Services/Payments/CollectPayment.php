@@ -58,6 +58,11 @@ final class CollectPayment
             if ($payload['method'] === 'cash' && ! $session) {
                 throw ValidationException::withMessages(['cash_session_id' => 'An open cash session at this location is required for cash payments.']);
             }
+            if ($payload['method'] === 'cash' && $payload['currency'] !== $business->currency) {
+                throw ValidationException::withMessages([
+                    'currency' => 'Cash payments must use the business base currency so the physical drawer can be reconciled exactly.',
+                ]);
+            }
 
             [$rate, $rateSnapshot] = $this->resolveRate($business, $payload['currency']);
             $amount = BigDecimal::of((string) $payload['amount'])->toScale(self::SCALE, RoundingMode::HALF_UP);
