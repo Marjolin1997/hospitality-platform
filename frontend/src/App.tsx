@@ -8,6 +8,8 @@ import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { FinancePage, InventoryPage, InvoicesPage, ProductsPage, SettingsPage, StaffPage } from './pages/management/ManagementPages';
 import { PosPage } from './pages/pos/PosPage';
 import { InvoicePrintPage } from './pages/invoices/InvoicePrintPage';
+import { CreditNotePrintPage } from './pages/invoices/CreditNotePrintPage';
+import { FiscalReceiptPage } from './pages/invoices/FiscalReceiptPage';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -16,6 +18,9 @@ export default function App() {
 
   return <Routes>
     <Route path="/invoices/:invoiceId/print" element={<InvoicePrintPage />} />
+    <Route path="/invoices/:invoiceId/receipt/:paper" element={<FiscalReceiptPage />} />
+    <Route path="/invoice-credit-notes/:creditNoteId/print" element={<CreditNotePrintPage />} />
+    <Route path="/invoice-credit-notes/:creditNoteId/receipt/:paper" element={<FiscalReceiptPage />} />
     <Route element={<AppShell />}>
       <Route index element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<DashboardPage />} />
