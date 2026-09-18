@@ -336,3 +336,30 @@ test('cash refund cannot overdraw the reconciled drawer balance', function (): v
     $this->postJson("/api/v1/payments/{$payment}/refunds",['location_id'=>$location->id,'cash_session_id'=>$session,'amount'=>'30.0000','reason'=>'Customer refund','idempotency_key'=>'refund-'.Str::uuid()],$headers)->assertStatus(422)->assertJsonValidationErrors('amount');
     expect(DB::table('payment_refunds')->where('payment_id',$payment)->count())->toBe(0)->and(DB::table('cash_movements')->where('cash_session_id',$session)->where('type','refund')->count())->toBe(0);
 });
+
+
+test('multiple open registers are explicit and cash is posted only to the selected drawer', function (): void {
+    $business=spiBusiness();$location=spiLocation($business);$user=spiUser($business);$order=spiOrder($business,$location,$user,'30.0000');$headers=spiHeaders($business);
+    $registerA=(string)Str::ulid();$registerB=(string)Str::ulid();
+    foreach ([[$registerA,'Drawer A','A-01'],[$registerB,'Drawer B','B-01']] as [$id,$name,$code]) {
+        DB::table('cash_registers')->insert(['id'=>$id,'business_id'=>$business->id,'location_id'=>$location->id,'name'=>$name,'code'=>$code,'is_active'=>true,'created_at'=>now(),'updated_at'=>now()]);
+    }
+    $sessionA=$this->postJson('/api/v1/cash-sessions',['location_id'=>$location->id,'cash_register_id'=>$registerA,'opening_cash'=>'10.0000'],$headers)->assertCreated()->json('data.id');
+    $sessionB=$this->postJson('/api/v1/cash-sessions',['location_id'=>$location->id,'cash_register_id'=>$registerB,'opening_cash'=>'20.0000'],$headers)->assertCreated()->json('data.id');
+
+    $open=$this->getJson('/api/v1/cash-sessions/open?location_id='.$location->id,$headers)->assertOk()->assertJsonCount(2,'data');
+    expect(collect($open->json('data'))->pluck('id')->all())->toContain($sessionA,$sessionB);
+
+    $this->postJson("/api/v1/orders/{$order}/payments",[
+        'location_id'=>$location->id,'cash_session_id'=>$sessionB,'method'=>'cash','currency'=>'EUR',
+        'amount'=>'10.0000','tendered_amount'=>'10.0000','idempotency_key'=>'cash-'.Str::uuid(),
+    ],$headers)->assertCreated();
+
+    expect(DB::table('cash_movements')->where('cash_session_id',$sessionA)->where('type','sale')->count())->toBe(0)
+        ->and(DB::table('cash_movements')->where('cash_session_id',$sessionB)->where('type','sale')->count())->toBe(1)
+        ->and(DB::table('orders')->where('id',$order)->value('status'))->toBe('payment_due');
+
+    $rows=$this->getJson('/api/v1/cash-sessions/open?location_id='.$location->id,$headers)->assertOk()->json('data');
+    $drawerB=collect($rows)->firstWhere('id',$sessionB);
+    expect($drawerB['expected_cash_live'])->toBe('30.0000');
+});
