@@ -37,12 +37,19 @@ function frtCredentials(int $days = 365): array
     ], $key, ['digest_alg' => 'sha256']);
 
     $certificate = openssl_csr_sign($csr, null, $key, $days, ['digest_alg' => 'sha256']);
+    $parsed = openssl_x509_parse($certificate);
+    if (! is_array($parsed)) {
+        throw new RuntimeException('Readiness test certificate could not be parsed.');
+    }
+
     $pkcs12 = '';
     openssl_pkcs12_export($certificate, $pkcs12, $key, 'readiness-password');
 
     return [
         'pkcs12' => base64_encode($pkcs12),
         'password' => 'readiness-password',
+        'not_before_ts' => (int) $parsed['validFrom_time_t'],
+        'not_after_ts' => (int) $parsed['validTo_time_t'],
     ];
 }
 
@@ -127,6 +134,10 @@ test('preflight reports a valid certificate and complete TEST fiscal setup witho
     putenv('FRT_PASSWORD='.$credentials['password']);
 
     try {
+        CarbonImmutable::setTestNow(
+            CarbonImmutable::createFromTimestampUTC($credentials['not_before_ts'])->addMinute()
+        );
+
         [$business] = frtFixture('test');
         config()->set('fiscalization.test_endpoint', 'https://test-dpt.example.test/service');
 
@@ -146,6 +157,7 @@ test('preflight reports a valid certificate and complete TEST fiscal setup witho
             ->and($profile->certificate_not_after)->not->toBeNull()
             ->and(strlen((string) $profile->certificate_fingerprint_sha256))->toBe(64);
     } finally {
+        CarbonImmutable::setTestNow();
         putenv('FRT_P12');
         putenv('FRT_PASSWORD');
     }
@@ -160,7 +172,9 @@ test('expired certificate blocks preflight and runtime certificate inspection', 
         [$business] = frtFixture('test');
         config()->set('fiscalization.test_endpoint', 'https://test-dpt.example.test/service');
 
-        CarbonImmutable::setTestNow(CarbonImmutable::now('UTC')->addDays(2));
+        CarbonImmutable::setTestNow(
+            CarbonImmutable::createFromTimestampUTC($credentials['not_after_ts'])->addMinute()
+        );
 
         $certificate = app(FiscalCertificateInspector::class)->inspect('env:FRT_P12', 'env:FRT_PASSWORD');
         $result = app(FiscalizationPreflight::class)->run($business);
@@ -183,6 +197,10 @@ test('production activation requires TEST verification approved endpoint CA bund
     file_put_contents($ca, "test-ca-bundle");
 
     try {
+        CarbonImmutable::setTestNow(
+            CarbonImmutable::createFromTimestampUTC($credentials['not_before_ts'])->addMinute()
+        );
+
         [$business, $user] = frtFixture('production');
         config()->set('fiscalization.production_endpoint', 'https://prod-dpt.example.test/service');
         config()->set('fiscalization.dpt_ca_bundle', $ca);
@@ -207,6 +225,7 @@ test('production activation requires TEST verification approved endpoint CA bund
             ->and((int) $profile->production_activated_by_user_id)->toBe($user->id)
             ->and($profile->preflight_status)->toBe('ready');
     } finally {
+        CarbonImmutable::setTestNow();
         @unlink($ca);
         putenv('FRT_P12');
         putenv('FRT_PASSWORD');
