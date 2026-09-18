@@ -29,6 +29,7 @@ final class ManageBusinessLocation
             ]);
 
             $location = $this->location($business, $id);
+            $this->invalidateFiscalPreflight($business);
             $this->audit($business, $location, $performedByUserId, 'created', null, $this->state($location));
 
             return $this->normalize($location);
@@ -140,10 +141,22 @@ final class ManageBusinessLocation
                 ]);
 
             $updated = $this->location($business, $locationId);
+            $this->invalidateFiscalPreflight($business);
             $this->audit($business, $updated, $performedByUserId, 'status_changed', $before, $this->state($updated));
 
             return $this->normalize($updated);
         }, 3);
+    }
+
+    private function invalidateFiscalPreflight(Business $business): void
+    {
+        DB::table('fiscalization_profiles')
+            ->where('business_id', $business->getKey())
+            ->update([
+                'preflight_checked_at' => null,
+                'preflight_status' => null,
+                'updated_at' => now(),
+            ]);
     }
 
     private function lockBusiness(Business $business): void
