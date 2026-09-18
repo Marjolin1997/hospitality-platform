@@ -17,6 +17,7 @@ return new class extends Migration {
 
         Schema::table('invoices', function (Blueprint $table): void {
             $table->string('order_number_snapshot', 64)->nullable()->after('order_id');
+            $table->decimal('discount_total', 18, 4)->default(0)->after('subtotal');
             $table->string('business_name_snapshot')->nullable()->after('created_by_user_id');
             $table->string('business_legal_name_snapshot')->nullable()->after('business_name_snapshot');
             $table->string('business_tax_number_snapshot')->nullable()->after('business_legal_name_snapshot');
@@ -48,7 +49,7 @@ return new class extends Migration {
         Schema::dropIfExists('invoice_lines');
         Schema::table('invoices', function (Blueprint $table): void {
             $table->dropColumn([
-                'order_number_snapshot','business_name_snapshot','business_legal_name_snapshot',
+                'order_number_snapshot','discount_total','business_name_snapshot','business_legal_name_snapshot',
                 'business_tax_number_snapshot','location_name_snapshot','location_address_snapshot',
             ]);
         });
