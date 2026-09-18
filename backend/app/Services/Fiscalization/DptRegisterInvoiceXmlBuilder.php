@@ -67,6 +67,17 @@ final class DptRegisterInvoiceXmlBuilder
         }
         $request->appendChild($invoice);
 
+        if ($submission->correctiveIicRef !== null || $submission->correctiveIssueDateTime !== null) {
+            if (! $submission->correctiveIicRef || ! $submission->correctiveIssueDateTime) {
+                throw new RuntimeException('Corrective fiscal invoices require both original IIC/NSLF and issue date-time.');
+            }
+
+            $corrective = $document->createElementNS(self::FISCAL_NS, 'CorrectiveInv');
+            $corrective->setAttribute('IICRef', $submission->correctiveIicRef);
+            $corrective->setAttribute('IssueDateTime', $submission->correctiveIssueDateTime);
+            $invoice->appendChild($corrective);
+        }
+
         $payMethods = $document->createElementNS(self::FISCAL_NS, 'PayMethods');
         foreach ($submission->payments as $payment) {
             $payMethod = $document->createElementNS(self::FISCAL_NS, 'PayMethod');
