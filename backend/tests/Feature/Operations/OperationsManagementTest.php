@@ -91,8 +91,15 @@ test('invoice issuance is paid-only sequential immutable and replay safe',functi
     $business=omtBusiness('Invoices');$business->update(['legal_name'=>'Invoices GmbH','tax_number'=>'DE-INV-1']);$location=omtLocation($business,'I1');$user=omtUser($business);$headers=omtHeaders($user,$business);
     $order=omtOrder($business,$location,$user,'paid');omtOrderItem($business,$order,'Espresso');omtSettleOrder($business,$order,$user);
     $first=$this->postJson('/api/v1/invoices',['order_id'=>$order,'customer_name'=>'Customer','customer_tax_number'=>'CUST-1'],$headers)->assertCreated();
-    $first->assertJsonPath('data.number','INV-'.now($business->timezone)->format('Ymd').'-0001')->assertJsonPath('data.grand_total','12.0000')->assertJsonPath('data.currency','EUR')->assertJsonPath('data.status','issued')->assertJsonPath('data.order_number_snapshot',DB::table('orders')->where('id',$order)->value('number'))->assertJsonCount(1,'data.lines');
-    expect(DB::table('invoice_lines')->where('invoice_id',$first->json('data.id'))->value('product_name_snapshot'))->toBe('Espresso');
+    $first->assertJsonPath('data.number','INV-'.now($business->timezone)->format('Ymd').'-0001')
+        ->assertJsonPath('data.grand_total','12.0000')->assertJsonPath('data.currency','EUR')
+        ->assertJsonPath('data.status','issued')->assertJsonPath('data.fiscal_invoice_type','CASH')
+        ->assertJsonPath('data.order_number_snapshot',DB::table('orders')->where('id',$order)->value('number'))
+        ->assertJsonPath('data.lines.0.unit_label_snapshot','Copë')
+        ->assertJsonPath('data.payments.0.method_label','Kartë krediti/debiti')
+        ->assertJsonCount(1,'data.lines')->assertJsonCount(1,'data.payments');
+    expect(DB::table('invoice_lines')->where('invoice_id',$first->json('data.id'))->value('product_name_snapshot'))->toBe('Espresso')
+        ->and(DB::table('invoice_payment_snapshots')->where('invoice_id',$first->json('data.id'))->count())->toBe(1);
 
     $replay=$this->postJson('/api/v1/invoices',['order_id'=>$order,'customer_name'=>'Customer','customer_tax_number'=>'CUST-1'],$headers)->assertCreated();
     expect($replay->json('data.id'))->toBe($first->json('data.id'));
