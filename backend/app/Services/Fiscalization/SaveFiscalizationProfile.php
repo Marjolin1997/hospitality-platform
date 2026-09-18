@@ -38,25 +38,93 @@ final class SaveFiscalizationProfile
             $this->assertReferenceOnly($secretRef);
             $this->assertReferenceOnly($passwordRef);
 
+            $provider = $payload['provider'];
+            $environment = $payload['environment'];
             $softwareCode = $payload['software_code'] ?? null;
             $endpoint = $payload['endpoint'] ?? null;
-            $isIssuerInVat = array_key_exists('is_issuer_in_vat', $payload) ? $payload['is_issuer_in_vat'] : $profile?->is_issuer_in_vat;
-            $status = $softwareCode && $endpoint && $secretRef && $isIssuerInVat !== null ? 'configured' : 'unconfigured';
+            $isIssuerInVat = array_key_exists('is_issuer_in_vat', $payload)
+                ? $payload['is_issuer_in_vat']
+                : $profile?->is_issuer_in_vat;
+
+            $lastTestVerifiedAt = $profile?->last_test_verified_at;
+            $lastProductionVerifiedAt = $profile?->last_production_verified_at;
+            $productionActivatedAt = $profile?->production_activated_at;
+            $productionActivatedBy = $profile?->production_activated_by_user_id;
+
+            $identityChanged = $profile && (
+                $profile->provider !== $provider
+                || (string) $profile->software_code !== (string) $softwareCode
+                || (string) $profile->certificate_secret_ref !== (string) $secretRef
+                || (string) $profile->certificate_password_secret_ref !== (string) $passwordRef
+                || $profile->is_issuer_in_vat !== $isIssuerInVat
+            );
+
+            $environmentChanged = $profile && $profile->environment !== $environment;
+            $endpointChangedInSameEnvironment = $profile
+                && ! $environmentChanged
+                && rtrim((string) $profile->endpoint, '/') !== rtrim((string) $endpoint, '/');
+
+            if ($identityChanged) {
+                $lastTestVerifiedAt = null;
+                $lastProductionVerifiedAt = null;
+                $productionActivatedAt = null;
+                $productionActivatedBy = null;
+            } elseif ($endpointChangedInSameEnvironment) {
+                if ($environment === 'test') {
+                    $lastTestVerifiedAt = null;
+                } else {
+                    $lastProductionVerifiedAt = null;
+                    $productionActivatedAt = null;
+                    $productionActivatedBy = null;
+                }
+            }
+
+            if ($environmentChanged) {
+                // Switching environments always requires an explicit production activation
+                // before any PRODUCTION invoice can leave the platform.
+                $productionActivatedAt = null;
+                $productionActivatedBy = null;
+            }
+
+            $configured = $softwareCode && $endpoint && $secretRef && $isIssuerInVat !== null;
+            $status = 'unconfigured';
+
+            if ($configured) {
+                if ($environment === 'production') {
+                    $status = $productionActivatedAt ? 'active' : 'configured';
+                } else {
+                    $status = $lastTestVerifiedAt ? 'active' : 'configured';
+                }
+            }
+
+            $lastVerifiedAt = $environment === 'production'
+                ? $lastProductionVerifiedAt
+                : $lastTestVerifiedAt;
 
             $values = [
-                'provider' => $payload['provider'],
-                'environment' => $payload['environment'],
+                'provider' => $provider,
+                'environment' => $environment,
                 'status' => $status,
                 'software_code' => $softwareCode,
                 'is_issuer_in_vat' => $isIssuerInVat,
                 'certificate_secret_ref' => $secretRef,
                 'certificate_password_secret_ref' => $passwordRef,
                 'endpoint' => $endpoint,
-                'last_verified_at' => null,
+                'last_verified_at' => $lastVerifiedAt,
+                'last_test_verified_at' => $lastTestVerifiedAt,
+                'last_production_verified_at' => $lastProductionVerifiedAt,
+                'production_activated_at' => $productionActivatedAt,
+                'production_activated_by_user_id' => $productionActivatedBy,
+                'preflight_checked_at' => null,
+                'preflight_status' => null,
+                'certificate_not_before' => null,
+                'certificate_not_after' => null,
+                'certificate_fingerprint_sha256' => null,
             ];
 
             if ($profile) {
                 $profile->forceFill($values)->save();
+
                 return $profile->refresh();
             }
 
