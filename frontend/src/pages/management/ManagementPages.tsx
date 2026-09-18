@@ -16,6 +16,11 @@ type FiscalRegister={id:string;name:string;code:string;fiscal_tcr_code:string|nu
 type Staff={id:number;name:string;email:string;status:string;role_id:string|null;role_name:string|null};
 type Role={id:string;name:string;slug:string};
 type FiscalizationProfile={provider:'direct_dpt';environment:'test'|'production';status:string;software_code:string|null;is_issuer_in_vat:boolean|null;endpoint:string|null;certificate_reference_configured:boolean;certificate_password_reference_configured:boolean;last_verified_at:string|null;ready_for_verification:boolean};
+type FiscalLocationSetup={id:string;name:string;code:string;fiscal_business_unit_code:string|null};
+type FiscalRegisterSetup={id:string;location_id:string;location_name:string;name:string;code:string;is_active:boolean;fiscal_tcr_code:string|null};
+type FiscalOperatorSetup={user_id:number;name:string;email:string;role_name:string|null;fiscal_operator_code:string|null};
+type FiscalSetup={locations:FiscalLocationSetup[];cash_registers:FiscalRegisterSetup[];operators:FiscalOperatorSetup[];summary:{locations_ready:number;locations_total:number;registers_ready:number;registers_total:number;operators_ready:number;operators_total:number}};
+
 type ProductDraft={id?:string;name:string;category_id:string;sku:string;sale_price:string;tax_rate:string;unit_code:string;unit_label:string;preparation_station:string;tracks_stock:boolean;is_active:boolean};
 const blankProduct:ProductDraft={name:'',category_id:'',sku:'',sale_price:'',tax_rate:'0',unit_code:'C62',unit_label:'Copë',preparation_station:'',tracks_stock:false,is_active:true};
 
@@ -89,8 +94,12 @@ export function SettingsPage(){
  const {activeBusiness,can}=useAuth(); const qc=useQueryClient();
  const q=useQuery({queryKey:['settings',activeBusiness?.id],enabled:Boolean(activeBusiness),queryFn:()=>api.get<{data:{business:{name:string;legal_name:string|null;tax_number:string|null;currency:string;timezone:string};settings:Record<string,unknown>}}>('/settings').then(r=>r.data.data)});
  const fiscal=useQuery({queryKey:['fiscalization-profile',activeBusiness?.id],enabled:Boolean(activeBusiness)&&can('fiscalization.view'),queryFn:()=>api.get<{data:FiscalizationProfile}>('/fiscalization/profile').then(r=>r.data.data)});
+ const fiscalSetup=useQuery({queryKey:['fiscalization-setup',activeBusiness?.id],enabled:Boolean(activeBusiness)&&can('fiscalization.view'),queryFn:()=>api.get<{data:FiscalSetup}>('/fiscalization/setup').then(r=>r.data.data)});
+ const [setupDraft,setSetupDraft]=useState<FiscalSetup|null>(null);
+ useEffect(()=>{if(fiscalSetup.data)setSetupDraft(structuredClone(fiscalSetup.data))},[fiscalSetup.data]);
  const save=useMutation({mutationFn:(data:any)=>api.put('/settings',data),onSuccess:()=>qc.invalidateQueries({queryKey:['settings',activeBusiness?.id]})});
  const saveFiscal=useMutation({mutationFn:(data:any)=>api.put('/fiscalization/profile',data),onSuccess:()=>qc.invalidateQueries({queryKey:['fiscalization-profile',activeBusiness?.id]})});
+ const saveFiscalSetup=useMutation({mutationFn:(data:FiscalSetup)=>api.put<{data:FiscalSetup}>('/fiscalization/setup',{locations:data.locations.map(x=>({id:x.id,fiscal_business_unit_code:x.fiscal_business_unit_code||null})),cash_registers:data.cash_registers.map(x=>({id:x.id,fiscal_tcr_code:x.fiscal_tcr_code||null})),operators:data.operators.map(x=>({user_id:x.user_id,fiscal_operator_code:x.fiscal_operator_code||null}))}).then(r=>r.data.data),onSuccess:(data)=>{setSetupDraft(data);qc.invalidateQueries({queryKey:['fiscalization-setup',activeBusiness?.id]})}});
  if(q.isLoading)return <Loading/>; if(q.isError)return <ErrorState/>; const d=q.data!;
  const submit=(e:React.FormEvent<HTMLFormElement>)=>{e.preventDefault();const f=new FormData(e.currentTarget);save.mutate({receipt_footer:String(f.get('receipt_footer')??''),service_charge_enabled:f.get('service_charge_enabled')==='on',low_stock_alerts:f.get('low_stock_alerts')==='on'})};
  const submitFiscal=(e:React.FormEvent<HTMLFormElement>)=>{e.preventDefault();const f=new FormData(e.currentTarget);saveFiscal.mutate({provider:'direct_dpt',environment:String(f.get('environment')??'test'),software_code:String(f.get('software_code')??'').trim()||null,is_issuer_in_vat:f.get('is_issuer_in_vat')==='yes'?true:f.get('is_issuer_in_vat')==='no'?false:null,endpoint:String(f.get('endpoint')??'').trim()||null,certificate_secret_ref:String(f.get('certificate_secret_ref')??'').trim()||null,certificate_password_secret_ref:String(f.get('certificate_password_secret_ref')??'').trim()||null,clear_certificate_reference:f.get('clear_certificate_reference')==='on',clear_certificate_password_reference:f.get('clear_certificate_password_reference')==='on'})};
@@ -125,6 +134,24 @@ export function SettingsPage(){
      {saveFiscal.isSuccess&&<span className="save-confirmation">Fiscalization profile saved securely.</span>}
      {can('fiscalization.manage')&&<button className="primary-button" disabled={saveFiscal.isPending}>{saveFiscal.isPending?'Saving fiscal profile…':'Save fiscalization profile'}</button>}
    </form>}
+ </div>}
+ {can('fiscalization.view')&&<div className="panel management-panel fiscalization-settings">
+   <div className="panel-heading"><div><span className="eyebrow">FISCAL IDENTITY MATRIX</span><h2>Business units, TCR devices and operators</h2><p>These codes come from Self-Care/DPT and are tenant-scoped. CASH invoices are issued from exactly one configured TCR.</p></div>{setupDraft&&<span className="status-badge">{setupDraft.summary.locations_ready+setupDraft.summary.registers_ready+setupDraft.summary.operators_ready}/{setupDraft.summary.locations_total+setupDraft.summary.registers_total+setupDraft.summary.operators_total} configured</span>}</div>
+   {fiscalSetup.isLoading?<div className="management-state">Loading fiscal setup…</div>:fiscalSetup.isError?<div className="error-state">{apiMessage(fiscalSetup.error)}</div>:setupDraft&&<>
+     <div className="fiscal-readiness-grid">
+       <div><span>Business units</span><strong>{setupDraft.summary.locations_ready}/{setupDraft.summary.locations_total}</strong></div>
+       <div><span>TCR devices</span><strong>{setupDraft.summary.registers_ready}/{setupDraft.summary.registers_total}</strong></div>
+       <div><span>Operators</span><strong>{setupDraft.summary.operators_ready}/{setupDraft.summary.operators_total}</strong></div>
+     </div>
+     <div className="fiscal-setup-sections">
+       <section><h3>Business units</h3><p className="field-hint">BusinUnitCode: 10-character DPT code such as ab123ab123.</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Location</th><th>Internal code</th><th>DPT business-unit code</th></tr></thead><tbody>{setupDraft.locations.map((row,index)=><tr key={row.id}><td><strong>{row.name}</strong></td><td>{row.code}</td><td><input disabled={!can('fiscalization.manage')} maxLength={10} pattern="[a-z]{2}[0-9]{3}[a-z]{2}[0-9]{3}" value={row.fiscal_business_unit_code??''} onChange={e=>setSetupDraft(d=>d?{...d,locations:d.locations.map((x,i)=>i===index?{...x,fiscal_business_unit_code:e.target.value.toLowerCase()}:x)}:d)} placeholder="ab123ab123"/></td></tr>)}</tbody></table></div></section>
+       <section><h3>Fiscal registers / TCR</h3><p className="field-hint">Each active cash/card issuing point should map to its own TCR code.</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Location</th><th>Register</th><th>TCR code</th></tr></thead><tbody>{setupDraft.cash_registers.map((row,index)=><tr key={row.id}><td>{row.location_name}</td><td><strong>{row.name}</strong><small className="cell-note">{row.code}{row.is_active?' · active':' · inactive'}</small></td><td><input disabled={!can('fiscalization.manage')} maxLength={10} pattern="[a-z]{2}[0-9]{3}[a-z]{2}[0-9]{3}" value={row.fiscal_tcr_code??''} onChange={e=>setSetupDraft(d=>d?{...d,cash_registers:d.cash_registers.map((x,i)=>i===index?{...x,fiscal_tcr_code:e.target.value.toLowerCase()}:x)}:d)} placeholder="ab123ab123"/></td></tr>)}</tbody></table></div></section>
+       <section><h3>Fiscal operators</h3><p className="field-hint">OperatorCode is assigned in Self-Care for the user that issues the invoice.</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>User</th><th>Role</th><th>Operator code</th></tr></thead><tbody>{setupDraft.operators.map((row,index)=><tr key={row.user_id}><td><strong>{row.name}</strong><small className="cell-note">{row.email}</small></td><td>{row.role_name??'—'}</td><td><input disabled={!can('fiscalization.manage')} maxLength={10} pattern="[a-z]{2}[0-9]{3}[a-z]{2}[0-9]{3}" value={row.fiscal_operator_code??''} onChange={e=>setSetupDraft(d=>d?{...d,operators:d.operators.map((x,i)=>i===index?{...x,fiscal_operator_code:e.target.value.toLowerCase()}:x)}:d)} placeholder="ab123ab123"/></td></tr>)}</tbody></table></div></section>
+     </div>
+     {saveFiscalSetup.isError&&<p className="error-state">{apiMessage(saveFiscalSetup.error)}</p>}
+     {saveFiscalSetup.isSuccess&&<span className="save-confirmation">Fiscal identity matrix saved.</span>}
+     {can('fiscalization.manage')&&<button className="primary-button" disabled={saveFiscalSetup.isPending} onClick={()=>setupDraft&&saveFiscalSetup.mutate(setupDraft)}>{saveFiscalSetup.isPending?'Saving fiscal codes…':'Save fiscal setup'}</button>}
+   </>}
  </div>}</>
 }
 
