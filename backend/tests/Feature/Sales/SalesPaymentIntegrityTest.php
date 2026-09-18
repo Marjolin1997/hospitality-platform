@@ -213,3 +213,43 @@ test('refund idempotency rejects a conflicting replay and net paid balance can b
 
     expect(DB::table('orders')->where('id', $order)->value('status'))->toBe('paid');
 });
+
+
+test('foreign currency payment uses inverse rate and enforces the base remaining balance', function (): void {
+    $business = spiBusiness();
+    $location = spiLocation($business);
+    $user = spiUser($business);
+    $order = spiOrder($business, $location, $user, '100.0000');
+    $headers = spiHeaders($business);
+
+    DB::table('exchange_rates')->insert([
+        'id' => (string) Str::ulid(),
+        'business_id' => $business->id,
+        'base_currency' => 'EUR',
+        'quote_currency' => 'USD',
+        'rate' => '1.2500000000',
+        'source' => 'test',
+        'effective_at' => now()->subMinute(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $quote = $this->postJson('/api/v1/exchange-rates/convert', [
+        'amount' => '125.0000', 'from' => 'USD', 'to' => 'EUR',
+    ], $headers)->assertOk();
+    expect($quote->json('data.amount'))->toBe('100.0000')
+        ->and($quote->json('data.inverse'))->toBeTrue();
+
+    $this->postJson("/api/v1/orders/{$order}/payments", [
+        'location_id' => $location->id, 'method' => 'card', 'currency' => 'USD',
+        'amount' => '126.0000', 'idempotency_key' => 'pay-'.Str::uuid(),
+    ], $headers)->assertStatus(422)->assertJsonValidationErrors(['amount']);
+
+    $payment = $this->postJson("/api/v1/orders/{$order}/payments", [
+        'location_id' => $location->id, 'method' => 'card', 'currency' => 'USD',
+        'amount' => '125.0000', 'idempotency_key' => 'pay-'.Str::uuid(),
+    ], $headers)->assertCreated();
+
+    expect($payment->json('data.amount_base'))->toBe('100.0000')
+        ->and(DB::table('orders')->where('id', $order)->value('status'))->toBe('paid');
+});
