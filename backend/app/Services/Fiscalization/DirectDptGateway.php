@@ -19,6 +19,7 @@ final class DirectDptGateway implements FiscalizationGateway
         private readonly DptRegisterInvoiceXmlBuilder $builder,
         private readonly FiscalXmlSigner $signer,
         private readonly Pkcs12CredentialLoader $credentials,
+        private readonly FiscalCertificateInspector $certificateInspector,
         private readonly DptRegisterInvoiceResponseParser $parser,
         private readonly FiscalXmlSignatureVerifier $responseVerifier,
     ) {}
@@ -26,10 +27,52 @@ final class DirectDptGateway implements FiscalizationGateway
     public function registerInvoice(FiscalInvoiceSubmission $submission, FiscalizationProfile $profile): FiscalizationGatewayResult
     {
         try {
+            $approvedEndpoint = $profile->environment === 'production'
+                ? config('fiscalization.production_endpoint')
+                : config('fiscalization.test_endpoint');
+
+            if ($profile->environment === 'production') {
+                if (! is_string($approvedEndpoint) || $approvedEndpoint === '') {
+                    return FiscalizationGatewayResult::failure(
+                        errorCode: 'DPT_PRODUCTION_ENDPOINT_NOT_APPROVED',
+                        errorMessage: 'Production DPT endpoint allowlist is not configured.',
+                        retryable: false,
+                    );
+                }
+
+                if (rtrim((string) $profile->endpoint, '/') !== rtrim($approvedEndpoint, '/')) {
+                    return FiscalizationGatewayResult::failure(
+                        errorCode: 'DPT_PRODUCTION_ENDPOINT_MISMATCH',
+                        errorMessage: 'Configured production endpoint does not match the deployment-approved DPT endpoint.',
+                        retryable: false,
+                    );
+                }
+            } elseif (is_string($approvedEndpoint) && $approvedEndpoint !== ''
+                && rtrim((string) $profile->endpoint, '/') !== rtrim($approvedEndpoint, '/')) {
+                return FiscalizationGatewayResult::failure(
+                    errorCode: 'DPT_TEST_ENDPOINT_MISMATCH',
+                    errorMessage: 'Configured TEST endpoint does not match the deployment-approved DPT endpoint.',
+                    retryable: false,
+                );
+            }
+
             $credentials = $this->credentials->load(
                 (string) $profile->certificate_secret_ref,
                 $profile->certificate_password_secret_ref,
             );
+
+            $certificate = $this->certificateInspector->inspectPem(
+                $credentials['certificate_pem'],
+                $credentials['private_key_pem'],
+            );
+
+            if (! $certificate['private_key_matches'] || ! $certificate['valid_now']) {
+                return FiscalizationGatewayResult::failure(
+                    errorCode: 'FISCAL_CERTIFICATE_INVALID',
+                    errorMessage: 'Fiscal certificate is expired, not valid yet, or does not match the configured private key.',
+                    retryable: false,
+                );
+            }
 
             ['document' => $document, 'request' => $request] = $this->builder->build($submission);
             $xml = $this->signer->sign(
