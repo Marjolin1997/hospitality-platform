@@ -35,8 +35,12 @@ final class Pkcs12CredentialLoader
 
     private function decodeIfBase64(string $value): string
     {
+        if (str_contains($value, 'BEGIN')) {
+            return $value;
+        }
+
         $trimmed = trim($value);
-        if (str_contains($trimmed, 'BEGIN')) {
+        if ($trimmed === '' || strlen($trimmed) % 4 !== 0 || ! preg_match('/^[A-Za-z0-9+\/=\r\n]+$/', $trimmed)) {
             return $value;
         }
 
