@@ -13,11 +13,13 @@ final class FiscalizeCreditNote
         private readonly FiscalizationGateway $gateway,
         private readonly CreditNoteFiscalizationAttemptRecorder $attempts,
         private readonly QrVerificationUrlGenerator $qr,
+        private readonly FiscalizationDispatchGuard $dispatchGuard,
     ) {}
 
     /** @return array{credit_note:object|null,attempt:object|null,status:string} */
     public function execute(Business $business, string $creditNoteId, bool $subsequentDelivery = false): array
     {
+        $this->dispatchGuard->assertCanDispatch($business);
         $prepared = $this->factory->prepare($business, $creditNoteId, $subsequentDelivery);
         $submission = $prepared->submission;
         $profile = $prepared->profile;
