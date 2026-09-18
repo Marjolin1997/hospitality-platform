@@ -150,6 +150,52 @@ test('custom role names are case-insensitively unique inside a business', functi
     expect(Role::query()->where('business_id', $business->getKey())->whereRaw('LOWER(name) = ?', ['floor lead'])->count())->toBe(1);
 });
 
+test('role managers cannot delegate or modify permissions above their own access level', function (): void {
+    $business = brmBusiness('Delegation Guard');
+    $owner = brmActor($business);
+    $ownerHeaders = brmHeaders($owner, $business);
+
+    $elevatedRole = $this->postJson('/api/v1/roles', [
+        'name' => 'Elevated Custom',
+        'permissions' => ['orders.view', 'fiscalization.manage'],
+    ], $ownerHeaders)->assertCreated()->json('data.id');
+
+    $limited = brmActor($business, ['roles.manage', 'orders.view']);
+    $limitedHeaders = brmHeaders($limited, $business);
+
+    $catalog = $this->getJson('/api/v1/roles', $limitedHeaders)
+        ->assertOk()
+        ->json('data.permissions');
+
+    expect(collect($catalog)->pluck('key')->all())
+        ->toContain('roles.manage', 'orders.view')
+        ->not->toContain('fiscalization.manage');
+
+    $this->postJson('/api/v1/roles', [
+        'name' => 'Escalated Role',
+        'permissions' => ['orders.view', 'fiscalization.manage'],
+    ], $limitedHeaders)->assertStatus(422)
+        ->assertJsonValidationErrors('permissions');
+
+    $this->putJson("/api/v1/roles/{$elevatedRole}", [
+        'name' => 'Elevated Custom Changed',
+        'permissions' => ['orders.view'],
+    ], $limitedHeaders)->assertStatus(422)
+        ->assertJsonValidationErrors('role');
+
+    $this->deleteJson("/api/v1/roles/{$elevatedRole}", [], $limitedHeaders)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('role');
+
+    $this->postJson('/api/v1/roles', [
+        'name' => 'Allowed Delegation',
+        'permissions' => ['orders.view'],
+    ], $limitedHeaders)->assertCreated();
+
+    expect(Role::query()->where('business_id', $business->getKey())->where('name', 'Escalated Role')->exists())->toBeFalse()
+        ->and(Role::query()->whereKey($elevatedRole)->value('name'))->toBe('Elevated Custom');
+});
+
 test('system role templates are immutable through custom role endpoints', function (): void {
     $business = brmBusiness('System Roles');
     app(ProvisionBusinessRoles::class)->handle($business);
