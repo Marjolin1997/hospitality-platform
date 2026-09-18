@@ -156,6 +156,19 @@ test('full invoice credit note is idempotent immutable and authorizes the refund
         ->assertStatus(422)->assertJsonValidationErrors('order');
 });
 
+test('invoice correction requires dedicated correction permission',function():void{
+    $business=omtBusiness('Credit RBAC');$location=omtLocation($business,'CRBAC');$user=omtUser($business);$headers=omtHeaders($user,$business);
+    $order=omtOrder($business,$location,$user,'paid');omtOrderItem($business,$order);omtSettleOrder($business,$order,$user);
+    $invoice=$this->postJson('/api/v1/invoices',['order_id'=>$order],$headers)->assertCreated()->json('data.id');
+
+    $roleId=DB::table('business_user')->where('business_id',$business->id)->where('user_id',$user->id)->value('role_id');
+    $permissionId=Permission::query()->where('key','invoices.correct')->value('id');
+    DB::table('permission_role')->where('role_id',$roleId)->where('permission_id',$permissionId)->delete();
+
+    $this->postJson("/api/v1/invoices/{$invoice}/credit-notes",['reason'=>'Should be forbidden','idempotency_key'=>'credit-'.Str::uuid()],$headers)->assertForbidden();
+    expect(DB::table('invoice_credit_notes')->where('invoice_id',$invoice)->count())->toBe(0);
+});
+
 test('invoice credit notes remain tenant isolated',function():void{
     $a=omtBusiness('Credit A');$b=omtBusiness('Credit B');$la=omtLocation($a,'CA1');$lb=omtLocation($b,'CB1');$userA=omtUser($a);$userB=omtUser($b);
     $orderB=omtOrder($b,$lb,$userB,'paid');omtOrderItem($b,$orderB);omtSettleOrder($b,$orderB,$userB);
