@@ -37,13 +37,15 @@ final class FiscalizationController extends Controller
             'environment' => $profile?->environment ?? 'test',
             'status' => $profile?->status ?? 'unconfigured',
             'software_code' => $profile?->software_code,
+            'is_issuer_in_vat' => $profile?->is_issuer_in_vat,
             'endpoint' => $profile?->endpoint,
             'certificate_reference_configured' => filled($profile?->certificate_secret_ref),
             'certificate_password_reference_configured' => filled($profile?->certificate_password_secret_ref),
             'last_verified_at' => $profile?->last_verified_at?->toISOString(),
             'ready_for_verification' => filled($profile?->software_code)
                 && filled($profile?->endpoint)
-                && filled($profile?->certificate_secret_ref),
+                && filled($profile?->certificate_secret_ref)
+                && $profile?->is_issuer_in_vat !== null,
         ];
     }
 }
