@@ -99,6 +99,19 @@ final class SaveFiscalizationSetup
                 'l.name as location_name','l.is_active as location_is_active',
             ]);
 
+        $locations->transform(function (object $row): object {
+            $row->is_active = (bool) $row->is_active;
+
+            return $row;
+        });
+
+        $registers->transform(function (object $row): object {
+            $row->is_active = (bool) $row->is_active;
+            $row->location_is_active = (bool) $row->location_is_active;
+
+            return $row;
+        });
+
         $operators = DB::table('business_user as bu')
             ->join('users as u','u.id','=','bu.user_id')
             ->leftJoin('roles as r', function ($join) use ($business): void {
