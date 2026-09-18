@@ -22,13 +22,20 @@ final class SaveFiscalizationProfileRequest extends FormRequest
                 'max:255',
                 'regex:/^(env|vault|secret):[A-Za-z0-9_.:\/\-]+$/',
             ],
+            'certificate_password_secret_ref' => [
+                'nullable',
+                'string',
+                'max:255',
+                'regex:/^(env|vault|secret):[A-Za-z0-9_.:\/\-]+$/',
+            ],
             'clear_certificate_reference' => ['sometimes','boolean'],
+            'clear_certificate_password_reference' => ['sometimes','boolean'],
         ];
     }
 
     protected function prepareForValidation(): void
     {
-        foreach (['software_code','endpoint','certificate_secret_ref'] as $field) {
+        foreach (['software_code','endpoint','certificate_secret_ref','certificate_password_secret_ref'] as $field) {
             if ($this->has($field) && is_string($this->input($field))) {
                 $value = trim((string) $this->input($field));
                 $this->merge([$field => $value === '' ? null : $value]);
@@ -39,7 +46,8 @@ final class SaveFiscalizationProfileRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'certificate_secret_ref.regex' => 'Store only a secret reference such as env:NAME, vault:path/key, or secret:identifier. Never paste a certificate, private key, or password here.',
+            'certificate_secret_ref.regex' => 'Store only a secret reference such as env:NAME, vault:path/key, or secret:identifier. Never paste a certificate or private key here.',
+            'certificate_password_secret_ref.regex' => 'Store only a password secret reference such as env:NAME, vault:path/key, or secret:identifier. Never paste the password here.',
         ];
     }
 }
