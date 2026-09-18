@@ -18,11 +18,21 @@ services:
     networks: [hospitality]
   queue:
     build: ./backend
-    command: php artisan queue:work --sleep=1 --tries=3 --timeout=90
+    command: php artisan queue:work --queue=fiscalization,default --sleep=1 --tries=1 --timeout=60
     working_dir: /var/www/html
     volumes: ["./backend:/var/www/html"]
     env_file: ./backend/.env
     depends_on: [backend, redis]
+    restart: unless-stopped
+    networks: [hospitality]
+  scheduler:
+    build: ./backend
+    command: php artisan schedule:work
+    working_dir: /var/www/html
+    volumes: ["./backend:/var/www/html"]
+    env_file: ./backend/.env
+    depends_on: [backend, redis]
+    restart: unless-stopped
     networks: [hospitality]
   frontend:
     build: ./frontend
