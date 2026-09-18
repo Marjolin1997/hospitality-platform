@@ -17,7 +17,7 @@ class PermissionSeeder extends Seeder
             'inventory'=>['inventory.view','inventory.receive','inventory.transfer','inventory.adjust'],
             'finance'=>['finance.view','expenses.view','expenses.create','expenses.approve'],
             'invoices'=>['invoices.view','invoices.issue','invoices.correct'],
-            'fiscalization'=>['fiscalization.view','fiscalization.retry'],
+            'fiscalization'=>['fiscalization.view','fiscalization.manage','fiscalization.retry'],
             'reports'=>['reports.operational.view','reports.financial.view'],
             'staff'=>['users.view','users.manage','roles.manage'],
             'settings'=>['business.settings.manage'],
