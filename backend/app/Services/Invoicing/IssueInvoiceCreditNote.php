@@ -88,6 +88,7 @@ final class IssueInvoiceCreditNote
                 'created_by_user_id' => $user->id,
                 'number' => $this->nextNumber($business, $businessNow),
                 'invoice_number_snapshot' => $invoice->number,
+                'original_invoice_nslf_snapshot' => $invoice->nslf,
                 'status' => 'issued',
                 'currency' => $invoice->currency,
                 'subtotal' => $invoice->subtotal,
