@@ -61,6 +61,12 @@ final class FiscalizationController extends Controller
             return response()->json(['message' => 'Invoice is already fiscalized.'], 422);
         }
 
+        if (($row->fiscalization_status ?? 'not_fiscalized') !== 'not_fiscalized') {
+            return response()->json([
+                'message' => 'Initial fiscalization is allowed only from not_fiscalized state. Use retry for failed or retry-pending invoices.',
+            ], 422);
+        }
+
         FiscalizeInvoiceJob::dispatch((string) $business->id, (string) $row->id, false);
 
         return response()->json([
@@ -103,6 +109,12 @@ final class FiscalizationController extends Controller
 
         if ($row->fiscalization_status === 'fiscalized' || filled($row->nivf)) {
             return response()->json(['message' => 'Corrective document is already fiscalized.'], 422);
+        }
+
+        if (($row->fiscalization_status ?? 'not_fiscalized') !== 'not_fiscalized') {
+            return response()->json([
+                'message' => 'Initial corrective fiscalization is allowed only from not_fiscalized state. Use retry after a failure.',
+            ], 422);
         }
 
         FiscalizeCreditNoteJob::dispatch((string) $business->id, (string) $row->id, false);
