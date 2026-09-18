@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Boxes, FileText, PackagePlus, Pencil, Plus, ReceiptText, Search, Settings2, Users, WalletCards, X } from 'lucide-react';
+import { AlertTriangle, Boxes, FileText, PackagePlus, Pencil, Plus, ReceiptText, Search, Settings2, ShieldCheck, Trash2, Users, WalletCards, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../features/auth/AuthProvider';
@@ -15,6 +15,10 @@ type InvoiceableOrder={id:string;number:string;location_id:string;currency:strin
 type FiscalRegister={id:string;name:string;code:string;fiscal_tcr_code:string|null};
 type Staff={id:number;name:string;email:string;status:string;role_id:string|null;role_name:string|null};
 type Role={id:string;name:string;slug:string};
+type PermissionItem={key:string;group:string;description:string|null};
+type ManagedRole={id:string;name:string;slug:string;is_system:boolean;member_count:number;permissions:PermissionItem[]};
+type RoleManagementResponse={roles:ManagedRole[];permissions:PermissionItem[]};
+type RoleDraft={id?:string;name:string;permissions:string[]};
 type FiscalizationProfile={provider:'direct_dpt';environment:'test'|'production';status:string;software_code:string|null;is_issuer_in_vat:boolean|null;endpoint:string|null;certificate_reference_configured:boolean;certificate_password_reference_configured:boolean;last_verified_at:string|null;last_test_verified_at:string|null;last_production_verified_at:string|null;production_activated_at:string|null;preflight_checked_at:string|null;preflight_status:string|null;certificate_not_before:string|null;certificate_not_after:string|null;certificate_fingerprint_sha256:string|null;ready_for_verification:boolean};
 type FiscalPreflightCheck={key:string;label:string;status:'pass'|'warning'|'fail';blocking:boolean;message:string};
 type FiscalPreflight={status:'ready'|'warning'|'blocked';blocking_failures:number;warnings:number;environment:'test'|'production'|null;can_fiscalize_test:boolean;can_activate_production:boolean;production_active:boolean;checked_at:string;checks:FiscalPreflightCheck[];certificate:null|{valid_now:boolean;not_before:string;not_after:string;days_remaining:number;fingerprint_sha256:string;subject_cn:string|null;issuer_cn:string|null;private_key_matches:boolean}};
