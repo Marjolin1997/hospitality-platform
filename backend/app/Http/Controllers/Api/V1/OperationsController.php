@@ -93,6 +93,7 @@ final class OperationsController extends Controller
             $user,
             $data['role_id'],
             $data['status'],
+            (int) $request->user()->id,
         );
 
         return response()->json(['message'=>'Staff membership updated.']);
