@@ -21,6 +21,7 @@ final class SaveFiscalizationProfile
                 ->first();
 
             $secretRef = $profile?->certificate_secret_ref;
+            $passwordRef = $profile?->certificate_password_secret_ref;
 
             if (($payload['clear_certificate_reference'] ?? false) === true) {
                 $secretRef = null;
@@ -28,7 +29,14 @@ final class SaveFiscalizationProfile
                 $secretRef = $payload['certificate_secret_ref'];
             }
 
+            if (($payload['clear_certificate_password_reference'] ?? false) === true) {
+                $passwordRef = null;
+            } elseif (array_key_exists('certificate_password_secret_ref', $payload) && $payload['certificate_password_secret_ref'] !== null) {
+                $passwordRef = $payload['certificate_password_secret_ref'];
+            }
+
             $this->assertReferenceOnly($secretRef);
+            $this->assertReferenceOnly($passwordRef);
 
             $softwareCode = $payload['software_code'] ?? null;
             $endpoint = $payload['endpoint'] ?? null;
@@ -40,6 +48,7 @@ final class SaveFiscalizationProfile
                 'status' => $status,
                 'software_code' => $softwareCode,
                 'certificate_secret_ref' => $secretRef,
+                'certificate_password_secret_ref' => $passwordRef,
                 'endpoint' => $endpoint,
                 'last_verified_at' => null,
             ];
