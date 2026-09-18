@@ -300,7 +300,7 @@ test('owner-only production activation endpoint succeeds only after TEST verific
 
     try {
         $business=fetBusiness('Endpoint Production Activation');
-        $user=fetUser($business,['fiscalization.view','fiscalization.manage','fiscalization.activate_production']);
+        $user=fetUser($business,['fiscalization.view','fiscalization.manage','fiscalization.activate_production','fiscalization.issue']);
         [,,$orderId,$locationId]=fetDocuments($business,$user);
 
         DB::table('locations')->where('id',$locationId)->update([
