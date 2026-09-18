@@ -13,6 +13,7 @@ use App\Services\Fiscalization\FiscalizationMonitoring;
 use App\Services\Fiscalization\FiscalizationDispatchGuard;
 use App\Services\Fiscalization\FiscalizationPreflight;
 use App\Services\Fiscalization\SaveFiscalizationProfile;
+use App\Services\Fiscalization\SaveFiscalizationSetup;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -166,6 +167,62 @@ test('preflight reports a valid certificate and complete TEST fiscal setup witho
             ->and($profile->preflight_checked_at)->not->toBeNull()
             ->and($profile->certificate_not_after)->not->toBeNull()
             ->and(strlen((string) $profile->certificate_fingerprint_sha256))->toBe(64);
+    } finally {
+        CarbonImmutable::setTestNow();
+        putenv('FRT_P12');
+        putenv('FRT_PASSWORD');
+    }
+});
+
+test('inactive locations and their registers are excluded from fiscal readiness totals', function (): void {
+    $credentials = frtCredentials();
+    putenv('FRT_P12='.$credentials['pkcs12']);
+    putenv('FRT_PASSWORD='.$credentials['password']);
+
+    try {
+        frtUseCertificateClock($credentials);
+        [$business] = frtFixture('test');
+        config()->set('fiscalization.test_endpoint', 'https://test-dpt.example.test/service');
+
+        $inactiveLocationId = (string) Str::ulid();
+        DB::table('locations')->insert([
+            'id' => $inactiveLocationId,
+            'business_id' => $business->id,
+            'name' => 'Future Branch',
+            'code' => 'FUTURE',
+            'type' => 'cafe',
+            'fiscal_business_unit_code' => null,
+            'is_active' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('cash_registers')->insert([
+            'id' => (string) Str::ulid(),
+            'business_id' => $business->id,
+            'location_id' => $inactiveLocationId,
+            'name' => 'Future Register',
+            'code' => 'FUTURE',
+            'fiscal_tcr_code' => null,
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $result = app(FiscalizationPreflight::class)->run($business);
+        $setup = app(SaveFiscalizationSetup::class)->read($business);
+
+        expect($result['status'])->toBe('ready')
+            ->and(collect($result['checks'])->firstWhere('key', 'business_units')['message'])->toBe('1/1 active locations have DPT business-unit codes.')
+            ->and(collect($result['checks'])->firstWhere('key', 'tcr_registers')['message'])->toBe('1/1 active registers have TCR codes.')
+            ->and($setup['summary']['locations_ready'])->toBe(1)
+            ->and($setup['summary']['locations_total'])->toBe(1)
+            ->and($setup['summary']['registers_ready'])->toBe(1)
+            ->and($setup['summary']['registers_total'])->toBe(1)
+            ->and($setup['locations'])->toHaveCount(2)
+            ->and($setup['cash_registers'])->toHaveCount(2)
+            ->and(collect($setup['locations'])->firstWhere('id', $inactiveLocationId)->is_active)->toBeFalse()
+            ->and(collect($setup['cash_registers'])->firstWhere('location_id', $inactiveLocationId)->location_is_active)->toBeFalse();
     } finally {
         CarbonImmutable::setTestNow();
         putenv('FRT_P12');
