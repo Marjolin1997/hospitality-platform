@@ -5,7 +5,6 @@ namespace App\Services\Operations;
 use App\Models\Business;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -199,35 +198,6 @@ final class OperationsService
             ],
             'recent_expenses' => DB::table('expenses')->where('business_id', $business->id)->orderByDesc('expense_date')->orderByDesc('created_at')->limit(50)->get(),
         ];
-    }
-
-    public function issueInvoice(Business $business, array $data, int $userId): object
-    {
-        try {
-            return DB::transaction(function () use ($business, $data, $userId): object {
-                $order = DB::table('orders')->where('business_id', $business->id)->where('id', $data['order_id'])->lockForUpdate()->first();
-                abort_unless($order, 404);
-                abort_if($order->status === 'cancelled', 422, 'Cancelled orders cannot be invoiced.');
-
-                $existing = DB::table('invoices')->where('business_id', $business->id)->where('order_id', $order->id)->first();
-                if ($existing) return $existing;
-
-                $id = (string) Str::ulid();
-                $number = 'INV-'.now($business->timezone)->format('Ymd').'-'.strtoupper(substr($id, -8));
-                DB::table('invoices')->insert([
-                    'id' => $id, 'business_id' => $business->id, 'location_id' => $order->location_id, 'order_id' => $order->id,
-                    'created_by_user_id' => $userId, 'number' => $number, 'status' => 'issued', 'currency' => $order->currency,
-                    'subtotal' => $order->subtotal, 'tax_total' => $order->tax_total, 'grand_total' => $order->grand_total,
-                    'customer_name' => $data['customer_name'] ?? null, 'customer_tax_number' => $data['customer_tax_number'] ?? null,
-                    'issued_at' => now(), 'created_at' => now(), 'updated_at' => now(),
-                ]);
-                return DB::table('invoices')->where('business_id', $business->id)->where('id', $id)->first();
-            });
-        } catch (QueryException $exception) {
-            $existing = DB::table('invoices')->where('business_id', $business->id)->where('order_id', $data['order_id'])->first();
-            if ($existing) return $existing;
-            throw $exception;
-        }
     }
 
     public function updateSettings(Business $business, array $data): void
