@@ -9,19 +9,22 @@ final class FiscalCertificateInspector
 {
     public function __construct(private readonly Pkcs12CredentialLoader $credentials) {}
 
+    public function inspect(string $certificateReference, ?string $passwordReference): array
+    {
+        $loaded = $this->credentials->load($certificateReference, $passwordReference);
+
+        return $this->inspectPem($loaded['certificate_pem'], $loaded['private_key_pem']);
+    }
+
     /**
      * @return array{
      *   valid_now:bool,not_before:string,not_after:string,days_remaining:int,
      *   fingerprint_sha256:string,subject_cn:?string,issuer_cn:?string,private_key_matches:bool
      * }
      */
-    public function inspect(string $certificateReference, ?string $passwordReference): array
+    public function inspectPem(string $certificatePem, string $privateKeyPem): array
     {
-        $loaded = $this->credentials->load($certificateReference, $passwordReference);
-        $certificate = $loaded['certificate_pem'];
-        $privateKey = $loaded['private_key_pem'];
-
-        $parsed = openssl_x509_parse($certificate);
+        $parsed = openssl_x509_parse($certificatePem);
         if (! is_array($parsed)) {
             throw new RuntimeException('Fiscal X509 certificate could not be parsed.');
         }
@@ -36,12 +39,10 @@ final class FiscalCertificateInspector
         $notAfter = CarbonImmutable::createFromTimestampUTC($notAfterTs);
         $now = CarbonImmutable::now('UTC');
 
-        $fingerprint = openssl_x509_fingerprint($certificate, 'sha256');
+        $fingerprint = openssl_x509_fingerprint($certificatePem, 'sha256');
         if (! is_string($fingerprint) || $fingerprint === '') {
             throw new RuntimeException('Fiscal certificate SHA-256 fingerprint could not be generated.');
         }
-
-        $matches = openssl_x509_check_private_key($certificate, $privateKey);
 
         return [
             'valid_now' => $now->greaterThanOrEqualTo($notBefore) && $now->lessThanOrEqualTo($notAfter),
@@ -51,7 +52,7 @@ final class FiscalCertificateInspector
             'fingerprint_sha256' => strtoupper(str_replace(':', '', $fingerprint)),
             'subject_cn' => isset($parsed['subject']['CN']) ? (string) $parsed['subject']['CN'] : null,
             'issuer_cn' => isset($parsed['issuer']['CN']) ? (string) $parsed['issuer']['CN'] : null,
-            'private_key_matches' => $matches === true,
+            'private_key_matches' => openssl_x509_check_private_key($certificatePem, $privateKeyPem) === true,
         ];
     }
 }
