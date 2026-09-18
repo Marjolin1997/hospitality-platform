@@ -107,6 +107,78 @@ final class IssueInvoice
                 ->distinct()
                 ->pluck('cr.fiscal_tcr_code');
 
+            if ($fiscalInvoiceType === 'CASH' && $tcrCodes->count() > 1) {
+                throw ValidationException::withMessages([
+                    'cash_register_id' => 'A single fiscal invoice cannot be issued from multiple TCR devices.',
+                ]);
+            }
+
+            $selectedRegister = null;
+            if (! empty($payload['cash_register_id'])) {
+                $selectedRegister = DB::table('cash_registers')
+                    ->where('business_id', $business->id)
+                    ->where('location_id', $order->location_id)
+                    ->where('id', $payload['cash_register_id'])
+                    ->where('is_active', true)
+                    ->first();
+
+                if (! $selectedRegister) {
+                    throw ValidationException::withMessages([
+                        'cash_register_id' => 'The selected fiscal register is not active in this order location.',
+                    ]);
+                }
+                if (! filled($selectedRegister->fiscal_tcr_code)) {
+                    throw ValidationException::withMessages([
+                        'cash_register_id' => 'The selected register has no fiscal TCR code configured.',
+                    ]);
+                }
+            }
+
+            $fiscalTcrCode = $tcrCodes->count() === 1 ? (string) $tcrCodes->first() : null;
+
+            if ($selectedRegister) {
+                if ($fiscalTcrCode !== null && $fiscalTcrCode !== (string) $selectedRegister->fiscal_tcr_code) {
+                    throw ValidationException::withMessages([
+                        'cash_register_id' => 'The selected register does not match the cash drawer used by this order.',
+                    ]);
+                }
+                $fiscalTcrCode = (string) $selectedRegister->fiscal_tcr_code;
+            }
+
+            if ($fiscalInvoiceType === 'CASH' && $fiscalTcrCode === null) {
+                $configuredRegisters = DB::table('cash_registers')
+                    ->where('business_id', $business->id)
+                    ->where('location_id', $order->location_id)
+                    ->where('is_active', true)
+                    ->whereNotNull('fiscal_tcr_code')
+                    ->get(['id','fiscal_tcr_code']);
+
+                if ($configuredRegisters->count() === 1) {
+                    $fiscalTcrCode = (string) $configuredRegisters->first()->fiscal_tcr_code;
+                } elseif ($configuredRegisters->count() > 1) {
+                    throw ValidationException::withMessages([
+                        'cash_register_id' => 'Select the fiscal register/TCR that issues this CASH invoice.',
+                    ]);
+                }
+            }
+
+            $profileConfigured = DB::table('fiscalization_profiles')
+                ->where('business_id', $business->id)
+                ->whereIn('status', ['configured','active'])
+                ->exists();
+
+            if ($profileConfigured && $fiscalInvoiceType === 'CASH' && $fiscalTcrCode === null) {
+                throw ValidationException::withMessages([
+                    'cash_register_id' => 'A configured fiscalization profile requires a TCR before issuing a CASH invoice.',
+                ]);
+            }
+
+            if ($fiscalInvoiceType === 'NONCASH' && $selectedRegister) {
+                throw ValidationException::withMessages([
+                    'cash_register_id' => 'NONCASH invoices do not use a TCR register.',
+                ]);
+            }
+
             $businessNow = CarbonImmutable::now($business->timezone);
             $invoiceId = (string) \Illuminate\Support\Str::ulid();
 
@@ -124,7 +196,7 @@ final class IssueInvoice
                 'location_address_snapshot' => $location->address,
                 'fiscal_operator_code_snapshot' => $operatorCode,
                 'fiscal_business_unit_code_snapshot' => $location->fiscal_business_unit_code,
-                'fiscal_tcr_code_snapshot' => $tcrCodes->count() === 1 ? $tcrCodes->first() : null,
+                'fiscal_tcr_code_snapshot' => $fiscalTcrCode,
                 'number' => $this->nextNumber($business, $businessNow),
                 'status' => 'issued',
                 'fiscal_invoice_type' => $fiscalInvoiceType,
@@ -226,6 +298,11 @@ final class IssueInvoice
     {
         $same = (string) ($existing->customer_name ?? '') === (string) ($payload['customer_name'] ?? '')
             && (string) ($existing->customer_tax_number ?? '') === (string) ($payload['customer_tax_number'] ?? '');
+
+        if (! empty($payload['cash_register_id'])) {
+            $selectedTcr = DB::table('cash_registers')->where('id', $payload['cash_register_id'])->value('fiscal_tcr_code');
+            $same = $same && (string) ($existing->fiscal_tcr_code_snapshot ?? '') === (string) ($selectedTcr ?? '');
+        }
 
         if (! $same) {
             throw ValidationException::withMessages([
