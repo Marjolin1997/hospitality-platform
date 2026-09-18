@@ -120,6 +120,7 @@ final class CollectPayment
             && $existing->method === $payload['method']
             && $existing->currency === $payload['currency']
             && BigDecimal::of((string) $existing->amount)->compareTo(BigDecimal::of((string) $payload['amount'])) === 0
+            && $this->sameOptionalDecimal($existing->tendered_amount, $payload['tendered_amount'] ?? null)
             && (string) ($existing->cash_session_id ?? '') === (string) ($payload['cash_session_id'] ?? '')
             && (string) ($existing->external_reference ?? '') === (string) ($payload['external_reference'] ?? '');
 
@@ -128,6 +129,15 @@ final class CollectPayment
                 'idempotency_key' => 'This idempotency key was already used for a different payment request.',
             ]);
         }
+    }
+
+    private function sameOptionalDecimal(mixed $stored, mixed $incoming): bool
+    {
+        if ($stored === null || $incoming === null) {
+            return $stored === null && $incoming === null;
+        }
+
+        return BigDecimal::of((string) $stored)->compareTo(BigDecimal::of((string) $incoming)) === 0;
     }
 
     private function netPaidBase(Business $business, Order $order): BigDecimal
