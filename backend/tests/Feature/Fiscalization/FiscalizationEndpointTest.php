@@ -130,6 +130,54 @@ test('fiscal retry endpoints require failed state and mark queued retry as subse
     Queue::assertPushed(FiscalizeCreditNoteJob::class, fn (FiscalizeCreditNoteJob $job): bool => $job->subsequentDelivery===true);
 });
 
+test('initial fiscalization cannot bypass the retry state machine', function (): void {
+    $business=fetBusiness('Endpoint State Machine');
+    $user=fetUser($business,['fiscalization.issue','fiscalization.retry','fiscalization.view','invoices.view']);
+    [$invoiceId,$creditId]=fetDocuments($business,$user);
+    $headers=['X-Business-Id'=>$business->id];
+
+    DB::table('invoices')->where('id',$invoiceId)->update(['fiscalization_status'=>'processing','updated_at'=>now()]);
+    DB::table('invoice_credit_notes')->where('id',$creditId)->update(['fiscalization_status'=>'retry_pending','updated_at'=>now()]);
+
+    $this->postJson("/api/v1/invoices/{$invoiceId}/fiscalize",[], $headers)->assertStatus(422);
+    $this->postJson("/api/v1/invoice-credit-notes/{$creditId}/fiscalize",[], $headers)->assertStatus(422);
+
+    Queue::assertNothingPushed();
+});
+
+test('corrective document detail is tenant scoped and exposes immutable print snapshots', function (): void {
+    $business=fetBusiness('Endpoint Credit Detail');
+    $user=fetUser($business,['fiscalization.view','invoices.view']);
+    [$invoiceId,$creditId]=fetDocuments($business,$user);
+    $headers=['X-Business-Id'=>$business->id];
+
+    DB::table('invoice_lines')->insert([
+        'id'=>(string)Str::ulid(),'business_id'=>$business->id,'invoice_id'=>$invoiceId,'position'=>1,
+        'product_name_snapshot'=>'Coffee','quantity'=>'1.0000','unit_price'=>'120.0000','tax_rate'=>'20.0000',
+        'line_subtotal'=>'100.0000','line_tax'=>'20.0000','line_total'=>'120.0000',
+        'created_at'=>now(),'updated_at'=>now(),
+    ]);
+    DB::table('invoice_credit_note_lines')->insert([
+        'id'=>(string)Str::ulid(),'business_id'=>$business->id,'invoice_credit_note_id'=>$creditId,
+        'position'=>1,'product_name_snapshot'=>'Coffee','unit_code_snapshot'=>'C62','unit_label_snapshot'=>'Copë',
+        'quantity'=>'1.0000','unit_price'=>'120.0000','discount_percent'=>'0.0000','tax_rate'=>'20.0000',
+        'line_subtotal'=>'100.0000','line_tax'=>'20.0000','line_total'=>'120.0000',
+        'created_at'=>now(),'updated_at'=>now(),
+    ]);
+    DB::table('invoice_payment_snapshots')->insert([
+        'id'=>(string)Str::ulid(),'business_id'=>$business->id,'invoice_id'=>$invoiceId,'position'=>1,
+        'method'=>'cash','method_label'=>'Kartëmonedha dhe monedha','amount'=>'120.0000','currency'=>'ALL',
+        'amount_base'=>'120.0000','base_currency'=>'ALL','exchange_rate'=>'1.0000000000',
+        'created_at'=>now(),'updated_at'=>now(),
+    ]);
+
+    $this->getJson("/api/v1/invoice-credit-notes/{$creditId}",$headers)->assertOk()
+        ->assertJsonPath('data.id',$creditId)
+        ->assertJsonPath('data.original_invoice.id',$invoiceId)
+        ->assertJsonPath('data.lines.0.product_name_snapshot','Coffee')
+        ->assertJsonPath('data.payments.0.method_label','Kartëmonedha dhe monedha');
+});
+
 test('fiscal endpoints and diagnostics never cross tenant boundaries', function (): void {
     $a=fetBusiness('Endpoint Tenant A');
     $userA=fetUser($a,['fiscalization.issue','fiscalization.retry','fiscalization.view','invoices.view']);
