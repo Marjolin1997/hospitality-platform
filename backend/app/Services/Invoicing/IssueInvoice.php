@@ -69,7 +69,7 @@ final class IssueInvoice
             }
 
             $allocation = $this->lineAllocator->allocate($items, (string) $order->discount_total);
-            if (BigDecimal::of($allocation['grand_total'])->isNotEqualTo(BigDecimal::of((string) $order->grand_total))) {
+            if (! BigDecimal::of($allocation['grand_total'])->isEqualTo(BigDecimal::of((string) $order->grand_total))) {
                 throw ValidationException::withMessages([
                     'order_id' => 'Fiscal invoice allocation does not reconcile with the authoritative order total.',
                 ]);
