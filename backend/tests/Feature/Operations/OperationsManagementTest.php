@@ -109,6 +109,28 @@ test('invoice issuance is paid-only sequential immutable and replay safe',functi
     $this->postJson('/api/v1/invoices',['order_id'=>$secondOrder],$headers)->assertCreated()->assertJsonPath('data.number','INV-'.now($business->timezone)->format('Ymd').'-0002');
 });
 
+test('discounted invoice snapshots reconcile gross discount and VAT exactly',function():void{
+    $business=omtBusiness('Discount invoice');$location=omtLocation($business,'DI1');$user=omtUser($business);$headers=omtHeaders($user,$business);
+    $order=omtOrder($business,$location,$user,'paid');
+    omtOrderItem($business,$order,'Discounted coffee');
+    DB::table('orders')->where('id',$order)->update([
+        'discount_total'=>'1.2000',
+        'grand_total'=>'10.8000',
+        'updated_at'=>now(),
+    ]);
+    omtSettleOrder($business,$order,$user,'10.8000');
+
+    $invoice=$this->postJson('/api/v1/invoices',['order_id'=>$order],$headers)->assertCreated();
+    $invoice->assertJsonPath('data.discount_total','1.2000')
+        ->assertJsonPath('data.subtotal','9.0000')
+        ->assertJsonPath('data.tax_total','1.8000')
+        ->assertJsonPath('data.grand_total','10.8000')
+        ->assertJsonPath('data.lines.0.discount_percent','10.0000')
+        ->assertJsonPath('data.lines.0.line_subtotal','9.0000')
+        ->assertJsonPath('data.lines.0.line_tax','1.8000')
+        ->assertJsonPath('data.lines.0.line_total','10.8000');
+});
+
 test('invoice issuance rejects foreign unpaid cancelled and unsettled orders',function():void{
     $a=omtBusiness('A');$b=omtBusiness('B');$la=omtLocation($a,'A1');$lb=omtLocation($b,'B1');$userA=omtUser($a);$userB=omtUser($b);$headers=omtHeaders($userA,$a);
     $foreign=omtOrder($b,$lb,$userB,'paid');omtOrderItem($b,$foreign);omtSettleOrder($b,$foreign,$userB);
