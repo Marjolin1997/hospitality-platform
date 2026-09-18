@@ -300,10 +300,16 @@ test('cash control blocks drawer overdraft and requires a note for closing varia
     $this->postJson("/api/v1/cash-sessions/{$session}/movements", [
         'location_id' => $location->id, 'type' => 'cash_out', 'amount' => '101.0000', 'currency' => 'EUR', 'reason' => 'Supplier payout',
     ], $headers)->assertStatus(422)->assertJsonValidationErrors(['amount']);
+    $this->postJson("/api/v1/cash-sessions/{$session}/movements", [
+        'location_id' => $location->id, 'type' => 'cash_in', 'amount' => '1.0000', 'currency' => 'EUR', 'reason' => 'x',
+    ], $headers)->assertStatus(422)->assertJsonValidationErrors(['reason']);
     expect(DB::table('cash_movements')->where('cash_session_id', $session)->count())->toBe(0);
 
     $this->postJson("/api/v1/cash-sessions/{$session}/close", [
         'location_id' => $location->id, 'counted_cash' => '99.0000',
+    ], $headers)->assertStatus(422)->assertJsonValidationErrors(['closing_note']);
+    $this->postJson("/api/v1/cash-sessions/{$session}/close", [
+        'location_id' => $location->id, 'counted_cash' => '99.0000', 'closing_note' => 'x',
     ], $headers)->assertStatus(422)->assertJsonValidationErrors(['closing_note']);
 
     $this->postJson("/api/v1/cash-sessions/{$session}/close", [
