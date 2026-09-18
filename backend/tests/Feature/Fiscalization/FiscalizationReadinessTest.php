@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\Fiscalization\ActivateProductionFiscalization;
 use App\Services\Fiscalization\FiscalCertificateInspector;
 use App\Services\Fiscalization\FiscalizationMonitoring;
+use App\Services\Fiscalization\FiscalizationDispatchGuard;
 use App\Services\Fiscalization\FiscalizationPreflight;
 use App\Services\Fiscalization\SaveFiscalizationProfile;
 use Carbon\CarbonImmutable;
@@ -272,4 +273,31 @@ test('monitoring aggregates fiscal states retries and recent failures without se
         ->and($result['recent_failures'][0]->error_code)->toBe('NETWORK_TIMEOUT')
         ->and(json_encode($result))->not->toContain('do-not-expose')
         ->and(json_encode($result))->not->toContain('certificate_secret_ref');
+});
+
+
+test('production dispatch is blocked when activation or preflight becomes stale', function (): void {
+    [$business, $user] = frtFixture('production');
+    $profile = FiscalizationProfile::query()->where('business_id', $business->id)->firstOrFail();
+
+    config()->set('fiscalization.production_endpoint', 'https://prod-dpt.example.test/service');
+
+    expect(fn () => app(FiscalizationDispatchGuard::class)->assertCanDispatch($business))
+        ->toThrow(ValidationException::class);
+
+    $profile->forceFill([
+        'status' => 'active',
+        'production_activated_at' => now(),
+        'production_activated_by_user_id' => $user->id,
+        'preflight_status' => 'ready',
+        'preflight_checked_at' => now(),
+        'certificate_not_after' => now()->addYear(),
+    ])->save();
+
+    expect(app(FiscalizationDispatchGuard::class)->assertCanDispatch($business)->id)->toBe($profile->id);
+
+    $profile->forceFill(['preflight_status' => null, 'preflight_checked_at' => null])->save();
+
+    expect(fn () => app(FiscalizationDispatchGuard::class)->assertCanDispatch($business))
+        ->toThrow(ValidationException::class);
 });
