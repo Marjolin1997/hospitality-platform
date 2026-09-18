@@ -1,6 +1,6 @@
 import { BarChart3, Boxes, Coffee, FileText, LayoutDashboard, LogOut, Menu, ReceiptText, Settings, ShoppingCart, Users, WalletCards, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../features/auth/AuthProvider';
 
 const navigation=[
@@ -18,11 +18,14 @@ const navigation=[
 
 export function AppShell(){
   const navigate=useNavigate();
+  const location=useLocation();
   const [mobileNavOpen,setMobileNavOpen]=useState(false);
   const {user,activeBusiness,activeLocation,selectBusiness,selectLocation,logout,canAny}=useAuth();
   const visibleNavigation=navigation.filter(item=>item.permissions.length===0||canAny([...item.permissions]));
   const canUseCashRegister=canAny(['cash_sessions.open','cash_sessions.close','payments.collect']);
   const sections=[...new Set(visibleNavigation.map(item=>item.section))];
+  const activeNavigation=navigation.find(item=>location.pathname===item.to)??navigation[0];
+  const ActiveIcon=activeNavigation.icon;
 
   useEffect(()=>{
     if(!mobileNavOpen)return;
@@ -69,7 +72,12 @@ export function AppShell(){
       <header className="topbar">
         <div className="mobile-topbar-brand">
           <button className="mobile-menu-button" aria-label="Open navigation" aria-expanded={mobileNavOpen} onClick={()=>setMobileNavOpen(true)}><Menu size={20}/></button>
-          <div><strong>Hospitality</strong><span>{activeLocation?.name??activeBusiness?.name??'Workspace'}</span></div>
+          <div><strong>{activeNavigation.label}</strong><span>{activeLocation?.name??activeBusiness?.name??'Workspace'}</span></div>
+        </div>
+
+        <div className="topbar-context" aria-label="Current module">
+          <span className="topbar-context-icon"><ActiveIcon size={16}/></span>
+          <div><span>{activeNavigation.section}</span><strong>{activeNavigation.label}</strong></div>
         </div>
 
         <div className="workspace-switchers">
