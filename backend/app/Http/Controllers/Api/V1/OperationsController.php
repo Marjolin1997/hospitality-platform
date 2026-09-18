@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\SetProductStatusRequest;
 use App\Http\Requests\Api\V1\StoreExpenseRequest;
 use App\Http\Requests\Api\V1\ReverseExpenseRequest;
 use App\Models\Business;
+use App\Services\Authorization\UpdateBusinessMembership;
 use App\Services\Operations\OperationsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -80,13 +81,20 @@ final class OperationsController extends Controller
         $roles=DB::table('roles')->where('business_id',$business->id)->select('id','name','slug')->orderBy('name')->get(); return response()->json(['data'=>['staff'=>$rows,'roles'=>$roles]]);
     }
 
-    public function updateStaff(Request $request, int $user): JsonResponse
+    public function updateStaff(Request $request, int $user, UpdateBusinessMembership $update): JsonResponse
     {
-        $business=app(Business::class); $data=$request->validate(['role_id'=>['required','string'],'status'=>['required',Rule::in(['active','inactive'])]]);
-        abort_unless(DB::table('roles')->where('business_id',$business->id)->where('id',$data['role_id'])->exists(),422,'Invalid business role.');
-        $membership=DB::table('business_user')->where('business_id',$business->id)->where('user_id',$user);
-        abort_unless($membership->exists(),404);
-        $membership->update(['role_id'=>$data['role_id'],'status'=>$data['status'],'updated_at'=>now()]);
+        $data = $request->validate([
+            'role_id' => ['required','string'],
+            'status' => ['required',Rule::in(['active','inactive'])],
+        ]);
+
+        $update->execute(
+            app(Business::class),
+            $user,
+            $data['role_id'],
+            $data['status'],
+        );
+
         return response()->json(['message'=>'Staff membership updated.']);
     }
 
