@@ -392,3 +392,54 @@ test('physical cash rejects foreign currency and excessive monetary precision', 
 
     expect(DB::table('cash_movements')->where('cash_session_id',$session)->count())->toBe(0);
 });
+
+
+test('cash-only payment fields cannot leak into non-cash payment or refund records', function (): void {
+    $business=spiBusiness();$location=spiLocation($business);$user=spiUser($business);$order=spiOrder($business,$location,$user,'100.0000');$headers=spiHeaders($business);
+    $register=(string)Str::ulid();
+    DB::table('cash_registers')->insert(['id'=>$register,'business_id'=>$business->id,'location_id'=>$location->id,'name'=>'Guard Drawer','code'=>'GUARD','is_active'=>true,'created_at'=>now(),'updated_at'=>now()]);
+    $session=$this->postJson('/api/v1/cash-sessions',['location_id'=>$location->id,'cash_register_id'=>$register,'opening_cash'=>'50.0000'],$headers)->assertCreated()->json('data.id');
+
+    $this->postJson("/api/v1/orders/{$order}/payments",[
+        'location_id'=>$location->id,'cash_session_id'=>$session,'method'=>'card','currency'=>'EUR',
+        'amount'=>'50.0000','tendered_amount'=>'50.0000','idempotency_key'=>'bad-card-'.Str::uuid(),
+    ],$headers)->assertStatus(422)->assertJsonValidationErrors(['cash_session_id','tendered_amount']);
+    expect(DB::table('payments')->where('order_id',$order)->count())->toBe(0);
+
+    $payment=$this->postJson("/api/v1/orders/{$order}/payments",[
+        'location_id'=>$location->id,'method'=>'card','currency'=>'EUR','amount'=>'100.0000','idempotency_key'=>'card-'.Str::uuid(),
+    ],$headers)->assertCreated()->json('data.id');
+
+    $this->postJson("/api/v1/payments/{$payment}/refunds",[
+        'location_id'=>$location->id,'cash_session_id'=>$session,'amount'=>'10.0000','reason'=>'Invalid drawer context',
+        'idempotency_key'=>'refund-'.Str::uuid(),
+    ],$headers)->assertStatus(422)->assertJsonValidationErrors('cash_session_id');
+    expect(DB::table('payment_refunds')->where('payment_id',$payment)->count())->toBe(0);
+});
+
+test('cash session opening is location-bound and opening and closing cash use exact precision', function (): void {
+    $business=spiBusiness();$locationA=spiLocation($business);$locationB=Location::query()->create([
+        'business_id'=>$business->id,'name'=>'Second','code'=>'SECOND-'.Str::upper(Str::random(5)),'type'=>'bar','is_active'=>true,
+    ]);spiUser($business);$headers=spiHeaders($business);
+    $register=(string)Str::ulid();
+    DB::table('cash_registers')->insert(['id'=>$register,'business_id'=>$business->id,'location_id'=>$locationB->id,'name'=>'Second Drawer','code'=>'SECOND-DRAWER','is_active'=>true,'created_at'=>now(),'updated_at'=>now()]);
+
+    $this->postJson('/api/v1/cash-sessions',[
+        'location_id'=>$locationA->id,'cash_register_id'=>$register,'opening_cash'=>'10.0000',
+    ],$headers)->assertStatus(422)->assertJsonValidationErrors('cash_register_id');
+    expect(DB::table('cash_sessions')->where('cash_register_id',$register)->count())->toBe(0);
+
+    $this->postJson('/api/v1/cash-sessions',[
+        'location_id'=>$locationB->id,'cash_register_id'=>$register,'opening_cash'=>'10.00001',
+    ],$headers)->assertStatus(422)->assertJsonValidationErrors('opening_cash');
+
+    $session=$this->postJson('/api/v1/cash-sessions',[
+        'location_id'=>$locationB->id,'cash_register_id'=>$register,'opening_cash'=>'10.0000',
+    ],$headers)->assertCreated()->json('data.id');
+
+    $this->postJson("/api/v1/cash-sessions/{$session}/close",[
+        'location_id'=>$locationB->id,'counted_cash'=>'10.00001',
+    ],$headers)->assertStatus(422)->assertJsonValidationErrors('counted_cash');
+
+    expect(DB::table('cash_sessions')->where('id',$session)->value('status'))->toBe('open');
+});
