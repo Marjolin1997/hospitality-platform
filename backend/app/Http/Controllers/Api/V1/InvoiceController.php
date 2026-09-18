@@ -82,7 +82,6 @@ final class InvoiceController extends Controller
         if (! $profile || $profile->status !== 'active') $missing[] = 'Active fiscalization profile';
         if (! $profile?->software_code) $missing[] = 'Certified software code';
         if (! $profile?->certificate_secret_ref) $missing[] = 'Electronic certificate reference';
-        if ((float) $row->discount_total > 0) $missing[] = 'Fiscal line-level allocation of the order discount';
 
         if ($paymentMapper->mixesCashAndNonCash($row->payments)) {
             $missing[] = 'Split CASH and NONCASH payment methods into fiscally compatible documents';
