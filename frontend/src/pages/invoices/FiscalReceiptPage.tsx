@@ -41,7 +41,7 @@ export function FiscalReceiptPage(){
   const qr=doc.verification_url||doc.qr_payload||'';
 
   return <main className={`thermal-receipt-shell paper-${width}`} data-path={location.pathname}>
-    <div className="receipt-screen-toolbar"><button className="primary-button" onClick={()=>window.print()}><Printer size={16}/> Print {width}mm</button></div>
+    <div className="receipt-screen-toolbar"><button type="button" className="primary-button" onClick={()=>window.print()}><Printer size={16}/> Print {width}mm</button></div>
     <article className="thermal-receipt">
       <header>
         <strong>{original.business_legal_name_snapshot||original.business_name_snapshot||'—'}</strong>
