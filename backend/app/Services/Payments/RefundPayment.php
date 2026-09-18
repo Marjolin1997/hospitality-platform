@@ -36,9 +36,35 @@ final class RefundPayment
                 return $existing;
             }
 
-            if (DB::table('invoices')->where('business_id', $business->id)->where('order_id', $order->id)->where('status', 'issued')->exists()) {
+            $invoice = DB::table('invoices')
+                ->where('business_id', $business->id)
+                ->where('order_id', $order->id)
+                ->lockForUpdate()
+                ->first();
+
+            $creditNote = null;
+            if ($invoice) {
+                if (empty($payload['invoice_credit_note_id'])) {
+                    throw ValidationException::withMessages([
+                        'payment' => 'Direct refunds are blocked after invoice issuance. Issue a credit note and attach it to the refund.',
+                    ]);
+                }
+
+                $creditNote = DB::table('invoice_credit_notes')
+                    ->where('business_id', $business->id)
+                    ->where('invoice_id', $invoice->id)
+                    ->where('id', $payload['invoice_credit_note_id'])
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $creditNote || ! in_array($creditNote->status, ['issued', 'partially_refunded'], true)) {
+                    throw ValidationException::withMessages([
+                        'invoice_credit_note_id' => 'The selected invoice credit note is not available for this refund.',
+                    ]);
+                }
+            } elseif (! empty($payload['invoice_credit_note_id'])) {
                 throw ValidationException::withMessages([
-                    'payment' => 'Direct refunds are blocked after invoice issuance. Create an invoice correction before refunding this order.',
+                    'invoice_credit_note_id' => 'A credit note can only authorize refunds for its original invoiced order.',
                 ]);
             }
 
@@ -54,6 +80,20 @@ final class RefundPayment
             }
 
             $amountBase = $requested->multipliedBy(BigDecimal::of((string) $payment->exchange_rate))->toScale(self::SCALE, RoundingMode::HALF_UP);
+
+            if ($creditNote) {
+                $alreadyCreditedRefunded = BigDecimal::of((string) PaymentRefund::query()->forBusiness($business)
+                    ->where('invoice_credit_note_id', $creditNote->id)
+                    ->where('status', 'completed')
+                    ->sum('amount_base'));
+                $creditRemaining = BigDecimal::of((string) $creditNote->grand_total)->minus($alreadyCreditedRefunded);
+
+                if ($amountBase->isGreaterThan($creditRemaining)) {
+                    throw ValidationException::withMessages([
+                        'amount' => 'Refund exceeds the remaining amount authorized by the invoice credit note.',
+                    ]);
+                }
+            }
 
             if ($payment->method !== 'cash' && ! empty($payload['cash_session_id'])) {
                 throw ValidationException::withMessages([
@@ -75,6 +115,7 @@ final class RefundPayment
 
             $refund = PaymentRefund::query()->create([
                 'business_id' => $business->getKey(), 'payment_id' => $payment->getKey(),
+                'invoice_credit_note_id' => $creditNote?->id,
                 'cash_session_id' => $session?->getKey(), 'refunded_by_user_id' => $user->getKey(),
                 'amount' => (string) $requested, 'amount_base' => (string) $amountBase,
                 'currency' => $payment->currency, 'base_currency' => $payment->base_currency,
@@ -100,11 +141,29 @@ final class RefundPayment
                 ]);
             }
 
-            $netPaid = $this->netPaidBase($business, $order->getKey());
-            $grandTotal = BigDecimal::of((string) $order->grand_total);
-            $order->forceFill([
-                'status' => $netPaid->isGreaterThanOrEqualTo($grandTotal) ? 'paid' : 'payment_due',
-            ])->save();
+            if ($creditNote) {
+                $creditedRefunded = BigDecimal::of((string) PaymentRefund::query()->forBusiness($business)
+                    ->where('invoice_credit_note_id', $creditNote->id)
+                    ->where('status', 'completed')
+                    ->sum('amount_base'));
+                $creditTotal = BigDecimal::of((string) $creditNote->grand_total);
+                $creditStatus = $creditedRefunded->isGreaterThanOrEqualTo($creditTotal) ? 'refunded' : 'partially_refunded';
+
+                DB::table('invoice_credit_notes')
+                    ->where('business_id', $business->id)
+                    ->where('id', $creditNote->id)
+                    ->update(['status' => $creditStatus, 'updated_at' => now()]);
+
+                $order->forceFill([
+                    'status' => $creditStatus === 'refunded' ? 'refunded' : 'partially_refunded',
+                ])->save();
+            } else {
+                $netPaid = $this->netPaidBase($business, $order->getKey());
+                $grandTotal = BigDecimal::of((string) $order->grand_total);
+                $order->forceFill([
+                    'status' => $netPaid->isGreaterThanOrEqualTo($grandTotal) ? 'paid' : 'payment_due',
+                ])->save();
+            }
 
             return $refund;
         }, attempts: 3);
@@ -115,6 +174,7 @@ final class RefundPayment
         $same = (string) $existing->payment_id === (string) $payment->getKey()
             && BigDecimal::of((string) $existing->amount)->compareTo(BigDecimal::of((string) $payload['amount'])) === 0
             && (string) ($existing->cash_session_id ?? '') === (string) ($payload['cash_session_id'] ?? '')
+            && (string) ($existing->invoice_credit_note_id ?? '') === (string) ($payload['invoice_credit_note_id'] ?? '')
             && $existing->reason === $payload['reason'];
 
         if (! $same) {
