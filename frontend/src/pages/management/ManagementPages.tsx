@@ -14,6 +14,7 @@ type Invoice={id:string;number:string;status:string;fiscalization_status?:string
 type InvoiceableOrder={id:string;number:string;location_id:string;currency:string;grand_total:string;updated_at:string};
 type Staff={id:number;name:string;email:string;status:string;role_id:string|null;role_name:string|null};
 type Role={id:string;name:string;slug:string};
+type FiscalizationProfile={provider:'direct_dpt';environment:'test'|'production';status:string;software_code:string|null;endpoint:string|null;certificate_reference_configured:boolean;last_verified_at:string|null;ready_for_verification:boolean};
 type ProductDraft={id?:string;name:string;category_id:string;sku:string;sale_price:string;tax_rate:string;unit_code:string;unit_label:string;preparation_station:string;tracks_stock:boolean;is_active:boolean};
 const blankProduct:ProductDraft={name:'',category_id:'',sku:'',sale_price:'',tax_rate:'0',unit_code:'C62',unit_label:'Copë',preparation_station:'',tracks_stock:false,is_active:true};
 
@@ -80,8 +81,41 @@ export function StaffPage(){
 }
 
 export function SettingsPage(){
- const qc=useQueryClient(); const q=useQuery({queryKey:['settings'],queryFn:()=>api.get<{data:{business:{name:string;legal_name:string|null;tax_number:string|null;currency:string;timezone:string};settings:Record<string,unknown>}}>('/settings').then(r=>r.data.data)});
- const save=useMutation({mutationFn:(data:any)=>api.put('/settings',data),onSuccess:()=>qc.invalidateQueries({queryKey:['settings']})}); if(q.isLoading)return <Loading/>; if(q.isError)return <ErrorState/>; const d=q.data!;
+ const {activeBusiness,can}=useAuth(); const qc=useQueryClient();
+ const q=useQuery({queryKey:['settings',activeBusiness?.id],enabled:Boolean(activeBusiness),queryFn:()=>api.get<{data:{business:{name:string;legal_name:string|null;tax_number:string|null;currency:string;timezone:string};settings:Record<string,unknown>}}>('/settings').then(r=>r.data.data)});
+ const fiscal=useQuery({queryKey:['fiscalization-profile',activeBusiness?.id],enabled:Boolean(activeBusiness)&&can('fiscalization.view'),queryFn:()=>api.get<{data:FiscalizationProfile}>('/fiscalization/profile').then(r=>r.data.data)});
+ const save=useMutation({mutationFn:(data:any)=>api.put('/settings',data),onSuccess:()=>qc.invalidateQueries({queryKey:['settings',activeBusiness?.id]})});
+ const saveFiscal=useMutation({mutationFn:(data:any)=>api.put('/fiscalization/profile',data),onSuccess:()=>qc.invalidateQueries({queryKey:['fiscalization-profile',activeBusiness?.id]})});
+ if(q.isLoading)return <Loading/>; if(q.isError)return <ErrorState/>; const d=q.data!;
  const submit=(e:React.FormEvent<HTMLFormElement>)=>{e.preventDefault();const f=new FormData(e.currentTarget);save.mutate({receipt_footer:String(f.get('receipt_footer')??''),service_charge_enabled:f.get('service_charge_enabled')==='on',low_stock_alerts:f.get('low_stock_alerts')==='on'})};
- return <><Heading eyebrow="WORKSPACE" title="Settings" description="Business identity and operational preferences for this tenant." icon={Settings2}/><div className="settings-grid"><div className="panel management-panel"><h2>Business profile</h2><dl className="detail-list"><div><dt>Name</dt><dd>{d.business.name}</dd></div><div><dt>Legal name</dt><dd>{d.business.legal_name??'—'}</dd></div><div><dt>Tax number</dt><dd>{d.business.tax_number??'—'}</dd></div><div><dt>Currency</dt><dd>{d.business.currency}</dd></div><div><dt>Timezone</dt><dd>{d.business.timezone}</dd></div></dl></div><form className="panel management-panel settings-form" onSubmit={submit}><h2>Operations</h2><label>Receipt footer<textarea name="receipt_footer" maxLength={500} defaultValue={String(d.settings.receipt_footer??'')}/></label><label className="check-row"><input type="checkbox" name="service_charge_enabled" defaultChecked={Boolean(d.settings.service_charge_enabled)}/> Enable service charge</label><label className="check-row"><input type="checkbox" name="low_stock_alerts" defaultChecked={d.settings.low_stock_alerts!==false}/> Enable low-stock alerts</label>{save.isError&&<span className="error-state">{apiMessage(save.error)}</span>}<button className="primary-button" disabled={save.isPending}>{save.isPending?'Saving…':'Save settings'}</button>{save.isSuccess&&<span className="save-confirmation">Settings saved.</span>}</form></div></>
+ const submitFiscal=(e:React.FormEvent<HTMLFormElement>)=>{e.preventDefault();const f=new FormData(e.currentTarget);saveFiscal.mutate({provider:'direct_dpt',environment:String(f.get('environment')??'test'),software_code:String(f.get('software_code')??'').trim()||null,endpoint:String(f.get('endpoint')??'').trim()||null,certificate_secret_ref:String(f.get('certificate_secret_ref')??'').trim()||null,clear_certificate_reference:f.get('clear_certificate_reference')==='on'})};
+ const fp=fiscal.data;
+ return <><Heading eyebrow="WORKSPACE" title="Settings" description="Business identity, operational preferences and fiscalization readiness for this tenant." icon={Settings2}/>
+ <div className="settings-grid">
+   <div className="panel management-panel"><h2>Business profile</h2><dl className="detail-list"><div><dt>Name</dt><dd>{d.business.name}</dd></div><div><dt>Legal name</dt><dd>{d.business.legal_name??'—'}</dd></div><div><dt>Tax number</dt><dd>{d.business.tax_number??'—'}</dd></div><div><dt>Currency</dt><dd>{d.business.currency}</dd></div><div><dt>Timezone</dt><dd>{d.business.timezone}</dd></div></dl></div>
+   <form className="panel management-panel settings-form" onSubmit={submit}><h2>Operations</h2><label>Receipt footer<textarea name="receipt_footer" maxLength={500} defaultValue={String(d.settings.receipt_footer??'')}/></label><label className="check-row"><input type="checkbox" name="service_charge_enabled" defaultChecked={Boolean(d.settings.service_charge_enabled)}/> Enable service charge</label><label className="check-row"><input type="checkbox" name="low_stock_alerts" defaultChecked={d.settings.low_stock_alerts!==false}/> Enable low-stock alerts</label>{save.isError&&<span className="error-state">{apiMessage(save.error)}</span>}<button className="primary-button" disabled={save.isPending}>{save.isPending?'Saving…':'Save settings'}</button>{save.isSuccess&&<span className="save-confirmation">Settings saved.</span>}</form>
+ </div>
+ {can('fiscalization.view')&&<div className="panel management-panel fiscalization-settings">
+   <div className="panel-heading"><div><span className="eyebrow">ALBANIAN FISCALIZATION</span><h2>DPT connection profile</h2><p>Configure identifiers and a secure certificate reference. The certificate/private key itself is never stored in the application database.</p></div>{fp&&<span className={`status-badge ${fp.status==='active'?'success':fp.status==='configured'?'warning':'muted'}`}>{fp.status}</span>}</div>
+   {fiscal.isLoading?<div className="management-state">Loading fiscalization profile…</div>:fiscal.isError?<div className="error-state">{apiMessage(fiscal.error)}</div>:<form className="settings-form fiscalization-form" key={`${fp?.environment}-${fp?.software_code}-${fp?.endpoint}-${fp?.certificate_reference_configured}`} onSubmit={submitFiscal}>
+     <div className="form-grid">
+       <label><span>Provider</span><input value="Direct DPT" disabled/><small>Adapter boundary prepared for the Albanian Tax Administration.</small></label>
+       <label><span>Environment</span><select name="environment" defaultValue={fp?.environment??'test'} disabled={!can('fiscalization.manage')}><option value="test">TEST</option><option value="production">PRODUCTION</option></select></label>
+       <label><span>Certified software code</span><input name="software_code" maxLength={64} defaultValue={fp?.software_code??''} disabled={!can('fiscalization.manage')} placeholder="Code assigned during certification"/></label>
+       <label><span>DPT endpoint</span><input name="endpoint" type="url" maxLength={500} defaultValue={fp?.endpoint??''} disabled={!can('fiscalization.manage')} placeholder="https://…"/></label>
+       <label className="span-2"><span>Certificate secret reference</span><input name="certificate_secret_ref" maxLength={255} disabled={!can('fiscalization.manage')} placeholder={fp?.certificate_reference_configured?'Configured — leave blank to keep current reference':'env:FISCAL_CERTIFICATE_P12'}/><small>Accepted references: env:, vault:, or secret:. Never paste the P12/PFX, PEM private key, or certificate password.</small></label>
+       {fp?.certificate_reference_configured&&can('fiscalization.manage')&&<label className="check-row span-2"><input type="checkbox" name="clear_certificate_reference"/> Remove the existing certificate reference</label>}
+     </div>
+     <div className="fiscal-readiness-grid">
+       <div><span>Certificate reference</span><strong>{fp?.certificate_reference_configured?'Configured':'Missing'}</strong></div>
+       <div><span>Verification readiness</span><strong>{fp?.ready_for_verification?'Ready to verify':'Incomplete'}</strong></div>
+       <div><span>Last verified</span><strong>{fp?.last_verified_at?new Date(fp.last_verified_at).toLocaleString():'Not verified yet'}</strong></div>
+     </div>
+     {fp?.status==='configured'&&<p className="field-hint">Configuration is complete, but it is not marked active until a real DPT TEST verification succeeds.</p>}
+     {saveFiscal.isError&&<p className="error-state">{apiMessage(saveFiscal.error)}</p>}
+     {saveFiscal.isSuccess&&<span className="save-confirmation">Fiscalization profile saved securely.</span>}
+     {can('fiscalization.manage')&&<button className="primary-button" disabled={saveFiscal.isPending}>{saveFiscal.isPending?'Saving fiscal profile…':'Save fiscalization profile'}</button>}
+   </form>}
+ </div>}</>
 }
+
