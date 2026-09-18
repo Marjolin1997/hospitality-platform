@@ -49,7 +49,8 @@ export function useSplitOrder(orderId?: string) {
 export function useMergeOrder(orderId?: string) { return useOrderMutation<{ idempotency_key: string; source_order_id: string; reason: string }>(orderId, async (id, p) => (await api.post<{ data: Order }>(`/orders/${id}/merge`, p)).data.data); }
 
 function invalidateItemOrder(qc: ReturnType<typeof useQueryClient>, item: OrderItem) {
-  qc.invalidateQueries({ queryKey: ['orders', item.order_id] });
+  const businessId = getActiveBusinessId();
+  qc.invalidateQueries({ queryKey: ['orders', businessId, item.order_id] });
   qc.invalidateQueries({ queryKey: ['orders'] });
 }
 export function useCancelOrderItem() {
