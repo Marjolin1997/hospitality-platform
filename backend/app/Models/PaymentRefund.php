@@ -12,7 +12,7 @@ class PaymentRefund extends Model
     use BelongsToBusiness, HasUlids;
 
     protected $fillable = [
-        'business_id', 'payment_id', 'cash_session_id', 'refunded_by_user_id', 'amount',
+        'business_id', 'payment_id', 'invoice_credit_note_id', 'cash_session_id', 'refunded_by_user_id', 'amount',
         'amount_base', 'currency', 'base_currency', 'exchange_rate', 'reason',
         'idempotency_key', 'status', 'refunded_at',
     ];
@@ -27,4 +27,5 @@ class PaymentRefund extends Model
 
     public function payment(): BelongsTo { return $this->belongsTo(Payment::class); }
     public function cashSession(): BelongsTo { return $this->belongsTo(CashSession::class); }
+    public function invoiceCreditNote(): BelongsTo { return $this->belongsTo(InvoiceCreditNote::class); }
 }
