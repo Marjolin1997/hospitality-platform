@@ -89,8 +89,29 @@ function fetDocuments(Business $business, User $user): array
     return [$invoiceId,$creditId,$orderId,$locationId];
 }
 
+function fetConfiguredProfile(Business $business): void
+{
+    DB::table('fiscalization_profiles')->updateOrInsert(
+        ['business_id'=>$business->id],
+        [
+            'id'=>(string)Str::ulid(),
+            'provider'=>'direct_dpt',
+            'environment'=>'test',
+            'status'=>'configured',
+            'software_code'=>'dd123dd123',
+            'certificate_secret_ref'=>'env:FET_QUEUE_P12',
+            'is_issuer_in_vat'=>true,
+            'endpoint'=>'https://test-dpt.example.test/service',
+            'created_at'=>now(),
+            'updated_at'=>now(),
+        ],
+    );
+}
+
+
 test('authorized fiscal issue endpoints queue invoice and corrective jobs without synchronous provider calls', function (): void {
     $business=fetBusiness('Endpoint Queue');
+    fetConfiguredProfile($business);
     $user=fetUser($business,['fiscalization.issue','fiscalization.retry','fiscalization.view','invoices.view']);
     [$invoiceId,$creditId]=fetDocuments($business,$user);
     $headers=['X-Business-Id'=>$business->id];
@@ -113,6 +134,7 @@ test('authorized fiscal issue endpoints queue invoice and corrective jobs withou
 
 test('fiscal retry endpoints require failed state and mark queued retry as subsequent delivery', function (): void {
     $business=fetBusiness('Endpoint Retry');
+    fetConfiguredProfile($business);
     $user=fetUser($business,['fiscalization.issue','fiscalization.retry','fiscalization.view','invoices.view']);
     [$invoiceId,$creditId]=fetDocuments($business,$user);
     $headers=['X-Business-Id'=>$business->id];
@@ -132,6 +154,7 @@ test('fiscal retry endpoints require failed state and mark queued retry as subse
 
 test('initial fiscalization cannot bypass the retry state machine', function (): void {
     $business=fetBusiness('Endpoint State Machine');
+    fetConfiguredProfile($business);
     $user=fetUser($business,['fiscalization.issue','fiscalization.retry','fiscalization.view','invoices.view']);
     [$invoiceId,$creditId]=fetDocuments($business,$user);
     $headers=['X-Business-Id'=>$business->id];
