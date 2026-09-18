@@ -16,6 +16,7 @@ use App\Services\Fiscalization\SaveFiscalizationSetup;
 use App\Services\Fiscalization\FiscalizationPreflight;
 use App\Services\Fiscalization\FiscalizationMonitoring;
 use App\Services\Fiscalization\ActivateProductionFiscalization;
+use App\Services\Fiscalization\FiscalizationDispatchGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -77,11 +78,13 @@ final class FiscalizationController extends Controller
         ]);
     }
 
-    public function fiscalize(string $invoice): JsonResponse
+    public function fiscalize(string $invoice, FiscalizationDispatchGuard $guard): JsonResponse
     {
         $business = app(Business::class);
         $row = Invoice::query()->forBusiness($business)->whereKey($invoice)->first();
         abort_unless($row, 404);
+
+        $guard->assertCanDispatch($business);
 
         if ($row->fiscalization_status === 'fiscalized' || filled($row->nivf)) {
             return response()->json(['message' => 'Invoice is already fiscalized.'], 422);
@@ -103,11 +106,13 @@ final class FiscalizationController extends Controller
         ], 202);
     }
 
-    public function retry(string $invoice): JsonResponse
+    public function retry(string $invoice, FiscalizationDispatchGuard $guard): JsonResponse
     {
         $business = app(Business::class);
         $row = Invoice::query()->forBusiness($business)->whereKey($invoice)->first();
         abort_unless($row, 404);
+
+        $guard->assertCanDispatch($business);
 
         if ($row->fiscalization_status === 'fiscalized' || filled($row->nivf)) {
             return response()->json(['message' => 'Invoice is already fiscalized.'], 422);
@@ -127,11 +132,13 @@ final class FiscalizationController extends Controller
         ], 202);
     }
 
-    public function fiscalizeCreditNote(string $creditNote): JsonResponse
+    public function fiscalizeCreditNote(string $creditNote, FiscalizationDispatchGuard $guard): JsonResponse
     {
         $business = app(Business::class);
         $row = InvoiceCreditNote::query()->forBusiness($business)->whereKey($creditNote)->first();
         abort_unless($row, 404);
+
+        $guard->assertCanDispatch($business);
 
         if ($row->fiscalization_status === 'fiscalized' || filled($row->nivf)) {
             return response()->json(['message' => 'Corrective document is already fiscalized.'], 422);
@@ -153,11 +160,13 @@ final class FiscalizationController extends Controller
         ], 202);
     }
 
-    public function retryCreditNote(string $creditNote): JsonResponse
+    public function retryCreditNote(string $creditNote, FiscalizationDispatchGuard $guard): JsonResponse
     {
         $business = app(Business::class);
         $row = InvoiceCreditNote::query()->forBusiness($business)->whereKey($creditNote)->first();
         abort_unless($row, 404);
+
+        $guard->assertCanDispatch($business);
 
         if ($row->fiscalization_status === 'fiscalized' || filled($row->nivf)) {
             return response()->json(['message' => 'Corrective document is already fiscalized.'], 422);
@@ -182,6 +191,8 @@ final class FiscalizationController extends Controller
         $business = app(Business::class);
         $row = Invoice::query()->forBusiness($business)->whereKey($invoice)->first();
         abort_unless($row, 404);
+
+        $guard->assertCanDispatch($business);
 
         $attempts = DB::table('invoice_fiscalization_attempts')
             ->where('business_id', $business->id)
@@ -212,6 +223,8 @@ final class FiscalizationController extends Controller
         $business = app(Business::class);
         $row = InvoiceCreditNote::query()->forBusiness($business)->whereKey($creditNote)->first();
         abort_unless($row, 404);
+
+        $guard->assertCanDispatch($business);
 
         $attempts = DB::table('credit_note_fiscalization_attempts')
             ->where('business_id', $business->id)
