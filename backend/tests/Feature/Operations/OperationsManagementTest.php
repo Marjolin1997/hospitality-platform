@@ -21,6 +21,8 @@ function omtUser(Business $business): User{$user=User::query()->create(['name'=>
 function omtHeaders(User $user,Business $business): array{Sanctum::actingAs($user);return ['X-Business-Id'=>$business->id];}
 function omtProduct(Business $business,bool $tracksStock=true): string{$id=(string)Str::ulid();DB::table('products')->insert(['id'=>$id,'business_id'=>$business->id,'name'=>'Product '.Str::random(5),'sale_price'=>'5.0000','tax_rate'=>'0.0000','is_active'=>true,'tracks_stock'=>$tracksStock,'created_at'=>now(),'updated_at'=>now()]);return $id;}
 function omtOrder(Business $business,Location $location,User $user,string $status='paid'): string{$id=(string)Str::ulid();DB::table('orders')->insert(['id'=>$id,'business_id'=>$business->id,'location_id'=>$location->id,'opened_by_user_id'=>$user->id,'number'=>'ORD-'.Str::random(8),'type'=>'takeaway','status'=>$status,'currency'=>'EUR','subtotal'=>'10.0000','discount_total'=>'0.0000','tax_total'=>'2.0000','grand_total'=>'12.0000','opened_at'=>now(),'created_at'=>now(),'updated_at'=>now()]);return $id;}
+function omtOrderItem(Business $business,string $orderId,string $name='Invoice item'): string{$id=(string)Str::ulid();DB::table('order_items')->insert(['id'=>$id,'business_id'=>$business->id,'order_id'=>$orderId,'product_name_snapshot'=>$name,'sku_snapshot'=>'INV-SKU','quantity'=>'1.0000','unit_price'=>'10.0000','tax_rate'=>'20.0000','line_subtotal'=>'10.0000','line_tax'=>'2.0000','line_total'=>'12.0000','preparation_status'=>'served','created_at'=>now(),'updated_at'=>now()]);return $id;}
+function omtSettleOrder(Business $business,string $orderId,User $user,string $amount='12.0000'): string{$id=(string)Str::ulid();DB::table('payments')->insert(['id'=>$id,'business_id'=>$business->id,'order_id'=>$orderId,'collected_by_user_id'=>$user->id,'method'=>'card','status'=>'completed','amount'=>$amount,'amount_base'=>$amount,'currency'=>'EUR','base_currency'=>'EUR','exchange_rate'=>'1.0000000000','idempotency_key'=>'invoice-pay-'.Str::uuid(),'paid_at'=>now(),'created_at'=>now(),'updated_at'=>now()]);return $id;}
 
 test('inventory adjustment is tenant and stock tracking safe',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$la=omtLocation($a,'A1');$lb=omtLocation($b,'B1');$user=omtUser($a);$headers=omtHeaders($user,$a);$productA=omtProduct($a,true);$productB=omtProduct($b,true);$nonStock=omtProduct($a,false);$this->postJson('/api/v1/inventory/adjustments',['location_id'=>$la->id,'product_id'=>$productA,'quantity_delta'=>'2.1250','note'=>'Opening stock'],$headers)->assertOk();expect((string)DB::table('inventory_stocks')->where('business_id',$a->id)->where('product_id',$productA)->value('quantity_on_hand'))->toBe('2.1250');expect(DB::table('inventory_movements')->where('business_id',$a->id)->where('product_id',$productA)->count())->toBe(1);$this->postJson('/api/v1/inventory/adjustments',['location_id'=>$lb->id,'product_id'=>$productA,'quantity_delta'=>1],$headers)->assertStatus(422);$this->postJson('/api/v1/inventory/adjustments',['location_id'=>$la->id,'product_id'=>$productB,'quantity_delta'=>1],$headers)->assertStatus(422);$this->postJson('/api/v1/inventory/adjustments',['location_id'=>$la->id,'product_id'=>$nonStock,'quantity_delta'=>1],$headers)->assertStatus(422);});
 
@@ -85,9 +87,40 @@ test('expense creators cannot reverse without approval permission',function():vo
         ->and(DB::table('expenses')->where('reversal_of_expense_id',$expense)->count())->toBe(0);
 });
 
-test('invoice issuance is idempotent per order and uses order totals',function():void{$business=omtBusiness('Invoices');$location=omtLocation($business,'I1');$user=omtUser($business);$headers=omtHeaders($user,$business);$order=omtOrder($business,$location,$user);$first=$this->postJson('/api/v1/invoices',['order_id'=>$order,'customer_name'=>'Customer'],$headers)->assertOk();$second=$this->postJson('/api/v1/invoices',['order_id'=>$order,'customer_name'=>'Changed'],$headers)->assertOk();expect($second->json('data.id'))->toBe($first->json('data.id'));expect(DB::table('invoices')->where('business_id',$business->id)->where('order_id',$order)->count())->toBe(1);$first->assertJsonPath('data.grand_total','12.0000')->assertJsonPath('data.currency','EUR')->assertJsonPath('data.status','issued');});
+test('invoice issuance is paid-only sequential immutable and replay safe',function():void{
+    $business=omtBusiness('Invoices');$business->update(['legal_name'=>'Invoices GmbH','tax_number'=>'DE-INV-1']);$location=omtLocation($business,'I1');$user=omtUser($business);$headers=omtHeaders($user,$business);
+    $order=omtOrder($business,$location,$user,'paid');omtOrderItem($business,$order,'Espresso');omtSettleOrder($business,$order,$user);
+    $first=$this->postJson('/api/v1/invoices',['order_id'=>$order,'customer_name'=>'Customer','customer_tax_number'=>'CUST-1'],$headers)->assertCreated();
+    $first->assertJsonPath('data.number','INV-'.now($business->timezone)->format('Ymd').'-0001')->assertJsonPath('data.grand_total','12.0000')->assertJsonPath('data.currency','EUR')->assertJsonPath('data.status','issued')->assertJsonPath('data.order_number_snapshot',DB::table('orders')->where('id',$order)->value('number'))->assertJsonCount(1,'data.lines');
+    expect(DB::table('invoice_lines')->where('invoice_id',$first->json('data.id'))->value('product_name_snapshot'))->toBe('Espresso');
 
-test('invoice cannot be issued for another business order or a cancelled order',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$la=omtLocation($a,'A1');$lb=omtLocation($b,'B1');$userA=omtUser($a);$userB=omtUser($b);$headers=omtHeaders($userA,$a);$foreign=omtOrder($b,$lb,$userB);$cancelled=omtOrder($a,$la,$userA,'cancelled');$this->postJson('/api/v1/invoices',['order_id'=>$foreign],$headers)->assertNotFound();$this->postJson('/api/v1/invoices',['order_id'=>$cancelled],$headers)->assertStatus(422);});
+    $replay=$this->postJson('/api/v1/invoices',['order_id'=>$order,'customer_name'=>'Customer','customer_tax_number'=>'CUST-1'],$headers)->assertCreated();
+    expect($replay->json('data.id'))->toBe($first->json('data.id'));
+    $this->postJson('/api/v1/invoices',['order_id'=>$order,'customer_name'=>'Changed'],$headers)->assertStatus(422)->assertJsonValidationErrors('order_id');
+
+    $secondOrder=omtOrder($business,$location,$user,'paid');omtOrderItem($business,$secondOrder,'Cappuccino');omtSettleOrder($business,$secondOrder,$user);
+    $this->postJson('/api/v1/invoices',['order_id'=>$secondOrder],$headers)->assertCreated()->assertJsonPath('data.number','INV-'.now($business->timezone)->format('Ymd').'-0002');
+});
+
+test('invoice issuance rejects foreign unpaid cancelled and unsettled orders',function():void{
+    $a=omtBusiness('A');$b=omtBusiness('B');$la=omtLocation($a,'A1');$lb=omtLocation($b,'B1');$userA=omtUser($a);$userB=omtUser($b);$headers=omtHeaders($userA,$a);
+    $foreign=omtOrder($b,$lb,$userB,'paid');omtOrderItem($b,$foreign);omtSettleOrder($b,$foreign,$userB);
+    $cancelled=omtOrder($a,$la,$userA,'cancelled');omtOrderItem($a,$cancelled);
+    $open=omtOrder($a,$la,$userA,'open');omtOrderItem($a,$open);
+    $fakePaid=omtOrder($a,$la,$userA,'paid');omtOrderItem($a,$fakePaid);
+    $this->postJson('/api/v1/invoices',['order_id'=>$foreign],$headers)->assertNotFound();
+    $this->postJson('/api/v1/invoices',['order_id'=>$cancelled],$headers)->assertStatus(422)->assertJsonValidationErrors('order_id');
+    $this->postJson('/api/v1/invoices',['order_id'=>$open],$headers)->assertStatus(422)->assertJsonValidationErrors('order_id');
+    $this->postJson('/api/v1/invoices',['order_id'=>$fakePaid],$headers)->assertStatus(422)->assertJsonValidationErrors('order_id');
+});
+
+test('issued invoice blocks direct refunds until a document correction exists',function():void{
+    $business=omtBusiness('Invoice refund guard');$location=omtLocation($business,'IRG');$user=omtUser($business);$headers=omtHeaders($user,$business);
+    $order=omtOrder($business,$location,$user,'paid');omtOrderItem($business,$order);$payment=omtSettleOrder($business,$order,$user);
+    $this->postJson('/api/v1/invoices',['order_id'=>$order],$headers)->assertCreated();
+    $this->postJson("/api/v1/payments/{$payment}/refunds",['location_id'=>$location->id,'amount'=>'1.0000','reason'=>'Customer refund','idempotency_key'=>'invoice-refund-'.Str::uuid()],$headers)->assertStatus(422)->assertJsonValidationErrors('payment');
+    expect(DB::table('payment_refunds')->where('payment_id',$payment)->count())->toBe(0);
+});
 
 test('staff update rejects roles and memberships from another business',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$owner=omtUser($a);$foreignUser=omtUser($b);$headers=omtHeaders($owner,$a);$foreignRole=DB::table('business_user')->where('business_id',$b->id)->where('user_id',$foreignUser->id)->value('role_id');$this->patchJson('/api/v1/staff/'.$owner->id,['role_id'=>$foreignRole,'status'=>'active'],$headers)->assertStatus(422);$this->patchJson('/api/v1/staff/'.$foreignUser->id,['role_id'=>DB::table('business_user')->where('business_id',$a->id)->where('user_id',$owner->id)->value('role_id'),'status'=>'active'],$headers)->assertNotFound();});
 
