@@ -353,13 +353,15 @@ test('monitoring ignores superseded retry attempts after a later success', funct
         [
             'id'=>(string)Str::ulid(),'business_id'=>$business->id,'invoice_id'=>$invoiceId,'attempt_no'=>1,
             'provider'=>'direct_dpt','environment'=>'test','status'=>'retry_pending','retryable'=>true,
-            'next_retry_at'=>now()->subMinute(),'error_code'=>'NETWORK_TIMEOUT','error_message'=>'Old retry',
+            'next_retry_at'=>now()->subMinute(),'nslf'=>null,'nivf'=>null,
+            'error_code'=>'NETWORK_TIMEOUT','error_message'=>'Old retry',
             'started_at'=>now()->subMinutes(2),'completed_at'=>now()->subMinutes(2),'created_at'=>now(),'updated_at'=>now(),
         ],
         [
             'id'=>(string)Str::ulid(),'business_id'=>$business->id,'invoice_id'=>$invoiceId,'attempt_no'=>2,
             'provider'=>'direct_dpt','environment'=>'test','status'=>'succeeded','retryable'=>false,
-            'nslf'=>'00112233445566778899AABBCCDDEEFF','nivf'=>'FIC-MON-2',
+            'next_retry_at'=>null,'nslf'=>'00112233445566778899AABBCCDDEEFF','nivf'=>'FIC-MON-2',
+            'error_code'=>null,'error_message'=>null,
             'started_at'=>now()->subMinute(),'completed_at'=>now()->subMinute(),'created_at'=>now(),'updated_at'=>now(),
         ],
     ]);
