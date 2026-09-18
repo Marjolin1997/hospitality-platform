@@ -33,6 +33,11 @@ export function AppShell(){
         <button className="sidebar-close" aria-label="Close navigation" onClick={()=>setMobileNavOpen(false)}><X size={18}/></button>
       </div>
 
+      <div className="mobile-workspace-switchers">
+        <label><span>Business</span><select aria-label="Mobile active business" value={activeBusiness?.id??''} onChange={e=>selectBusiness(e.target.value)}>{user?.businesses.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+        <label><span>Location</span><select aria-label="Mobile active location" value={activeLocation?.id??''} onChange={e=>selectLocation(e.target.value)}>{activeBusiness?.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+      </div>
+
       <nav className="nav-list" aria-label="Main navigation">
         {sections.map(section=><div className="nav-section" key={section}>
           <span className="nav-section-label">{section}</span>
