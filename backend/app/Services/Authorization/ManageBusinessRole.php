@@ -120,6 +120,20 @@ final class ManageBusinessRole
                 ]);
             }
 
+            $hasPendingInvitations = DB::table('staff_invitations')
+                ->where('business_id', $business->getKey())
+                ->where('role_id', $role->getKey())
+                ->where('status', 'pending')
+                ->where('expires_at', '>', now())
+                ->lockForUpdate()
+                ->exists();
+
+            if ($hasPendingInvitations) {
+                throw ValidationException::withMessages([
+                    'role' => 'Revoke or let pending staff invitations expire before deleting this role.',
+                ]);
+            }
+
             $previousPermissions = $role->permissions()
                 ->orderBy('key')
                 ->pluck('key')
