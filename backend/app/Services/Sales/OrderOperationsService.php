@@ -92,7 +92,7 @@ final class OrderOperationsService
         return DB::transaction(function () use ($business, $user, $order, $tableId, $reason): Order {
             $order = $this->lockEditableOrder($business, $order); $this->assertPaymentNotStarted($order, 'A table cannot be moved after payment has started.');
             if ($order->type !== 'table') throw ValidationException::withMessages(['order' => 'Only table orders can be moved between tables.']);
-            $table = VenueTable::query()->forBusiness($business)->whereKey($tableId)->where('location_id', $order->location_id)->where('is_active', true)->lockForUpdate()->firstOrFail();
+            $table = VenueTable::query()->forBusiness($business)->whereKey($tableId)->where('location_id', $order->location_id)->where('is_active', true)->whereHas('area', fn ($query) => $query->where('is_active', true))->lockForUpdate()->firstOrFail();
             if ((string) $order->venue_table_id === (string) $table->getKey()) throw ValidationException::withMessages(['venue_table_id' => 'The order is already assigned to this table.']);
             $occupied = Order::query()->forBusiness($business)->where('location_id', $order->location_id)->where('venue_table_id', $table->getKey())->whereIn('status', self::EDITABLE_ORDER_STATES)->whereKeyNot($order->getKey())->lockForUpdate()->exists();
             if ($occupied) throw ValidationException::withMessages(['venue_table_id' => 'The destination table already has an active order; use merge instead.']);
