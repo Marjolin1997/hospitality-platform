@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canDisableCashRegister,
   canDisableCategory,
   canDisableLocation,
+  canDisableVenueArea,
+  canDisableVenueTable,
   canManageRolePermissions,
 } from './managementGuards';
 
@@ -35,6 +38,17 @@ describe('management guards', () => {
   it('blocks category disable while active products depend on it', () => {
     expect(canDisableCategory(2)).toBe(false);
     expect(canDisableCategory(0)).toBe(true);
+  });
+
+  it('guards destructive venue configuration while live dependencies remain', () => {
+    expect(canDisableVenueArea(2)).toBe(false);
+    expect(canDisableVenueArea(0)).toBe(true);
+
+    expect(canDisableVenueTable(1)).toBe(false);
+    expect(canDisableVenueTable(0)).toBe(true);
+
+    expect(canDisableCashRegister(1)).toBe(false);
+    expect(canDisableCashRegister(0)).toBe(true);
   });
 
   it('prevents role management above the actor delegable permission set', () => {
