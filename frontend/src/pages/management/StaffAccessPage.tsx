@@ -13,7 +13,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { api } from '../../lib/api';
 import { canManageRolePermissions } from '../../lib/managementGuards';
