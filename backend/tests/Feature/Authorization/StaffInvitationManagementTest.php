@@ -126,6 +126,18 @@ test('manager can issue a one-time invitation without storing the raw token', fu
 
     expect(json_encode($list->json()))->not->toContain($token)
         ->and(json_encode($list->json()))->not->toContain($row->token_hash);
+
+    $event = DB::table('staff_invitation_events')
+        ->where('staff_invitation_id', $response->json('data.id'))
+        ->where('event', 'created')
+        ->first();
+
+    expect($event)->not->toBeNull()
+        ->and((int) $event->actor_user_id)->toBe($manager->id)
+        ->and($event->previous_status)->toBeNull()
+        ->and($event->new_status)->toBe('pending')
+        ->and(json_encode($event))->not->toContain($token)
+        ->and(json_encode($event))->not->toContain($row->token_hash);
 });
 
 test('new invited staff account is created atomically and invitation is one-time', function (): void {
@@ -317,6 +329,188 @@ test('expired and revoked invitations cannot be accepted and expired email can b
         ->assertJsonValidationErrors('invitation');
 });
 
+test('expired invitations persist terminal expiry state and system audit event', function (): void {
+    $business = simBusiness('Persisted Expiry');
+    [$manager] = simUser(
+        $business,
+        ['users.manage', 'users.view', 'orders.view'],
+        'expiry-manager@example.test',
+    );
+    $role = simRole($business, 'Expiry Role', ['orders.view']);
+    $headers = simHeaders($manager, $business);
+
+    $invite = $this->postJson('/api/v1/staff-invitations', [
+        'email' => 'persisted-expiry@example.test',
+        'role_id' => $role->getKey(),
+        'expires_in_days' => 1,
+    ], $headers)->assertCreated();
+
+    $id = $invite->json('data.id');
+    $token = simTokenFromUrl($invite->json('data.invitation_url'));
+
+    DB::table('staff_invitations')->where('id', $id)->update([
+        'expires_at' => now()->subMinute(),
+    ]);
+
+    $this->getJson('/api/v1/invitations/'.$token)
+        ->assertOk()
+        ->assertJsonPath('data.status', 'expired');
+
+    $row = DB::table('staff_invitations')->where('id', $id)->first();
+
+    expect($row->status)->toBe('expired')
+        ->and($row->expired_at)->not->toBeNull();
+
+    $expiryEvents = DB::table('staff_invitation_events')
+        ->where('staff_invitation_id', $id)
+        ->where('event', 'expired')
+        ->get();
+
+    expect($expiryEvents)->toHaveCount(1)
+        ->and($expiryEvents[0]->actor_user_id)->toBeNull()
+        ->and($expiryEvents[0]->previous_status)->toBe('pending')
+        ->and($expiryEvents[0]->new_status)->toBe('expired');
+
+    // Re-reading remains idempotent and must not duplicate the expiry audit.
+    $this->getJson('/api/v1/staff-invitations', $headers)->assertOk();
+
+    expect(DB::table('staff_invitation_events')
+        ->where('staff_invitation_id', $id)
+        ->where('event', 'expired')
+        ->count())->toBe(1);
+});
+
+test('pending and expired invitations can be securely reissued with token rotation and history', function (): void {
+    $business = simBusiness('Invitation Reissue');
+    [$manager] = simUser(
+        $business,
+        ['users.manage', 'users.view', 'orders.view'],
+        'reissue-manager@example.test',
+    );
+    $role = simRole($business, 'Reissue Role', ['orders.view']);
+    $headers = simHeaders($manager, $business);
+
+    $invite = $this->postJson('/api/v1/staff-invitations', [
+        'email' => 'reissue@example.test',
+        'role_id' => $role->getKey(),
+        'expires_in_days' => 7,
+    ], $headers)->assertCreated();
+
+    $id = $invite->json('data.id');
+    $oldUrl = $invite->json('data.invitation_url');
+    $oldToken = simTokenFromUrl($oldUrl);
+    $oldHash = DB::table('staff_invitations')->where('id', $id)->value('token_hash');
+
+    $reissued = $this->postJson("/api/v1/staff-invitations/{$id}/reissue", [
+        'expires_in_days' => 14,
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.id', $id)
+        ->assertJsonPath('data.email', 'reissue@example.test')
+        ->assertJsonPath('data.status', 'pending')
+        ->assertJsonPath('data.role_name', 'Reissue Role');
+
+    $newUrl = $reissued->json('data.invitation_url');
+    $newToken = simTokenFromUrl($newUrl);
+    $row = DB::table('staff_invitations')->where('id', $id)->first();
+
+    expect($newToken)->not->toBe($oldToken)
+        ->and($row->token_hash)->toBe(hash('sha256', $newToken))
+        ->and($row->token_hash)->not->toBe($oldHash)
+        ->and((int) $row->reissue_count)->toBe(1)
+        ->and((int) $row->last_reissued_by_user_id)->toBe($manager->id)
+        ->and($row->last_reissued_at)->not->toBeNull();
+
+    $this->getJson('/api/v1/invitations/'.$oldToken)->assertNotFound();
+    $this->getJson('/api/v1/invitations/'.$newToken)
+        ->assertOk()
+        ->assertJsonPath('data.status', 'pending');
+
+    $history = $this->getJson("/api/v1/staff-invitations/{$id}/events", $headers)
+        ->assertOk()
+        ->assertJsonPath('data.0.event', 'reissued')
+        ->assertJsonPath('data.0.previous_status', 'pending')
+        ->assertJsonPath('data.0.new_status', 'pending');
+
+    expect(json_encode($history->json()))->not->toContain($oldToken)
+        ->and(json_encode($history->json()))->not->toContain($newToken)
+        ->and(json_encode($history->json()))->not->toContain($oldHash)
+        ->and(json_encode($history->json()))->not->toContain($row->token_hash);
+
+    DB::table('staff_invitations')->where('id', $id)->update([
+        'expires_at' => now()->subMinute(),
+    ]);
+
+    $this->getJson('/api/v1/staff-invitations', $headers)
+        ->assertOk()
+        ->assertJsonPath('data.0.status', 'expired');
+
+    $reissuedExpired = $this->postJson("/api/v1/staff-invitations/{$id}/reissue", [
+        'expires_in_days' => 3,
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.status', 'pending');
+
+    expect(DB::table('staff_invitations')->where('id', $id)->value('reissue_count'))->toBe(2)
+        ->and(DB::table('staff_invitations')->where('id', $id)->value('expired_at'))->toBeNull();
+
+    $events = DB::table('staff_invitation_events')
+        ->where('staff_invitation_id', $id)
+        ->orderBy('occurred_at')
+        ->get();
+
+    expect($events->pluck('event')->all())->toBe(['created', 'reissued', 'expired', 'reissued']);
+});
+
+test('accepted and revoked invitations are terminal and cannot be reissued', function (): void {
+    $business = simBusiness('Invitation Terminal States');
+    [$manager] = simUser(
+        $business,
+        ['users.manage', 'users.view', 'orders.view'],
+        'terminal-manager@example.test',
+    );
+    $role = simRole($business, 'Terminal Role', ['orders.view']);
+    $headers = simHeaders($manager, $business);
+
+    $revoked = $this->postJson('/api/v1/staff-invitations', [
+        'email' => 'terminal-revoked@example.test',
+        'role_id' => $role->getKey(),
+        'expires_in_days' => 7,
+    ], $headers)->assertCreated();
+
+    $revokedId = $revoked->json('data.id');
+
+    $this->postJson("/api/v1/staff-invitations/{$revokedId}/revoke", [], $headers)->assertOk();
+    $this->postJson("/api/v1/staff-invitations/{$revokedId}/reissue", [
+        'expires_in_days' => 7,
+    ], $headers)->assertStatus(422)->assertJsonValidationErrors('invitation');
+
+    $accepted = $this->postJson('/api/v1/staff-invitations', [
+        'email' => 'terminal-accepted@example.test',
+        'role_id' => $role->getKey(),
+        'expires_in_days' => 7,
+    ], $headers)->assertCreated();
+
+    $acceptedId = $accepted->json('data.id');
+    $acceptedToken = simTokenFromUrl($accepted->json('data.invitation_url'));
+
+    app('auth')->forgetGuards();
+
+    $this->postJson('/api/v1/invitations/'.$acceptedToken.'/accept', [
+        'name' => 'Terminal Accepted',
+        'password' => 'Strong#Password123',
+        'password_confirmation' => 'Strong#Password123',
+    ])->assertOk();
+
+    $this->postJson("/api/v1/staff-invitations/{$acceptedId}/reissue", [
+        'expires_in_days' => 7,
+    ], simHeaders($manager, $business))->assertStatus(422)
+        ->assertJsonValidationErrors('invitation');
+
+    expect(DB::table('staff_invitation_events')
+        ->where('staff_invitation_id', $acceptedId)
+        ->where('event', 'accepted')
+        ->count())->toBe(1);
+});
+
 test('duplicate pending invites and existing memberships are rejected', function (): void {
     $business = simBusiness('Duplicate Invite');
     [$manager] = simUser(
@@ -453,6 +647,13 @@ test('invitation administration is permission and tenant scoped', function (): v
     ], simHeaders($viewerA, $businessA))->assertForbidden();
 
     $this->postJson('/api/v1/staff-invitations/'.$inviteB->json('data.id').'/revoke', [], simHeaders($managerA, $businessA))
+        ->assertNotFound();
+
+    $this->postJson('/api/v1/staff-invitations/'.$inviteB->json('data.id').'/reissue', [
+        'expires_in_days' => 7,
+    ], simHeaders($managerA, $businessA))->assertNotFound();
+
+    $this->getJson('/api/v1/staff-invitations/'.$inviteB->json('data.id').'/events', simHeaders($managerA, $businessA))
         ->assertNotFound();
 
     expect(DB::table('staff_invitations')->where('id', $inviteB->json('data.id'))->value('status'))->toBe('pending');
