@@ -19,6 +19,7 @@ const FinancePage = lazy(() => import('./pages/management/ManagementPages').then
 const InvoicesPage = lazy(() => import('./pages/management/ManagementPages').then(module => ({ default: module.InvoicesPage })));
 const StaffPage = lazy(() => import('./pages/management/ManagementPages').then(module => ({ default: module.StaffPage })));
 const SettingsPage = lazy(() => import('./pages/management/ManagementPages').then(module => ({ default: module.SettingsPage })));
+const VenueSetupPage = lazy(() => import('./pages/management/VenueSetupPage').then(module => ({ default: module.VenueSetupPage })));
 
 function RouteFallback() {
   return <div className="app-loading">Preparing your workspace…</div>;
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/finance" element={<FinancePage />} />
         <Route path="/invoices" element={<InvoicesPage />} />
         <Route path="/staff" element={<StaffPage />} />
+        <Route path="/venue-setup" element={<VenueSetupPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
