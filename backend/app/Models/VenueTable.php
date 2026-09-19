@@ -24,4 +24,9 @@ class VenueTable extends Model
     {
         return $this->belongsTo(Location::class);
     }
+
+    public function area(): BelongsTo
+    {
+        return $this->belongsTo(VenueArea::class, 'venue_area_id');
+    }
 }
