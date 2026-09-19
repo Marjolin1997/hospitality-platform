@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, Coffee, FileText, LayoutDashboard, LogOut, Menu, ReceiptText, Settings, ShoppingCart, Users, WalletCards, X } from 'lucide-react';
+import { BarChart3, Boxes, Coffee, FileText, LayoutDashboard, LayoutGrid, LogOut, Menu, ReceiptText, Settings, ShoppingCart, Users, WalletCards, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../features/auth/AuthProvider';
@@ -12,6 +12,7 @@ const navigation=[
   {label:'Inventory',to:'/inventory',icon:Boxes,permissions:['inventory.view','inventory.receive','inventory.transfer','inventory.adjust'],section:'Management'},
   {label:'Finance',to:'/finance',icon:BarChart3,permissions:['finance.view','expenses.view','expenses.create','expenses.approve'],section:'Management'},
   {label:'Invoices',to:'/invoices',icon:FileText,permissions:['invoices.view','invoices.issue'],section:'Management'},
+  {label:'Venue Setup',to:'/venue-setup',icon:LayoutGrid,permissions:['venue.manage','cash_registers.manage'],section:'Management'},
   {label:'Staff',to:'/staff',icon:Users,permissions:['users.view','users.manage','roles.manage'],section:'Administration'},
   {label:'Settings',to:'/settings',icon:Settings,permissions:['business.settings.manage'],section:'Administration'},
 ] as const;
