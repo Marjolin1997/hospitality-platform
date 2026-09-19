@@ -145,6 +145,10 @@ test('new invited staff account is created atomically and invitation is one-time
 
     $token = simTokenFromUrl($invite->json('data.invitation_url'));
 
+    // The invite acceptance endpoint intentionally establishes a fresh web session.
+    // Clear Sanctum's test-only actor so the next /auth/me assertion proves that session.
+    app('auth')->forgetGuards();
+
     $this->postJson('/api/v1/invitations/'.$token.'/accept', [
         'name' => 'New Server',
         'password' => 'Strong#Password123',
