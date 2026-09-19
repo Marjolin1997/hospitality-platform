@@ -20,6 +20,25 @@ import { useAuth } from '../../features/auth/AuthProvider';
 import { api } from '../../lib/api';
 import { canManageRolePermissions } from '../../lib/managementGuards';
 
+type MembershipEvent = {
+  id: string;
+  action: string;
+  previous_role_name: string | null;
+  previous_role_slug: string | null;
+  previous_status: string;
+  new_role_name: string | null;
+  new_role_slug: string | null;
+  new_status: string;
+  performed_at: string;
+  performed_by_user_id: number;
+  performed_by_name: string;
+};
+
+type StaffHistoryResponse = {
+  member: { id: number; name: string; email: string };
+  events: MembershipEvent[];
+};
+
 type Staff = {
   id: number;
   name: string;
@@ -153,6 +172,7 @@ export function StaffAccessPage() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [deactivating, setDeactivating] = useState<Staff | null>(null);
+  const [historyMember, setHistoryMember] = useState<Staff | null>(null);
 
   const [roleEditor, setRoleEditor] = useState<RoleDraft | null>(null);
   const [deletingRole, setDeletingRole] = useState<ManagedRole | null>(null);
@@ -183,6 +203,14 @@ export function StaffAccessPage() {
     queryKey: ['staff', activeBusiness?.id],
     enabled: Boolean(activeBusiness),
     queryFn: () => api.get<{ data: StaffResponse }>('/staff').then(response => response.data.data),
+  });
+
+  const staffHistoryQuery = useQuery({
+    queryKey: ['staff-events', activeBusiness?.id, historyMember?.id],
+    enabled: Boolean(activeBusiness) && Boolean(historyMember),
+    queryFn: () => api
+      .get<{ data: StaffHistoryResponse }>(`/staff/${historyMember!.id}/events`)
+      .then(response => response.data.data),
   });
 
   const rolesQuery = useQuery({
@@ -587,6 +615,7 @@ export function StaffAccessPage() {
                     <th>Email</th>
                     <th>Role</th>
                     <th>Access status</th>
+                    <th>History</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -663,6 +692,16 @@ export function StaffAccessPage() {
                               {member.status}
                             </span>
                           )}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => setHistoryMember(member)}
+                          >
+                            <History size={14} />
+                            History
+                          </button>
                         </td>
                       </tr>
                     );
