@@ -1119,6 +1119,182 @@ export function StaffAccessPage() {
         </div>
       )}
 
+      {reissuingInvitation && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget && !reissueInvitation.isPending) {
+              setReissuingInvitation(null);
+            }
+          }}
+        >
+          <div className="modal-card compact-confirmation invitation-reissue-modal" role="dialog" aria-modal="true" aria-label="Reissue staff invitation">
+            <header>
+              <div>
+                <span className="eyebrow">ROTATE INVITATION TOKEN</span>
+                <h2>Reissue invite for {reissuingInvitation.email}?</h2>
+                <p>
+                  A new one-time link will be generated. The previous link becomes invalid immediately, and the current role permissions are snapshotted again.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Close invitation reissue"
+                disabled={reissueInvitation.isPending}
+                onClick={() => setReissuingInvitation(null)}
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            {!reissuingInvitation.role_is_current && (
+              <div className="permission-banner warning">
+                <AlertTriangle size={18} />
+                <div>
+                  <strong>The assigned role changed since this invitation was issued</strong>
+                  <span>Reissuing refreshes the role snapshot to the current permission set, subject to your delegation level.</span>
+                </div>
+              </div>
+            )}
+
+            <label className="reissue-expiry-field">
+              <span>New link expires in</span>
+              <select
+                value={reissueDays}
+                disabled={reissueInvitation.isPending}
+                onChange={event => setReissueDays(Number(event.target.value))}
+              >
+                <option value={1}>1 day</option>
+                <option value={3}>3 days</option>
+                <option value={7}>7 days</option>
+                <option value={14}>14 days</option>
+                <option value={30}>30 days</option>
+              </select>
+            </label>
+
+            {reissueInvitation.isError && <p className="error-state">{apiMessage(reissueInvitation.error)}</p>}
+
+            <footer className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={reissueInvitation.isPending}
+                onClick={() => setReissuingInvitation(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={reissueInvitation.isPending}
+                onClick={() => reissueInvitation.mutate({
+                  invitation: reissuingInvitation,
+                  expiresInDays: reissueDays,
+                })}
+              >
+                <RefreshCw size={15} className={reissueInvitation.isPending ? 'spin' : undefined} />
+                {reissueInvitation.isPending ? 'Reissuing…' : 'Reissue secure link'}
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {historyInvitation && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget) setHistoryInvitation(null);
+          }}
+        >
+          <div className="modal-card management-modal invitation-history-modal" role="dialog" aria-modal="true" aria-label="Invitation audit history">
+            <header>
+              <div>
+                <span className="eyebrow">INVITATION AUDIT</span>
+                <h2>{historyInvitation.email}</h2>
+                <p>
+                  Immutable lifecycle events for this invitation. Secure tokens and token hashes are never included.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Close invitation history"
+                onClick={() => setHistoryInvitation(null)}
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="invitation-history-summary">
+              <div><span>Current status</span><strong className={`status-badge ${invitationStatusClass(historyInvitation.status)}`}>{historyInvitation.status}</strong></div>
+              <div><span>Assigned role</span><strong>{historyInvitation.role_name}</strong></div>
+              <div><span>Reissues</span><strong>{historyInvitation.reissue_count}</strong></div>
+            </div>
+
+            {invitationHistoryQuery.isLoading ? (
+              <div className="management-state">Loading invitation history…</div>
+            ) : invitationHistoryQuery.isError ? (
+              <div className="management-state error">
+                <AlertTriangle size={18} />
+                <div>
+                  <strong>History unavailable</strong>
+                  <span>{apiMessage(invitationHistoryQuery.error)}</span>
+                </div>
+                <button type="button" className="secondary-button" onClick={() => invitationHistoryQuery.refetch()}>
+                  Try again
+                </button>
+              </div>
+            ) : (
+              <div className="invitation-timeline">
+                {(invitationHistoryQuery.data ?? []).map(event => {
+                  const roleName = typeof event.metadata?.role_name === 'string' ? event.metadata.role_name : null;
+                  const expiresAt = typeof event.metadata?.expires_at === 'string' ? event.metadata.expires_at : null;
+
+                  return (
+                    <article key={event.id} className="invitation-timeline-event">
+                      <span className="timeline-dot" aria-hidden="true" />
+                      <div>
+                        <header>
+                          <strong>{event.event.replaceAll('_', ' ')}</strong>
+                          <time>{new Date(event.occurred_at).toLocaleString()}</time>
+                        </header>
+                        <p>
+                          {event.previous_status
+                            ? `${event.previous_status} → ${event.new_status}`
+                            : `Created as ${event.new_status}`}
+                          {' · '}
+                          {event.actor_name ?? 'System'}
+                        </p>
+                        {(roleName || expiresAt) && (
+                          <small>
+                            {roleName ? `Role: ${roleName}` : ''}
+                            {roleName && expiresAt ? ' · ' : ''}
+                            {expiresAt ? `Expires: ${new Date(expiresAt).toLocaleString()}` : ''}
+                          </small>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+                {(invitationHistoryQuery.data ?? []).length === 0 && (
+                  <Empty>No invitation lifecycle events are available.</Empty>
+                )}
+              </div>
+            )}
+
+            <footer className="modal-actions">
+              <button type="button" className="primary-button" onClick={() => setHistoryInvitation(null)}>
+                Done
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
       {revokingInvitation && (
         <div
           className="modal-backdrop"
