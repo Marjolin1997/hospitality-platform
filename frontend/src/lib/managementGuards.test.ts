@@ -28,6 +28,7 @@ describe('management guards', () => {
       is_last_active: false,
       open_order_count: 0,
       open_cash_session_count: 1,
+      open_purchase_order_count: 0,
     })).toBe(false);
 
     expect(canDisableLocation({
