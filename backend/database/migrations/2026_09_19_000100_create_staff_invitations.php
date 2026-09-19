@@ -10,7 +10,7 @@ return new class extends Migration {
         Schema::create('staff_invitations', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->foreignUlid('business_id')->constrained()->restrictOnDelete();
-            $table->foreignUlid('role_id')->constrained('roles')->restrictOnDelete();
+            $table->foreignUlid('role_id')->nullable()->constrained('roles')->nullOnDelete();
             $table->foreignId('invited_by_user_id')->constrained('users')->restrictOnDelete();
 
             $table->string('email', 255);
