@@ -9,6 +9,8 @@ use Illuminate\Validation\ValidationException;
 
 final class UpdateBusinessMembership
 {
+    public function __construct(private readonly RoleDelegationPolicy $delegation) {}
+
     public function execute(
         Business $business,
         int $userId,
@@ -34,6 +36,13 @@ final class UpdateBusinessMembership
                     'role_id' => 'The selected role does not belong to this business.',
                 ]);
             }
+
+            $this->delegation->assertRoleDelegable(
+                $business,
+                $performedByUserId,
+                $roleId,
+                true,
+            );
 
             $activeOwnerIds = DB::table('business_user as bu')
                 ->join('roles as r', 'r.id', '=', 'bu.role_id')
@@ -62,6 +71,21 @@ final class UpdateBusinessMembership
 
             if (! $membership) {
                 abort(404);
+            }
+
+            if ($membership->role_id) {
+                $currentRolePermissions = $this->delegation->rolePermissionKeys(
+                    $business,
+                    (string) $membership->role_id,
+                    true,
+                );
+
+                $this->delegation->assertExistingRoleManageable(
+                    $business,
+                    $performedByUserId,
+                    $currentRolePermissions,
+                    true,
+                );
             }
 
             $removesActiveOwner = $this->isActiveBusinessOwner($membership, $business)
