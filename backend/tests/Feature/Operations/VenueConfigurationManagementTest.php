@@ -473,3 +473,144 @@ test('operational venue endpoint hides inactive areas tables and rejects inactiv
         ->assertStatus(422)
         ->assertJsonValidationErrors('location_id');
 });
+
+test('live orders and cash shifts freeze structural venue identity until operations close', function (): void {
+    $business = vcmBusiness('Venue Live Edit Guard');
+    $location = vcmLocation($business, 'Live');
+    $user = vcmUser($business, ['venue.manage', 'cash_registers.manage']);
+    $headers = vcmHeaders($user, $business);
+
+    $area = vcmArea($this, $headers, $location->id, 'Dining');
+    $table = vcmTable($this, $headers, $location->id, $area, 'T-10', 4);
+
+    $orderId = (string) Str::ulid();
+    DB::table('orders')->insert([
+        'id' => $orderId,
+        'business_id' => $business->id,
+        'location_id' => $location->id,
+        'venue_table_id' => $table,
+        'opened_by_user_id' => $user->id,
+        'number' => 'ORD-LIVE-EDIT',
+        'type' => 'table',
+        'status' => 'open',
+        'currency' => 'EUR',
+        'subtotal' => '0.0000',
+        'discount_total' => '0.0000',
+        'tax_total' => '0.0000',
+        'grand_total' => '0.0000',
+        'opened_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->postJson('/api/v1/management/venue/tables', [
+        'id' => $table,
+        'location_id' => $location->id,
+        'venue_area_id' => $area,
+        'name' => 'T-10 Renamed',
+        'capacity' => 6,
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('table');
+
+    DB::table('orders')->where('id', $orderId)->update([
+        'status' => 'closed',
+        'closed_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->postJson('/api/v1/management/venue/tables', [
+        'id' => $table,
+        'location_id' => $location->id,
+        'venue_area_id' => $area,
+        'name' => 'T-10 Renamed',
+        'capacity' => 6,
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.name', 'T-10 Renamed')
+        ->assertJsonPath('data.capacity', 6);
+
+    $register = $this->postJson('/api/v1/management/cash-registers', [
+        'location_id' => $location->id,
+        'name' => 'Front Till',
+        'code' => 'FRONT',
+    ], $headers)->assertCreated()->json('data.id');
+
+    $sessionId = (string) Str::ulid();
+    DB::table('cash_sessions')->insert([
+        'id' => $sessionId,
+        'business_id' => $business->id,
+        'location_id' => $location->id,
+        'cash_register_id' => $register,
+        'opened_by_user_id' => $user->id,
+        'base_currency' => 'EUR',
+        'opening_cash' => '50.0000',
+        'status' => 'open',
+        'opened_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->postJson('/api/v1/management/cash-registers', [
+        'id' => $register,
+        'location_id' => $location->id,
+        'name' => 'Front Till Renamed',
+        'code' => 'FRONT-2',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('register');
+
+    DB::table('cash_sessions')->where('id', $sessionId)->update([
+        'status' => 'closed',
+        'closed_by_user_id' => $user->id,
+        'expected_cash' => '50.0000',
+        'counted_cash' => '50.0000',
+        'cash_difference' => '0.0000',
+        'closed_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->postJson('/api/v1/management/cash-registers', [
+        'id' => $register,
+        'location_id' => $location->id,
+        'name' => 'Front Till Renamed',
+        'code' => 'FRONT-2',
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.name', 'Front Till Renamed')
+        ->assertJsonPath('data.code', 'FRONT-2');
+
+    $this->getJson("/api/v1/management/venue/tables/{$table}/events", $headers)
+        ->assertOk()
+        ->assertJsonPath('data.0.action', 'updated')
+        ->assertJsonPath('data.0.new_state.name', 'T-10 Renamed')
+        ->assertJsonPath('data.0.performed_by_user_id', $user->id);
+
+    $this->getJson("/api/v1/management/cash-registers/{$register}/events", $headers)
+        ->assertOk()
+        ->assertJsonPath('data.0.action', 'updated')
+        ->assertJsonPath('data.0.new_state.name', 'Front Till Renamed');
+});
+
+test('configuration audit history remains tenant and permission scoped', function (): void {
+    $businessA = vcmBusiness('Venue History A');
+    $businessB = vcmBusiness('Venue History B');
+    $locationA = vcmLocation($businessA, 'History A');
+    $locationB = vcmLocation($businessB, 'History B');
+
+    $venueA = vcmUser($businessA, ['venue.manage']);
+    $venueB = vcmUser($businessB, ['venue.manage']);
+    $registerA = vcmUser($businessA, ['cash_registers.manage']);
+
+    $headersA = vcmHeaders($venueA, $businessA);
+    $areaB = vcmArea($this, vcmHeaders($venueB, $businessB), $locationB->id, 'Foreign Area');
+
+    $this->getJson("/api/v1/management/venue/areas/{$areaB}/events", $headersA)
+        ->assertNotFound();
+
+    $register = $this->postJson('/api/v1/management/cash-registers', [
+        'location_id' => $locationA->id,
+        'name' => 'History Till',
+        'code' => 'HIST',
+    ], vcmHeaders($registerA, $businessA))->assertCreated()->json('data.id');
+
+    $this->getJson("/api/v1/management/cash-registers/{$register}/events", $headersA)
+        ->assertForbidden();
+});
+
