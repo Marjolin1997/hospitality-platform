@@ -226,7 +226,7 @@ test('existing user must prove account password and keeps their existing identit
     $existing = User::query()->create([
         'name' => 'Existing Identity',
         'email' => 'existing@example.test',
-        'password' => 'Existing#Password123',
+        'password' => 'legacy123',
     ]);
 
     $invite = $this->postJson('/api/v1/staff-invitations', [
@@ -243,8 +243,7 @@ test('existing user must prove account password and keeps their existing identit
 
     $this->postJson('/api/v1/invitations/'.$token.'/accept', [
         'name' => 'Should Not Replace',
-        'password' => 'Wrong#Password123',
-        'password_confirmation' => 'Wrong#Password123',
+        'password' => 'wrong-password',
     ])->assertStatus(422)
         ->assertJsonValidationErrors('password');
 
@@ -255,8 +254,7 @@ test('existing user must prove account password and keeps their existing identit
 
     $this->postJson('/api/v1/invitations/'.$token.'/accept', [
         'name' => 'Should Not Replace',
-        'password' => 'Existing#Password123',
-        'password_confirmation' => 'Existing#Password123',
+        'password' => 'legacy123',
     ])->assertOk()
         ->assertJsonPath('data.name', 'Existing Identity');
 
