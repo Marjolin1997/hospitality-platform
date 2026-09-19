@@ -101,7 +101,9 @@ export function InvitationAcceptPage() {
   });
 
   const data = invitation.data;
-  const passwordReady = password.length >= 12 && password === passwordConfirmation;
+  const passwordReady = data?.existing_user
+    ? password.length > 0
+    : password.length >= 12 && password === passwordConfirmation;
   const formReady = Boolean(
     data
     && data.status === 'pending'
@@ -257,21 +259,23 @@ export function InvitationAcceptPage() {
                   )}
                 </label>
 
-                <label className="auth-field">
-                  <span>Confirm password</span>
-                  <div className="input-with-icon">
-                    <LockKeyhole size={18} aria-hidden="true" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={passwordConfirmation}
-                      autoComplete={data.existing_user ? 'current-password' : 'new-password'}
-                      placeholder="Repeat password"
-                      onChange={event => setPasswordConfirmation(event.target.value)}
-                      disabled={accept.isPending}
-                      required
-                    />
-                  </div>
-                </label>
+                {!data.existing_user && (
+                  <label className="auth-field">
+                    <span>Confirm password</span>
+                    <div className="input-with-icon">
+                      <LockKeyhole size={18} aria-hidden="true" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={passwordConfirmation}
+                        autoComplete="new-password"
+                        placeholder="Repeat password"
+                        onChange={event => setPasswordConfirmation(event.target.value)}
+                        disabled={accept.isPending}
+                        required
+                      />
+                    </div>
+                  </label>
+                )}
               </div>
 
               {data.existing_user && (
@@ -283,7 +287,7 @@ export function InvitationAcceptPage() {
                 </div>
               )}
 
-              {passwordConfirmation && password !== passwordConfirmation && (
+              {!data.existing_user && passwordConfirmation && password !== passwordConfirmation && (
                 <div className="form-error visible" role="alert">Passwords do not match.</div>
               )}
 
