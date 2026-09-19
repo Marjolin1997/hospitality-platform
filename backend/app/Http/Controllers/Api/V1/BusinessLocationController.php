@@ -47,6 +47,13 @@ final class BusinessLocationController extends Controller
                     ->whereColumn('cash_sessions.business_id', 'locations.business_id')
                     ->where('cash_sessions.status', 'open');
             }, 'open_cash_session_count')
+            ->selectSub(function ($query): void {
+                $query->from('purchase_orders')
+                    ->selectRaw('COUNT(*)')
+                    ->whereColumn('purchase_orders.location_id', 'locations.id')
+                    ->whereColumn('purchase_orders.business_id', 'locations.business_id')
+                    ->whereIn('purchase_orders.status', ['draft', 'ordered', 'partially_received']);
+            }, 'open_purchase_order_count')
             ->orderByDesc('is_active')
             ->orderBy('name')
             ->get();
@@ -59,6 +66,7 @@ final class BusinessLocationController extends Controller
             $row->cash_register_count = (int) $row->cash_register_count;
             $row->open_order_count = (int) $row->open_order_count;
             $row->open_cash_session_count = (int) $row->open_cash_session_count;
+            $row->open_purchase_order_count = (int) $row->open_purchase_order_count;
             $row->is_last_active = $row->is_active && $activeCount === 1;
 
             return $row;
