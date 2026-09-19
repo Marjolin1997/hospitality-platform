@@ -147,3 +147,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
 @media(max-width:900px){.invitation-toolbar{min-width:0;max-width:none}}
 @media(max-width:680px){.invitation-toolbar{align-items:stretch;flex-direction:column}.invitation-toolbar>select{width:100%}.invitation-form .form-grid{grid-template-columns:1fr}.invitation-form .span-2{grid-column:auto}.invitation-link-field{grid-template-columns:1fr}.invitation-link-field .secondary-button{width:100%}.invitation-assignment{grid-template-columns:1fr}.invitation-auth-page .auth-card{width:100%}}
+
+
+/* Venue setup */
+.venue-setup-metrics{margin-bottom:16px}
+.venue-area-panel{margin-bottom:16px}.venue-area-panel>.panel-heading{align-items:center}
+.venue-area-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin-top:16px}
+.venue-area-card{display:grid;gap:14px;padding:14px;border:1px solid #dfe6e2;border-radius:14px;background:linear-gradient(180deg,#fff,#fafcfb);box-shadow:0 2px 10px rgba(20,38,29,.025)}
+.venue-area-card.inactive{background:#fafbfa;color:#6f7b75}.venue-area-card>header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}.venue-area-card>header>div{display:grid;gap:3px}.venue-area-card>header strong{font-size:12px;letter-spacing:-.015em}.venue-area-card>header small{color:#89958f;font-size:9px}
+.venue-area-order{width:30px;height:30px;display:grid;place-items:center;border:1px solid #dfe5e1;border-radius:9px;background:#f4f7f5;color:#65746c;font-size:9px;font-weight:850}.venue-area-card>footer{display:flex;justify-content:flex-end;gap:7px;padding-top:10px;border-top:1px solid #edf1ef}
+.venue-table-actions,.venue-register-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;max-width:860px}.venue-table-actions .compact-search,.venue-register-actions .compact-search{width:250px;min-width:200px}.venue-table-actions>select,.venue-register-actions>select{width:140px}
+.venue-table-identity{display:flex;align-items:center;gap:8px;min-width:120px}.venue-table-identity>span{width:28px;height:28px;display:grid;place-items:center;border:1px solid #dfe5e1;border-radius:9px;background:#f5f8f6;color:#5f7067}.venue-table-identity strong{font-size:11px}
+.register-management-table code{padding:4px 6px;border:1px solid #e1e6e3;border-radius:6px;background:#f6f8f7;color:#4b5b53;font-size:9px}
+.venue-config-modal{width:min(650px,100%)}.venue-config-modal .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}.venue-config-modal .span-2{grid-column:1/-1}
+.venue-config-modal label{display:grid;gap:6px}.venue-config-modal label>span{color:#55645c;font-size:10px;font-weight:800}.venue-config-modal label>small{color:#859189;font-size:9px;line-height:1.4}
+.venue-config-modal input,.venue-config-modal select{min-height:43px;border:1px solid #dce4df;border-radius:10px;padding:9px 10px;background:#fff}
+
+@media(max-width:1180px){.venue-area-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.venue-table-actions,.venue-register-actions{max-width:none;width:100%;justify-content:flex-start}}
+@media(max-width:900px){.venue-area-panel>.panel-heading{align-items:stretch;flex-direction:column}.venue-table-actions,.venue-register-actions{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto}.venue-register-actions{grid-template-columns:minmax(0,1fr) auto auto}.venue-table-actions .compact-search,.venue-register-actions .compact-search{width:100%;min-width:0}}
+@media(max-width:680px){.venue-area-grid{grid-template-columns:1fr}.venue-area-panel>.panel-heading .primary-button{width:100%}.venue-table-actions,.venue-register-actions{display:flex;align-items:stretch;flex-direction:column}.venue-table-actions>select,.venue-register-actions>select,.venue-table-actions .primary-button,.venue-register-actions .primary-button{width:100%}.venue-config-modal .form-grid{grid-template-columns:1fr}.venue-config-modal .span-2{grid-column:auto}.venue-area-card>header{grid-template-columns:auto minmax(0,1fr)}.venue-area-card>header>.status-badge{grid-column:2;justify-self:start}.venue-area-card>footer{align-items:stretch;flex-direction:column}.venue-area-card>footer .secondary-button{width:100%}}
