@@ -453,6 +453,7 @@ test('pending and expired invitations can be securely reissued with token rotati
     $events = DB::table('staff_invitation_events')
         ->where('staff_invitation_id', $id)
         ->orderBy('occurred_at')
+        ->orderBy('id')
         ->get();
 
     expect($events->pluck('event')->all())->toBe(['created', 'reissued', 'expired', 'reissued']);
