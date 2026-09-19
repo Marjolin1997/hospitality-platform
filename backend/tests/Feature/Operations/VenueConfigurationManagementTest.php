@@ -73,18 +73,18 @@ function vcmHeaders(User $user, Business $business): array
     return ['X-Business-Id' => $business->getKey()];
 }
 
-function vcmArea(array $headers, string $locationId, string $name = 'Main Room', int $sortOrder = 10): string
+function vcmArea(object $case, array $headers, string $locationId, string $name = 'Main Room', int $sortOrder = 10): string
 {
-    return test()->postJson('/api/v1/management/venue/areas', [
+    return $case->postJson('/api/v1/management/venue/areas', [
         'location_id' => $locationId,
         'name' => $name,
         'sort_order' => $sortOrder,
     ], $headers)->assertCreated()->json('data.id');
 }
 
-function vcmTable(array $headers, string $locationId, string $areaId, string $name = 'T1', int $capacity = 4): string
+function vcmTable(object $case, array $headers, string $locationId, string $areaId, string $name = 'T1', int $capacity = 4): string
 {
-    return test()->postJson('/api/v1/management/venue/tables', [
+    return $case->postJson('/api/v1/management/venue/tables', [
         'location_id' => $locationId,
         'venue_area_id' => $areaId,
         'name' => $name,
@@ -98,10 +98,10 @@ test('areas and tables support audited tenant-scoped lifecycle and ordered manag
     $user = vcmUser($business, ['venue.manage', 'orders.view']);
     $headers = vcmHeaders($user, $business);
 
-    $terrace = vcmArea($headers, $location->id, 'Terrace', 20);
-    $inside = vcmArea($headers, $location->id, 'Inside', 10);
+    $terrace = vcmArea($this, $headers, $location->id, 'Terrace', 20);
+    $inside = vcmArea($this, $headers, $location->id, 'Inside', 10);
 
-    $table = vcmTable($headers, $location->id, $terrace, 'T-01', 6);
+    $table = vcmTable($this, $headers, $location->id, $terrace, 'T-01', 6);
 
     $response = $this->getJson('/api/v1/management/venue?location_id='.$location->id, $headers)
         ->assertOk()
@@ -157,7 +157,7 @@ test('area and table identities are case-insensitively unique inside one locatio
     $user = vcmUser($business, ['venue.manage']);
     $headers = vcmHeaders($user, $business);
 
-    $area = vcmArea($headers, $location->id, 'Terrace', 1);
+    $area = vcmArea($this, $headers, $location->id, 'Terrace', 1);
 
     $this->postJson('/api/v1/management/venue/areas', [
         'location_id' => $location->id,
@@ -166,7 +166,7 @@ test('area and table identities are case-insensitively unique inside one locatio
     ], $headers)->assertStatus(422)
         ->assertJsonValidationErrors('name');
 
-    vcmTable($headers, $location->id, $area, 'T1');
+    vcmTable($this, $headers, $location->id, $area, 'T1');
 
     $this->postJson('/api/v1/management/venue/tables', [
         'location_id' => $location->id,
@@ -183,8 +183,8 @@ test('area disable requires every table inactive and table enable requires an ac
     $user = vcmUser($business, ['venue.manage']);
     $headers = vcmHeaders($user, $business);
 
-    $area = vcmArea($headers, $location->id);
-    $table = vcmTable($headers, $location->id, $area);
+    $area = vcmArea($this, $headers, $location->id);
+    $table = vcmTable($this, $headers, $location->id, $area);
 
     $this->patchJson("/api/v1/management/venue/areas/{$area}/status", [
         'is_active' => false,
@@ -221,8 +221,8 @@ test('table disable is blocked while an active order still references it', funct
     $location = vcmLocation($business, 'Orders');
     $user = vcmUser($business, ['venue.manage']);
     $headers = vcmHeaders($user, $business);
-    $area = vcmArea($headers, $location->id);
-    $table = vcmTable($headers, $location->id, $area);
+    $area = vcmArea($this, $headers, $location->id);
+    $table = vcmTable($this, $headers, $location->id, $area);
 
     $order = (string) Str::ulid();
     DB::table('orders')->insert([
@@ -273,10 +273,10 @@ test('table configuration cannot cross tenant or location boundaries', function 
     $headersA = vcmHeaders($userA, $businessA);
     $headersB = vcmHeaders($userB, $businessB);
 
-    $areaA = vcmArea($headersA, $locationA->id, 'A Area');
-    $areaA2 = vcmArea($headersA, $locationA2->id, 'A2 Area');
-    $areaB = vcmArea($headersB, $locationB->id, 'B Area');
-    $tableA = vcmTable($headersA, $locationA->id, $areaA, 'A-T1');
+    $areaA = vcmArea($this, $headersA, $locationA->id, 'A Area');
+    $areaA2 = vcmArea($this, $headersA, $locationA2->id, 'A2 Area');
+    $areaB = vcmArea($this, $headersB, $locationB->id, 'B Area');
+    $tableA = vcmTable($this, $headersA, $locationA->id, $areaA, 'A-T1');
 
     $this->postJson('/api/v1/management/venue/tables', [
         'id' => $tableA,
@@ -448,12 +448,12 @@ test('operational venue endpoint hides inactive areas tables and rejects inactiv
     $user = vcmUser($business, ['venue.manage', 'orders.view']);
     $headers = vcmHeaders($user, $business);
 
-    $activeArea = vcmArea($headers, $location->id, 'Active');
-    $inactiveArea = vcmArea($headers, $location->id, 'Inactive');
+    $activeArea = vcmArea($this, $headers, $location->id, 'Active');
+    $inactiveArea = vcmArea($this, $headers, $location->id, 'Inactive');
 
-    $activeTable = vcmTable($headers, $location->id, $activeArea, 'A1');
-    $inactiveTable = vcmTable($headers, $location->id, $activeArea, 'A2');
-    $hiddenTable = vcmTable($headers, $location->id, $inactiveArea, 'I1');
+    $activeTable = vcmTable($this, $headers, $location->id, $activeArea, 'A1');
+    $inactiveTable = vcmTable($this, $headers, $location->id, $activeArea, 'A2');
+    $hiddenTable = vcmTable($this, $headers, $location->id, $inactiveArea, 'I1');
 
     $this->patchJson("/api/v1/management/venue/tables/{$inactiveTable}/status", ['is_active' => false], $headers)->assertOk();
     $this->patchJson("/api/v1/management/venue/tables/{$hiddenTable}/status", ['is_active' => false], $headers)->assertOk();
