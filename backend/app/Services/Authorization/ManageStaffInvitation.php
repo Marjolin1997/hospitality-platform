@@ -88,6 +88,8 @@ final class ManageStaffInvitation
 
     public function create(Business $business, array $data, int $actorUserId): array
     {
+        $this->expireStale($business);
+
         return DB::transaction(function () use ($business, $data, $actorUserId): array {
             $this->lockBusiness($business);
 
@@ -188,6 +190,8 @@ final class ManageStaffInvitation
 
     public function revoke(Business $business, string $invitationId, int $actorUserId): void
     {
+        $this->expireStale($business);
+
         DB::transaction(function () use ($business, $invitationId, $actorUserId): void {
             $this->lockBusiness($business);
 
@@ -202,12 +206,6 @@ final class ManageStaffInvitation
             if ($invitation->status !== 'pending') {
                 throw ValidationException::withMessages([
                     'invitation' => 'Only pending invitations can be revoked.',
-                ]);
-            }
-
-            if (now()->greaterThanOrEqualTo($invitation->expires_at)) {
-                throw ValidationException::withMessages([
-                    'invitation' => 'This invitation has already expired.',
                 ]);
             }
 
@@ -233,9 +231,10 @@ final class ManageStaffInvitation
 
     public function reissue(Business $business, string $invitationId, int $actorUserId, int $expiresInDays): array
     {
+        $this->expireStale($business);
+
         return DB::transaction(function () use ($business, $invitationId, $actorUserId, $expiresInDays): array {
             $this->lockBusiness($business);
-            $this->expireStale($business, false);
 
             $invitation = DB::table('staff_invitations')
                 ->where('business_id', $business->getKey())
@@ -289,6 +288,21 @@ final class ManageStaffInvitation
                 ]);
             }
 
+            $hasAnotherLiveInvite = DB::table('staff_invitations')
+                ->where('business_id', $business->getKey())
+                ->where('email', $invitation->email)
+                ->where('id', '!=', $invitationId)
+                ->where('status', 'pending')
+                ->where('expires_at', '>', now())
+                ->lockForUpdate()
+                ->exists();
+
+            if ($hasAnotherLiveInvite) {
+                throw ValidationException::withMessages([
+                    'invitation' => 'Another pending invitation already exists for this email address.',
+                ]);
+            }
+
             $token = Str::random(64);
             $expiresAt = now()->addDays($expiresInDays);
             $previousStatus = (string) $invitation->status;
@@ -338,6 +352,8 @@ final class ManageStaffInvitation
 
     public function events(Business $business, string $invitationId): array
     {
+        $this->expireStale($business);
+
         abort_unless(
             DB::table('staff_invitations')
                 ->where('business_id', $business->getKey())
@@ -422,6 +438,9 @@ final class ManageStaffInvitation
             ->first(['business_id']);
 
         abort_unless($snapshot, 404);
+
+        $businessForExpiry = Business::query()->findOrFail($snapshot->business_id);
+        $this->expireStale($businessForExpiry);
 
         try {
             return DB::transaction(function () use ($tokenHash, $data, $snapshot): User {
@@ -594,12 +613,10 @@ final class ManageStaffInvitation
         }
     }
 
-    private function expireStale(Business $business, bool $lockBusiness = true): void
+    private function expireStale(Business $business): void
     {
-        DB::transaction(function () use ($business, $lockBusiness): void {
-            if ($lockBusiness) {
-                $this->lockBusiness($business);
-            }
+        DB::transaction(function () use ($business): void {
+            $this->lockBusiness($business);
 
             $expired = DB::table('staff_invitations')
                 ->where('business_id', $business->getKey())
