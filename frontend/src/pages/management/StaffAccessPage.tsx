@@ -3,9 +3,11 @@ import {
   AlertTriangle,
   Check,
   Copy,
+  History,
   Mail,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   ShieldCheck,
   Trash2,
@@ -70,6 +72,9 @@ type StaffInvitation = {
   role_is_current: boolean;
   status: 'pending' | 'accepted' | 'revoked' | 'expired';
   expires_at: string;
+  expired_at: string | null;
+  reissue_count: number;
+  last_reissued_at: string | null;
   accepted_at: string | null;
   revoked_at: string | null;
   created_at: string;
@@ -81,6 +86,16 @@ type InvitationDraft = {
   email: string;
   role_id: string;
   expires_in_days: number;
+};
+
+type InvitationEvent = {
+  id: string;
+  event: string;
+  previous_status: string | null;
+  new_status: string;
+  metadata: Record<string, unknown> | null;
+  occurred_at: string;
+  actor_name: string | null;
 };
 
 type CreatedInvitation = {
@@ -151,9 +166,13 @@ export function StaffAccessPage() {
     expires_in_days: 7,
   });
   const [createdInvitation, setCreatedInvitation] = useState<CreatedInvitation | null>(null);
+  const [invitationOutcome, setInvitationOutcome] = useState<'created' | 'reissued'>('created');
   const [inviteCopied, setInviteCopied] = useState(false);
   const [copyError, setCopyError] = useState('');
   const [revokingInvitation, setRevokingInvitation] = useState<StaffInvitation | null>(null);
+  const [reissuingInvitation, setReissuingInvitation] = useState<StaffInvitation | null>(null);
+  const [reissueDays, setReissueDays] = useState(7);
+  const [historyInvitation, setHistoryInvitation] = useState<StaffInvitation | null>(null);
 
   useEffect(() => {
     if (section === 'invitations' && !can('users.manage')) setSection('team');
@@ -176,6 +195,14 @@ export function StaffAccessPage() {
     queryKey: ['staff-invitations', activeBusiness?.id],
     enabled: Boolean(activeBusiness) && can('users.manage'),
     queryFn: () => api.get<{ data: StaffInvitation[] }>('/staff-invitations').then(response => response.data.data),
+  });
+
+  const invitationHistoryQuery = useQuery({
+    queryKey: ['staff-invitation-events', activeBusiness?.id, historyInvitation?.id],
+    enabled: Boolean(activeBusiness) && can('users.manage') && Boolean(historyInvitation),
+    queryFn: () => api
+      .get<{ data: InvitationEvent[] }>(`/staff-invitations/${historyInvitation!.id}/events`)
+      .then(response => response.data.data),
   });
 
   const updateMembership = useMutation({
@@ -242,6 +269,7 @@ export function StaffAccessPage() {
       })
       .then(response => response.data.data),
     onSuccess: async invitation => {
+      setInvitationOutcome('created');
       setCreatedInvitation(invitation);
       setInviteCopied(false);
       setCopyError('');
@@ -256,6 +284,26 @@ export function StaffAccessPage() {
     onSuccess: async () => {
       setRevokingInvitation(null);
       await qc.invalidateQueries({ queryKey: ['staff-invitations', activeBusiness?.id] });
+    },
+  });
+
+  const reissueInvitation = useMutation({
+    mutationFn: ({ invitation, expiresInDays }: { invitation: StaffInvitation; expiresInDays: number }) => api
+      .post<{ data: CreatedInvitation }>(`/staff-invitations/${invitation.id}/reissue`, {
+        expires_in_days: expiresInDays,
+      })
+      .then(response => response.data.data),
+    onSuccess: async invitation => {
+      setReissuingInvitation(null);
+      setInvitationOutcome('reissued');
+      setCreatedInvitation(invitation);
+      setInviteCopied(false);
+      setCopyError('');
+      setInviteEditor(true);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['staff-invitations', activeBusiness?.id] }),
+        qc.invalidateQueries({ queryKey: ['staff-invitation-events', activeBusiness?.id, invitation.id] }),
+      ]);
     },
   });
 
@@ -343,6 +391,7 @@ export function StaffAccessPage() {
 
   const openInvitation = () => {
     createInvitation.reset();
+    setInvitationOutcome('created');
     setCreatedInvitation(null);
     setInviteCopied(false);
     setCopyError('');
