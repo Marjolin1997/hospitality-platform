@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
+  History,
   LayoutGrid,
   Pencil,
   Plus,
@@ -73,6 +74,22 @@ type RegisterDraft = {
   name: string;
   code: string;
 };
+type ConfigurationEvent = {
+  id: string;
+  action: string;
+  previous_state: Record<string, unknown> | null;
+  new_state: Record<string, unknown> | null;
+  performed_at: string;
+  performed_by_user_id: number;
+  performed_by_name: string;
+};
+
+type HistoryTarget = {
+  type: 'area' | 'table' | 'register';
+  id: string;
+  name: string;
+};
+
 
 function apiMessage(error: unknown): string {
   const response = (error as {
@@ -114,6 +131,7 @@ export function VenueSetupPage() {
   const [areaDisableTarget, setAreaDisableTarget] = useState<VenueArea | null>(null);
   const [tableDisableTarget, setTableDisableTarget] = useState<VenueTable | null>(null);
   const [registerDisableTarget, setRegisterDisableTarget] = useState<CashRegister | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<HistoryTarget | null>(null);
 
   useEffect(() => {
     if (section === 'venue' && !canVenue && canRegisters) setSection('registers');
@@ -128,6 +146,20 @@ export function VenueSetupPage() {
         params: { location_id: activeLocation!.id },
       })
       .then(response => response.data.data),
+  });
+
+  const configurationHistoryQuery = useQuery({
+    queryKey: ['configuration-events', activeBusiness?.id, historyTarget?.type, historyTarget?.id],
+    enabled: Boolean(activeBusiness && historyTarget),
+    queryFn: () => {
+      const path = historyTarget!.type === 'area'
+        ? `/management/venue/areas/${historyTarget!.id}/events`
+        : historyTarget!.type === 'table'
+          ? `/management/venue/tables/${historyTarget!.id}/events`
+          : `/management/cash-registers/${historyTarget!.id}/events`;
+
+      return api.get<{ data: ConfigurationEvent[] }>(path).then(response => response.data.data);
+    },
   });
 
   const registersQuery = useQuery({
