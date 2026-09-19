@@ -963,6 +963,84 @@ export function StaffAccessPage() {
         </div>
       )}
 
+      {historyMember && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget) setHistoryMember(null);
+          }}
+        >
+          <div className="modal-card management-modal invitation-history-modal membership-history-modal" role="dialog" aria-modal="true" aria-label="Staff access history">
+            <header>
+              <div>
+                <span className="eyebrow">MEMBERSHIP AUDIT</span>
+                <h2>{historyMember.name}</h2>
+                <p>{historyMember.email} · immutable tenant-scoped access history</p>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Close staff access history"
+                onClick={() => setHistoryMember(null)}
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="invitation-history-summary">
+              <div><span>Current role</span><strong>{historyMember.role_name ?? 'No role'}</strong></div>
+              <div><span>Current status</span><strong className={`status-badge ${historyMember.status === 'active' ? 'success' : 'muted'}`}>{historyMember.status}</strong></div>
+              <div><span>Audit events</span><strong>{staffHistoryQuery.data?.events.length ?? 0}</strong></div>
+            </div>
+
+            {staffHistoryQuery.isLoading ? (
+              <div className="management-state">Loading access history…</div>
+            ) : staffHistoryQuery.isError ? (
+              <div className="management-state error">
+                <AlertTriangle size={18} />
+                <div>
+                  <strong>Access history unavailable</strong>
+                  <span>{apiMessage(staffHistoryQuery.error)}</span>
+                </div>
+                <button type="button" className="secondary-button" onClick={() => staffHistoryQuery.refetch()}>
+                  Try again
+                </button>
+              </div>
+            ) : (
+              <div className="invitation-timeline">
+                {(staffHistoryQuery.data?.events ?? []).map(event => (
+                  <article key={event.id} className="invitation-timeline-event">
+                    <span className="timeline-dot" aria-hidden="true" />
+                    <div>
+                      <header>
+                        <strong>{event.action.replaceAll('_', ' ')}</strong>
+                        <time>{new Date(event.performed_at).toLocaleString()}</time>
+                      </header>
+                      <p>
+                        {(event.previous_role_name ?? 'No role')} / {event.previous_status}
+                        {' → '}
+                        {(event.new_role_name ?? 'No role')} / {event.new_status}
+                      </p>
+                      <small>Performed by {event.performed_by_name}</small>
+                    </div>
+                  </article>
+                ))}
+                {(staffHistoryQuery.data?.events ?? []).length === 0 && (
+                  <Empty>No membership lifecycle events have been recorded yet.</Empty>
+                )}
+              </div>
+            )}
+
+            <footer className="modal-actions">
+              <button type="button" className="primary-button" onClick={() => setHistoryMember(null)}>
+                Done
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
       {deactivating?.role_id && (
         <div
           className="modal-backdrop"
