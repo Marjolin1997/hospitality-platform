@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Boxes, FileText, MapPin, PackagePlus, Pencil, Plus, ReceiptText, Search, Settings2, ShieldCheck, Trash2, Users, WalletCards, X } from 'lucide-react';
+import { AlertTriangle, Boxes, Check, Copy, FileText, Mail, MapPin, PackagePlus, Pencil, Plus, ReceiptText, Search, Settings2, ShieldCheck, Trash2, UserPlus, Users, WalletCards, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { canDisableCategory, canDisableLocation, canManageRolePermissions } from '../../lib/managementGuards';
@@ -18,6 +18,10 @@ type InvoiceableOrder={id:string;number:string;location_id:string;currency:strin
 type FiscalRegister={id:string;name:string;code:string;fiscal_tcr_code:string|null};
 type Staff={id:number;name:string;email:string;status:string;role_id:string|null;role_name:string|null};
 type Role={id:string;name:string;slug:string};
+type StaffResponse={staff:Staff[];roles:Role[];assignable_role_ids:string[]};
+type StaffInvitation={id:string;email:string;role_id:string|null;role_name:string;role_name_snapshot:string;role_is_current:boolean;status:'pending'|'accepted'|'revoked'|'expired';expires_at:string;accepted_at:string|null;revoked_at:string|null;created_at:string;invited_by_name:string;accepted_by_name:string|null};
+type InvitationDraft={email:string;role_id:string;expires_in_days:number};
+type CreatedInvitation={id:string;email:string;role_id:string;role_name:string;status:string;expires_at:string;invitation_url:string};
 type PermissionItem={key:string;group:string;description:string|null};
 type ManagedRole={id:string;name:string;slug:string;is_system:boolean;member_count:number;permissions:PermissionItem[]};
 type RoleManagementResponse={roles:ManagedRole[];permissions:PermissionItem[]};
