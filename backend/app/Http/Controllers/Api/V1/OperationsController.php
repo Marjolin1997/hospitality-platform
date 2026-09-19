@@ -10,6 +10,7 @@ use App\Http\Requests\Api\V1\SetProductStatusRequest;
 use App\Http\Requests\Api\V1\StoreExpenseRequest;
 use App\Http\Requests\Api\V1\ReverseExpenseRequest;
 use App\Models\Business;
+use App\Services\Authorization\RoleDelegationPolicy;
 use App\Services\Authorization\UpdateBusinessMembership;
 use App\Services\Operations\OperationsService;
 use Illuminate\Http\JsonResponse;
@@ -20,7 +21,10 @@ use Illuminate\Validation\Rule;
 
 final class OperationsController extends Controller
 {
-    public function __construct(private readonly OperationsService $operations) {}
+    public function __construct(
+        private readonly OperationsService $operations,
+        private readonly RoleDelegationPolicy $delegation,
+    ) {}
 
     public function products(): JsonResponse
     {
@@ -132,10 +136,36 @@ final class OperationsController extends Controller
         return response()->json(['data' => $expense], 201);
     }
 
-    public function staff(): JsonResponse
+    public function staff(Request $request): JsonResponse
     {
-        $business=app(Business::class); $rows=DB::table('business_user as bu')->join('users as u','u.id','=','bu.user_id')->leftJoin('roles as r','r.id','=','bu.role_id')->where('bu.business_id',$business->id)->select('u.id','u.name','u.email','bu.status','bu.role_id','r.name as role_name')->orderBy('u.name')->get();
-        $roles=DB::table('roles')->where('business_id',$business->id)->select('id','name','slug')->orderBy('name')->get(); return response()->json(['data'=>['staff'=>$rows,'roles'=>$roles]]);
+        $business = app(Business::class);
+        $rows = DB::table('business_user as bu')
+            ->join('users as u', 'u.id', '=', 'bu.user_id')
+            ->leftJoin('roles as r', function ($join) use ($business): void {
+                $join->on('r.id', '=', 'bu.role_id')
+                    ->where('r.business_id', $business->id);
+            })
+            ->where('bu.business_id', $business->id)
+            ->select('u.id', 'u.name', 'u.email', 'bu.status', 'bu.role_id', 'r.name as role_name')
+            ->orderBy('u.name')
+            ->get();
+
+        $roles = DB::table('roles')
+            ->where('business_id', $business->id)
+            ->select('id', 'name', 'slug')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json([
+            'data' => [
+                'staff' => $rows,
+                'roles' => $roles,
+                'assignable_role_ids' => $this->delegation->assignableRoleIds(
+                    $business,
+                    (int) $request->user()->id,
+                ),
+            ],
+        ]);
     }
 
     public function updateStaff(Request $request, int $user, UpdateBusinessMembership $update): JsonResponse
