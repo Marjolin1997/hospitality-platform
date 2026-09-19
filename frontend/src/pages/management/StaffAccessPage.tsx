@@ -782,22 +782,53 @@ export function StaffAccessPage() {
                                 : 'No longer active'}
                         </small>
                       </td>
-                      <td>{invitation.invited_by_name}</td>
                       <td>
-                        {invitation.status === 'pending' ? (
+                        <strong>{invitation.invited_by_name}</strong>
+                        {invitation.reissue_count > 0 && (
+                          <small className="cell-note">
+                            Reissued {invitation.reissue_count} time{invitation.reissue_count === 1 ? '' : 's'}
+                          </small>
+                        )}
+                      </td>
+                      <td>
+                        <div className="inline-actions invitation-actions">
+                          {(invitation.status === 'pending' || invitation.status === 'expired') && (
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              disabled={!invitation.role_id}
+                              title={!invitation.role_id ? 'The invited role no longer exists.' : 'Rotate the secure token and issue a new link'}
+                              onClick={() => {
+                                reissueInvitation.reset();
+                                setReissueDays(7);
+                                setReissuingInvitation(invitation);
+                              }}
+                            >
+                              <RefreshCw size={14} />
+                              Reissue
+                            </button>
+                          )}
                           <button
                             type="button"
-                            className="secondary-button subtle-danger"
-                            onClick={() => {
-                              revokeInvitation.reset();
-                              setRevokingInvitation(invitation);
-                            }}
+                            className="secondary-button"
+                            onClick={() => setHistoryInvitation(invitation)}
                           >
-                            Revoke
+                            <History size={14} />
+                            History
                           </button>
-                        ) : (
-                          <span className="muted">Closed</span>
-                        )}
+                          {invitation.status === 'pending' && (
+                            <button
+                              type="button"
+                              className="secondary-button subtle-danger"
+                              onClick={() => {
+                                revokeInvitation.reset();
+                                setRevokingInvitation(invitation);
+                              }}
+                            >
+                              Revoke
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -955,7 +986,9 @@ export function StaffAccessPage() {
                 <h2>{createdInvitation ? 'Invitation ready' : 'Invite staff member'}</h2>
                 <p>
                   {createdInvitation
-                    ? 'Copy this link now. For security, the raw invitation token will not be shown again.'
+                    ? invitationOutcome === 'reissued'
+                      ? 'The previous link is now invalid. Copy this replacement link now; the raw token will not be shown again.'
+                      : 'Copy this link now. For security, the raw invitation token will not be shown again.'
                     : 'Choose only the access this person needs. The invitation expires automatically.'}
                 </p>
               </div>
@@ -975,7 +1008,7 @@ export function StaffAccessPage() {
                 <div className="permission-banner">
                   <Check size={18} />
                   <div>
-                    <strong>Invite created for {createdInvitation.email}</strong>
+                    <strong>{invitationOutcome === 'reissued' ? 'New secure link issued for' : 'Invite created for'} {createdInvitation.email}</strong>
                     <span>{createdInvitation.role_name} · expires {new Date(createdInvitation.expires_at).toLocaleString()}</span>
                   </div>
                 </div>
