@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   LayoutGrid,
-  MapPin,
   Pencil,
   Plus,
   Search,
@@ -227,6 +226,15 @@ export function VenueSetupPage() {
       await invalidateRegisters();
     },
   });
+
+  if (!canVenue && !canRegisters) {
+    return (
+      <div className="panel management-state error">
+        <AlertTriangle size={20} />
+        Your role does not have permission to manage venue layout or cash registers.
+      </div>
+    );
+  }
 
   if (!activeLocation) {
     return (
