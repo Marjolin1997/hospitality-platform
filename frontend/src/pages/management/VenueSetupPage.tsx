@@ -109,6 +109,21 @@ function Empty({ children }: { children: string }) {
   return <div className="management-empty">{children}</div>;
 }
 
+function configurationStateLabel(state: Record<string, unknown> | null): string {
+  if (!state) return 'None';
+
+  const preferred = ['name', 'code', 'capacity', 'sort_order', 'is_active'];
+  const parts = preferred
+    .filter(key => key in state)
+    .map(key => {
+      const value = state[key];
+      if (key === 'is_active') return `status=${value ? 'active' : 'inactive'}`;
+      return `${key.replaceAll('_', ' ')}=${String(value ?? '—')}`;
+    });
+
+  return parts.length > 0 ? parts.join(' · ') : 'Configuration snapshot';
+}
+
 export function VenueSetupPage() {
   const { activeBusiness, activeLocation, can } = useAuth();
   const qc = useQueryClient();
@@ -954,6 +969,97 @@ export function VenueSetupPage() {
               </button>
             </footer>
           </form>
+        </div>
+      )}
+
+      {historyTarget && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget) setHistoryTarget(null);
+          }}
+        >
+          <div className="modal-card management-modal invitation-history-modal venue-history-modal" role="dialog" aria-modal="true" aria-label="Configuration history">
+            <header>
+              <div>
+                <span className="eyebrow">CONFIGURATION AUDIT</span>
+                <h2>{historyTarget.name}</h2>
+                <p>
+                  {historyTarget.type === 'area' ? 'Service area' : historyTarget.type === 'table' ? 'Guest table' : 'Cash register'}
+                  {' · '}
+                  immutable tenant-scoped configuration history
+                </p>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Close configuration history"
+                onClick={() => setHistoryTarget(null)}
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="invitation-history-summary">
+              <div>
+                <span>Entity</span>
+                <strong>{historyTarget.type}</strong>
+              </div>
+              <div>
+                <span>Audit events</span>
+                <strong>{configurationHistoryQuery.data?.length ?? 0}</strong>
+              </div>
+              <div>
+                <span>Location</span>
+                <strong>{activeLocation.name}</strong>
+              </div>
+            </div>
+
+            {configurationHistoryQuery.isLoading ? (
+              <div className="management-state">Loading configuration history…</div>
+            ) : configurationHistoryQuery.isError ? (
+              <div className="management-state error">
+                <AlertTriangle size={18} />
+                <div>
+                  <strong>Configuration history unavailable</strong>
+                  <span>{apiMessage(configurationHistoryQuery.error)}</span>
+                </div>
+                <button type="button" className="secondary-button" onClick={() => configurationHistoryQuery.refetch()}>
+                  Try again
+                </button>
+              </div>
+            ) : (
+              <div className="invitation-timeline">
+                {(configurationHistoryQuery.data ?? []).map(event => (
+                  <article key={event.id} className="invitation-timeline-event">
+                    <span className="timeline-dot" aria-hidden="true" />
+                    <div>
+                      <header>
+                        <strong>{event.action.replaceAll('_', ' ')}</strong>
+                        <time>{new Date(event.performed_at).toLocaleString()}</time>
+                      </header>
+                      <p>
+                        {configurationStateLabel(event.previous_state)}
+                        {' → '}
+                        {configurationStateLabel(event.new_state)}
+                      </p>
+                      <small>Performed by {event.performed_by_name}</small>
+                    </div>
+                  </article>
+                ))}
+                {(configurationHistoryQuery.data ?? []).length === 0 && (
+                  <Empty>No configuration lifecycle events have been recorded yet.</Empty>
+                )}
+              </div>
+            )}
+
+            <footer className="modal-actions">
+              <button type="button" className="primary-button" onClick={() => setHistoryTarget(null)}>
+                Done
+              </button>
+            </footer>
+          </div>
         </div>
       )}
 
