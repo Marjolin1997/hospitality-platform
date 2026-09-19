@@ -36,6 +36,8 @@ final class CreateOrder
                     ->where('business_id', $business->getKey())
                     ->where('location_id', $location->getKey())
                     ->where('is_active', true)
+                    ->whereHas('area', fn ($query) => $query->where('is_active', true))
+                    ->lockForUpdate()
                     ->first();
 
                 if (! $table) {
