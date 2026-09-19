@@ -206,7 +206,7 @@ test('invoice credit notes remain tenant isolated',function():void{
     expect(DB::table('invoice_credit_notes')->where('business_id',$a->id)->count())->toBe(0);
 });
 
-test('staff update rejects roles and memberships from another business',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$owner=omtUser($a);$foreignUser=omtUser($b);$headers=omtHeaders($owner,$a);$foreignRole=DB::table('business_user')->where('business_id',$b->id)->where('user_id',$foreignUser->id)->value('role_id');$this->patchJson('/api/v1/staff/'.$owner->id,['role_id'=>$foreignRole,'status'=>'active'],$headers)->assertStatus(422);$this->patchJson('/api/v1/staff/'.$foreignUser->id,['role_id'=>DB::table('business_user')->where('business_id',$a->id)->where('user_id',$owner->id)->value('role_id'),'status'=>'active'],$headers)->assertNotFound();});
+test('staff update rejects roles and memberships from another business',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$owner=omtUser($a);$foreignUser=omtUser($b);$headers=omtHeaders($owner,$a);$foreignRole=DB::table('business_user')->where('business_id',$b->id)->where('user_id',$foreignUser->id)->value('role_id');$this->patchJson('/api/v1/staff/'.$owner->id,['role_id'=>$foreignRole,'status'=>'active'],$headers)->assertStatus(422);$this->patchJson('/api/v1/staff/'.$foreignUser->id,['role_id'=>DB::table('business_user')->where('business_id',$a->id)->where('user_id',$owner->id)->value('role_id'),'status'=>'active'],$headers)->assertNotFound();$this->getJson('/api/v1/staff/'.$foreignUser->id.'/events',$headers)->assertNotFound();});
 
 test('staff update preserves at least one active owner while allowing a safe owner handoff', function (): void {
     $business = omtBusiness('Owner guard');
@@ -278,7 +278,16 @@ test('staff update preserves at least one active owner while allowing a safe own
         ->where('target_user_id', $owner->id)
         ->first();
 
-    expect(DB::table('business_user')
+    $history = $this->getJson('/api/v1/staff/'.$owner->id.'/events', $headers)
+        ->assertOk()
+        ->assertJsonPath('data.member.id', $owner->id)
+        ->assertJsonPath('data.events.0.action', 'role_changed')
+        ->assertJsonPath('data.events.0.previous_role_name', 'Owner')
+        ->assertJsonPath('data.events.0.new_role_name', 'Manager')
+        ->assertJsonPath('data.events.0.performed_by_user_id', $owner->id);
+
+    expect(json_encode($history->json()))->not->toContain('password')
+        ->and(DB::table('business_user')
         ->where('business_id', $business->id)
         ->where('user_id', $owner->id)
         ->value('role_id'))->toBe($managerRole->id)
