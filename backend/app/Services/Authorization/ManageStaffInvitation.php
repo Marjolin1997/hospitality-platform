@@ -16,6 +16,8 @@ final class ManageStaffInvitation
 
     public function list(Business $business): array
     {
+        $this->expireStale($business);
+
         $rows = DB::table('staff_invitations as si')
             ->join('users as inviter', 'inviter.id', '=', 'si.invited_by_user_id')
             ->leftJoin('users as accepter', 'accepter.id', '=', 'si.accepted_by_user_id')
@@ -30,6 +32,9 @@ final class ManageStaffInvitation
                 'si.role_permissions_snapshot',
                 'si.status',
                 'si.expires_at',
+                'si.expired_at',
+                'si.reissue_count',
+                'si.last_reissued_at',
                 'si.accepted_at',
                 'si.revoked_at',
                 'si.created_at',
@@ -70,6 +75,9 @@ final class ManageStaffInvitation
                 'status' => $this->effectiveStatus($row),
                 'expires_at' => $row->expires_at,
                 'accepted_at' => $row->accepted_at,
+                'expired_at' => $row->expired_at,
+                'reissue_count' => (int) $row->reissue_count,
+                'last_reissued_at' => $row->last_reissued_at,
                 'revoked_at' => $row->revoked_at,
                 'created_at' => $row->created_at,
                 'invited_by_name' => $row->invited_by_name,
@@ -151,6 +159,21 @@ final class ManageStaffInvitation
                 'updated_at' => now(),
             ]);
 
+            $this->auditEvent(
+                $business,
+                $id,
+                $actorUserId,
+                'created',
+                null,
+                'pending',
+                [
+                    'email' => $email,
+                    'role_id' => $roleId,
+                    'role_name' => $role->name,
+                    'expires_at' => $expiresAt->toISOString(),
+                ],
+            );
+
             return [
                 'id' => $id,
                 'email' => $email,
@@ -196,14 +219,173 @@ final class ManageStaffInvitation
                     'revoked_by_user_id' => $actorUserId,
                     'updated_at' => now(),
                 ]);
+
+            $this->auditEvent(
+                $business,
+                $invitationId,
+                $actorUserId,
+                'revoked',
+                'pending',
+                'revoked',
+            );
         }, 3);
+    }
+
+    public function reissue(Business $business, string $invitationId, int $actorUserId, int $expiresInDays): array
+    {
+        return DB::transaction(function () use ($business, $invitationId, $actorUserId, $expiresInDays): array {
+            $this->lockBusiness($business);
+            $this->expireStale($business, false);
+
+            $invitation = DB::table('staff_invitations')
+                ->where('business_id', $business->getKey())
+                ->where('id', $invitationId)
+                ->lockForUpdate()
+                ->first();
+
+            abort_unless($invitation, 404);
+
+            if (! in_array($invitation->status, ['pending', 'expired'], true)) {
+                throw ValidationException::withMessages([
+                    'invitation' => 'Only pending or expired invitations can be reissued.',
+                ]);
+            }
+
+            if (! $invitation->role_id) {
+                throw ValidationException::withMessages([
+                    'invitation' => 'The invited role no longer exists. Create a new invitation with another role.',
+                ]);
+            }
+
+            $role = DB::table('roles')
+                ->where('business_id', $business->getKey())
+                ->where('id', $invitation->role_id)
+                ->lockForUpdate()
+                ->first(['id', 'name']);
+
+            if (! $role) {
+                throw ValidationException::withMessages([
+                    'invitation' => 'The invited role no longer exists. Create a new invitation with another role.',
+                ]);
+            }
+
+            $rolePermissions = $this->delegation->assertRoleDelegable(
+                $business,
+                $actorUserId,
+                (string) $role->id,
+                true,
+            );
+
+            $existingUserId = DB::table('users')
+                ->whereRaw('LOWER(email) = ?', [mb_strtolower($invitation->email)])
+                ->value('id');
+
+            if ($existingUserId && DB::table('business_user')
+                ->where('business_id', $business->getKey())
+                ->where('user_id', $existingUserId)
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'invitation' => 'This user already has a membership in the business.',
+                ]);
+            }
+
+            $token = Str::random(64);
+            $expiresAt = now()->addDays($expiresInDays);
+            $previousStatus = (string) $invitation->status;
+
+            DB::table('staff_invitations')
+                ->where('business_id', $business->getKey())
+                ->where('id', $invitationId)
+                ->update([
+                    'invited_by_user_id' => $actorUserId,
+                    'role_name_snapshot' => $role->name,
+                    'role_permissions_snapshot' => json_encode(array_values($rolePermissions), JSON_THROW_ON_ERROR),
+                    'token_hash' => hash('sha256', $token),
+                    'status' => 'pending',
+                    'expires_at' => $expiresAt,
+                    'expired_at' => null,
+                    'reissue_count' => DB::raw('reissue_count + 1'),
+                    'last_reissued_at' => now(),
+                    'last_reissued_by_user_id' => $actorUserId,
+                    'updated_at' => now(),
+                ]);
+
+            $this->auditEvent(
+                $business,
+                $invitationId,
+                $actorUserId,
+                'reissued',
+                $previousStatus,
+                'pending',
+                [
+                    'role_id' => $role->id,
+                    'role_name' => $role->name,
+                    'expires_at' => $expiresAt->toISOString(),
+                ],
+            );
+
+            return [
+                'id' => $invitationId,
+                'email' => $invitation->email,
+                'role_id' => $role->id,
+                'role_name' => $role->name,
+                'status' => 'pending',
+                'expires_at' => $expiresAt->toISOString(),
+                'invitation_url' => rtrim((string) config('app.frontend_url'), '/').'/join/'.$token,
+            ];
+        }, 3);
+    }
+
+    public function events(Business $business, string $invitationId): array
+    {
+        abort_unless(
+            DB::table('staff_invitations')
+                ->where('business_id', $business->getKey())
+                ->where('id', $invitationId)
+                ->exists(),
+            404,
+        );
+
+        return DB::table('staff_invitation_events as sie')
+            ->leftJoin('users as actor', 'actor.id', '=', 'sie.actor_user_id')
+            ->where('sie.business_id', $business->getKey())
+            ->where('sie.staff_invitation_id', $invitationId)
+            ->orderByDesc('sie.occurred_at')
+            ->get([
+                'sie.id',
+                'sie.event',
+                'sie.previous_status',
+                'sie.new_status',
+                'sie.metadata',
+                'sie.occurred_at',
+                'actor.name as actor_name',
+            ])
+            ->map(function (object $event): array {
+                return [
+                    'id' => $event->id,
+                    'event' => $event->event,
+                    'previous_status' => $event->previous_status,
+                    'new_status' => $event->new_status,
+                    'metadata' => $event->metadata ? json_decode($event->metadata, true, 512, JSON_THROW_ON_ERROR) : null,
+                    'occurred_at' => $event->occurred_at,
+                    'actor_name' => $event->actor_name,
+                ];
+            })
+            ->all();
     }
 
     public function preview(string $token): array
     {
+        $tokenHash = hash('sha256', $token);
+        $snapshot = DB::table('staff_invitations')->where('token_hash', $tokenHash)->first(['business_id']);
+        abort_unless($snapshot, 404);
+
+        $business = Business::query()->findOrFail($snapshot->business_id);
+        $this->expireStale($business);
+
         $invitation = DB::table('staff_invitations as si')
             ->join('businesses as b', 'b.id', '=', 'si.business_id')
-            ->where('si.token_hash', hash('sha256', $token))
+            ->where('si.token_hash', $tokenHash)
             ->first([
                 'si.email',
                 'si.role_name_snapshot',
@@ -390,6 +572,15 @@ final class ManageStaffInvitation
                     'updated_at' => now(),
                 ]);
 
+            $this->auditEvent(
+                $business,
+                (string) $invitation->id,
+                (int) $user->getKey(),
+                'accepted',
+                'pending',
+                'accepted',
+            );
+
                 return $user->refresh();
             }, 3);
         } catch (QueryException $exception) {
@@ -401,6 +592,68 @@ final class ManageStaffInvitation
 
             throw $exception;
         }
+    }
+
+    private function expireStale(Business $business, bool $lockBusiness = true): void
+    {
+        DB::transaction(function () use ($business, $lockBusiness): void {
+            if ($lockBusiness) {
+                $this->lockBusiness($business);
+            }
+
+            $expired = DB::table('staff_invitations')
+                ->where('business_id', $business->getKey())
+                ->where('status', 'pending')
+                ->where('expires_at', '<=', now())
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get(['id']);
+
+            foreach ($expired as $invitation) {
+                DB::table('staff_invitations')
+                    ->where('business_id', $business->getKey())
+                    ->where('id', $invitation->id)
+                    ->where('status', 'pending')
+                    ->update([
+                        'status' => 'expired',
+                        'expired_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                $this->auditEvent(
+                    $business,
+                    (string) $invitation->id,
+                    null,
+                    'expired',
+                    'pending',
+                    'expired',
+                );
+            }
+        }, 3);
+    }
+
+    private function auditEvent(
+        Business $business,
+        string $invitationId,
+        ?int $actorUserId,
+        string $event,
+        ?string $previousStatus,
+        string $newStatus,
+        ?array $metadata = null,
+    ): void {
+        DB::table('staff_invitation_events')->insert([
+            'id' => (string) Str::ulid(),
+            'business_id' => $business->getKey(),
+            'staff_invitation_id' => $invitationId,
+            'actor_user_id' => $actorUserId,
+            'event' => $event,
+            'previous_status' => $previousStatus,
+            'new_status' => $newStatus,
+            'metadata' => $metadata === null ? null : json_encode($metadata, JSON_THROW_ON_ERROR),
+            'occurred_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     private function lockBusiness(Business $business): void
