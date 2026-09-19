@@ -206,6 +206,18 @@ final class PurchasingController extends Controller
         ], 201);
     }
 
+    public function update(CreatePurchaseOrderRequest $request, string $purchaseOrder): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->purchasing->updateDraft(
+                app(Business::class),
+                $purchaseOrder,
+                $request->validated(),
+                (int) $request->user()->id,
+            ),
+        ]);
+    }
+
     public function place(Request $request, string $purchaseOrder): JsonResponse
     {
         return response()->json([
