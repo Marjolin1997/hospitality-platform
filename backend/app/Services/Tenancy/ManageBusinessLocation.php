@@ -128,6 +128,18 @@ final class ManageBusinessLocation
                         'location' => 'Close all cash register sessions before disabling this location.',
                     ]);
                 }
+
+                $hasOpenPurchaseOrders = DB::table('purchase_orders')
+                    ->where('business_id', $business->getKey())
+                    ->where('location_id', $locationId)
+                    ->whereIn('status', ['draft', 'ordered', 'partially_received'])
+                    ->exists();
+
+                if ($hasOpenPurchaseOrders) {
+                    throw ValidationException::withMessages([
+                        'location' => 'Complete or cancel all open purchase orders before disabling this location.',
+                    ]);
+                }
             }
 
             $before = $this->state($location);
