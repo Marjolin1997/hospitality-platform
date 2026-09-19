@@ -181,6 +181,18 @@ final class ManageVenueConfiguration
             ];
 
             if ($table) {
+                $hasOpenOrders = DB::table('orders')
+                    ->where('business_id', $business->getKey())
+                    ->where('venue_table_id', $table->id)
+                    ->whereIn('status', ['open', 'payment_due'])
+                    ->exists();
+
+                if ($hasOpenOrders) {
+                    throw ValidationException::withMessages([
+                        'table' => 'Close or move every active order before editing this table configuration.',
+                    ]);
+                }
+
                 $before = $this->tableState($table);
                 DB::table('venue_tables')
                     ->where('business_id', $business->getKey())
@@ -309,6 +321,18 @@ final class ManageVenueConfiguration
             ];
 
             if ($register) {
+                $hasOpenSession = DB::table('cash_sessions')
+                    ->where('business_id', $business->getKey())
+                    ->where('cash_register_id', $register->id)
+                    ->where('status', 'open')
+                    ->exists();
+
+                if ($hasOpenSession) {
+                    throw ValidationException::withMessages([
+                        'register' => 'Close the open cash session before editing this register identity.',
+                    ]);
+                }
+
                 $before = $this->registerState($register);
                 DB::table('cash_registers')
                     ->where('business_id', $business->getKey())
