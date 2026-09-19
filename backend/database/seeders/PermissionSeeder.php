@@ -12,8 +12,9 @@ class PermissionSeeder extends Seeder
         $permissions=[
             'orders'=>['orders.view','orders.create','orders.update','orders.send_to_station','orders.prepare','orders.cancel','orders.apply_discount','orders.override_price','orders.split','orders.merge'],
             'payments'=>['payments.collect','payments.refund'],
-            'cash'=>['cash_sessions.view','cash_sessions.open','cash_sessions.close','cash_movements.create'],
+            'cash'=>['cash_sessions.view','cash_sessions.open','cash_sessions.close','cash_movements.create','cash_registers.manage'],
             'catalog'=>['products.view','products.manage'],
+            'venue'=>['venue.manage'],
             'inventory'=>['inventory.view','inventory.receive','inventory.transfer','inventory.adjust'],
             'finance'=>['finance.view','expenses.view','expenses.create','expenses.approve'],
             'invoices'=>['invoices.view','invoices.issue','invoices.correct'],
