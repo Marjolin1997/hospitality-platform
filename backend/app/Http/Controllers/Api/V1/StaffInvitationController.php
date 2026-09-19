@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\AcceptStaffInvitationRequest;
 use App\Http\Requests\Api\V1\CreateStaffInvitationRequest;
+use App\Http\Requests\Api\V1\ReissueStaffInvitationRequest;
 use App\Models\Business;
 use App\Services\Authorization\ManageStaffInvitation;
 use Illuminate\Http\JsonResponse;
@@ -42,6 +43,25 @@ final class StaffInvitationController extends Controller
         );
 
         return response()->json(['message' => 'Staff invitation revoked.']);
+    }
+
+    public function reissue(ReissueStaffInvitationRequest $request, string $invitation): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->invitations->reissue(
+                app(Business::class),
+                $invitation,
+                (int) $request->user()->id,
+                (int) $request->validated('expires_in_days'),
+            ),
+        ]);
+    }
+
+    public function events(string $invitation): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->invitations->events(app(Business::class), $invitation),
+        ]);
     }
 
     public function preview(string $token): JsonResponse
