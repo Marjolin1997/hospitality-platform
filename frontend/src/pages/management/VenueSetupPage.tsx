@@ -10,7 +10,7 @@ import {
   WalletCards,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { api } from '../../lib/api';
 import {
@@ -246,31 +246,25 @@ export function VenueSetupPage() {
   const activeRegisters = registers.filter(register => register.is_active);
 
   const tableTerm = tableSearch.trim().toLowerCase();
-  const filteredTables = useMemo(
-    () => venue.tables.filter(table => (
-      (tableStatus === 'all' || (tableStatus === 'active' ? table.is_active : !table.is_active))
-      && (tableArea === 'all' || table.venue_area_id === tableArea)
-      && (!tableTerm || [
-        table.name,
-        table.area_name ?? '',
-        String(table.capacity),
-      ].some(value => value.toLowerCase().includes(tableTerm)))
-    )),
-    [tableArea, tableStatus, tableTerm, venue.tables],
-  );
+  const filteredTables = venue.tables.filter(table => (
+    (tableStatus === 'all' || (tableStatus === 'active' ? table.is_active : !table.is_active))
+    && (tableArea === 'all' || table.venue_area_id === tableArea)
+    && (!tableTerm || [
+      table.name,
+      table.area_name ?? '',
+      String(table.capacity),
+    ].some(value => value.toLowerCase().includes(tableTerm)))
+  ));
 
   const registerTerm = registerSearch.trim().toLowerCase();
-  const filteredRegisters = useMemo(
-    () => registers.filter(register => (
-      (registerStatus === 'all' || (registerStatus === 'active' ? register.is_active : !register.is_active))
-      && (!registerTerm || [
-        register.name,
-        register.code,
-        register.fiscal_tcr_code ?? '',
-      ].some(value => value.toLowerCase().includes(registerTerm)))
-    )),
-    [registerStatus, registerTerm, registers],
-  );
+  const filteredRegisters = registers.filter(register => (
+    (registerStatus === 'all' || (registerStatus === 'active' ? register.is_active : !register.is_active))
+    && (!registerTerm || [
+      register.name,
+      register.code,
+      register.fiscal_tcr_code ?? '',
+    ].some(value => value.toLowerCase().includes(registerTerm)))
+  ));
 
   const availableAreasForTable = venue.areas.filter(area => area.is_active);
   const editingTable = tableEditor?.id
@@ -301,7 +295,7 @@ export function VenueSetupPage() {
     saveArea.reset();
     setAreaEditor(area
       ? { id: area.id, name: area.name, sort_order: String(area.sort_order) }
-      : { name: '', sort_order: String((venue.areas.at(-1)?.sort_order ?? -10) + 10) });
+      : { name: '', sort_order: String(((venue.areas[venue.areas.length - 1]?.sort_order) ?? -10) + 10) });
   };
 
   const openTableEditor = (table?: VenueTable) => {
