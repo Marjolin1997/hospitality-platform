@@ -4,6 +4,7 @@ namespace App\Services\Authorization;
 
 use App\Models\Business;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -240,7 +241,8 @@ final class ManageStaffInvitation
 
         abort_unless($snapshot, 404);
 
-        return DB::transaction(function () use ($tokenHash, $data, $snapshot): User {
+        try {
+            return DB::transaction(function () use ($tokenHash, $data, $snapshot): User {
             $business = Business::query()->whereKey($snapshot->business_id)->lockForUpdate()->firstOrFail();
 
             if ($business->status !== 'active') {
@@ -388,8 +390,17 @@ final class ManageStaffInvitation
                     'updated_at' => now(),
                 ]);
 
-            return $user->refresh();
-        }, 3);
+                return $user->refresh();
+            }, 3);
+        } catch (QueryException $exception) {
+            if ((string) $exception->getCode() === '23000') {
+                throw ValidationException::withMessages([
+                    'invitation' => 'The account or business membership changed while this invitation was being accepted. Retry with the invited account credentials.',
+                ]);
+            }
+
+            throw $exception;
+        }
     }
 
     private function lockBusiness(Business $business): void
