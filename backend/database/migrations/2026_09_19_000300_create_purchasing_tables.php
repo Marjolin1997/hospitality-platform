@@ -29,6 +29,8 @@ return new class extends Migration {
             $table->foreignId('created_by_user_id')->constrained('users')->restrictOnDelete();
             $table->foreignId('placed_by_user_id')->nullable()->constrained('users')->restrictOnDelete();
             $table->foreignId('cancelled_by_user_id')->nullable()->constrained('users')->restrictOnDelete();
+            $table->string('supplier_name_snapshot', 160);
+            $table->string('supplier_tax_number_snapshot', 80)->nullable();
             $table->string('number', 48);
             $table->string('status', 32)->default('draft');
             $table->char('currency', 3);
