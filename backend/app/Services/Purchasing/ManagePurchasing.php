@@ -235,6 +235,149 @@ final class ManagePurchasing
         }, 3);
     }
 
+    public function updateDraft(Business $business, string $purchaseOrderId, array $data, int $actorUserId): object
+    {
+        return DB::transaction(function () use ($business, $purchaseOrderId, $data, $actorUserId): object {
+            $this->lockBusiness($business);
+            $order = $this->lockedPurchaseOrder($business, $purchaseOrderId);
+
+            if ($order->status !== 'draft') {
+                throw ValidationException::withMessages([
+                    'purchase_order' => 'Only a draft purchase order can be edited.',
+                ]);
+            }
+
+            if ((string) $order->location_id !== (string) $data['location_id']) {
+                throw ValidationException::withMessages([
+                    'location_id' => 'A draft purchase order cannot be moved to another location.',
+                ]);
+            }
+
+            $location = DB::table('locations')
+                ->where('business_id', $business->getKey())
+                ->where('id', $order->location_id)
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $location) {
+                throw ValidationException::withMessages([
+                    'location_id' => 'Reactivate the receiving location before editing this draft.',
+                ]);
+            }
+
+            $supplier = DB::table('suppliers')
+                ->where('business_id', $business->getKey())
+                ->where('id', $data['supplier_id'])
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $supplier) {
+                throw ValidationException::withMessages([
+                    'supplier_id' => 'Select an active supplier from this business.',
+                ]);
+            }
+
+            $items = collect($data['items'])->values();
+            $productIds = $items->pluck('product_id')->values();
+
+            $products = DB::table('products')
+                ->where('business_id', $business->getKey())
+                ->whereIn('id', $productIds)
+                ->where('is_active', true)
+                ->where('tracks_stock', true)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            if ($products->count() !== $productIds->count()) {
+                throw ValidationException::withMessages([
+                    'items' => 'Every purchase line must reference an active stock-tracked product in this business.',
+                ]);
+            }
+
+            $before = [
+                'supplier_id' => $order->supplier_id,
+                'supplier_name_snapshot' => $order->supplier_name_snapshot,
+                'total_cost' => (string) $order->total_cost,
+                'line_count' => DB::table('purchase_order_items')
+                    ->where('business_id', $business->getKey())
+                    ->where('purchase_order_id', $purchaseOrderId)
+                    ->count(),
+            ];
+
+            DB::table('purchase_order_items')
+                ->where('business_id', $business->getKey())
+                ->where('purchase_order_id', $purchaseOrderId)
+                ->delete();
+
+            $total = BigDecimal::zero();
+
+            foreach ($items as $item) {
+                $product = $products->get($item['product_id']);
+                $quantity = $this->positiveDecimal($item['quantity_ordered'], 'quantity_ordered');
+                $unitCost = $this->nonNegativeDecimal($item['unit_cost'], 'unit_cost');
+                $lineTotal = BigDecimal::of($quantity)
+                    ->multipliedBy($unitCost)
+                    ->toScale(self::SCALE, RoundingMode::HALF_UP);
+
+                $total = $total->plus($lineTotal);
+
+                DB::table('purchase_order_items')->insert([
+                    'id' => (string) Str::ulid(),
+                    'business_id' => $business->getKey(),
+                    'purchase_order_id' => $purchaseOrderId,
+                    'product_id' => $product->id,
+                    'product_name_snapshot' => $product->name,
+                    'sku_snapshot' => $product->sku,
+                    'quantity_ordered' => $quantity,
+                    'quantity_received' => '0.0000',
+                    'unit_cost' => $unitCost,
+                    'line_total' => (string) $lineTotal,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            $newTotal = (string) $total->toScale(self::SCALE, RoundingMode::HALF_UP);
+
+            DB::table('purchase_orders')
+                ->where('business_id', $business->getKey())
+                ->where('id', $purchaseOrderId)
+                ->update([
+                    'supplier_id' => $supplier->id,
+                    'supplier_name_snapshot' => $supplier->name,
+                    'supplier_tax_number_snapshot' => $supplier->tax_number,
+                    'total_cost' => $newTotal,
+                    'notes' => isset($data['notes']) && trim((string) $data['notes']) !== ''
+                        ? trim((string) $data['notes'])
+                        : null,
+                    'updated_at' => now(),
+                ]);
+
+            $this->event(
+                $business,
+                $purchaseOrderId,
+                $actorUserId,
+                'draft_updated',
+                'draft',
+                'draft',
+                [
+                    'previous_supplier_id' => $before['supplier_id'],
+                    'supplier_id' => $supplier->id,
+                    'previous_total_cost' => $before['total_cost'],
+                    'total_cost' => $newTotal,
+                    'previous_line_count' => $before['line_count'],
+                    'line_count' => $items->count(),
+                ],
+            );
+
+            return $this->purchaseOrder($business, $purchaseOrderId);
+        }, 3);
+    }
+
     public function place(Business $business, string $purchaseOrderId, int $actorUserId): object
     {
         return DB::transaction(function () use ($business, $purchaseOrderId, $actorUserId): object {
