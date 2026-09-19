@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { useAuth } from './features/auth/AuthProvider';
 import { LoginPage } from './pages/auth/LoginPage';
+import { InvitationAcceptPage } from './pages/auth/InvitationAcceptPage';
 
 const DashboardPage = lazy(() => import('./pages/dashboard/DashboardPage').then(module => ({ default: module.DashboardPage })));
 const PosPage = lazy(() => import('./pages/pos/PosPage').then(module => ({ default: module.PosPage })));
@@ -27,7 +28,7 @@ export default function App() {
   const { user, loading, activeBusiness, activeLocation } = useAuth();
 
   if (loading) return <RouteFallback />;
-  if (!user) return <Routes><Route path="*" element={<LoginPage />} /></Routes>;
+  if (!user) return <Routes><Route path="/join/:token" element={<InvitationAcceptPage />} /><Route path="*" element={<LoginPage />} /></Routes>;
 
   return <Suspense fallback={<RouteFallback />}>
     <Routes>
@@ -35,6 +36,7 @@ export default function App() {
       <Route path="/invoices/:invoiceId/receipt/:paper" element={<FiscalReceiptPage />} />
       <Route path="/invoice-credit-notes/:creditNoteId/print" element={<CreditNotePrintPage />} />
       <Route path="/invoice-credit-notes/:creditNoteId/receipt/:paper" element={<FiscalReceiptPage />} />
+      <Route path="/join/:token" element={<InvitationAcceptPage />} />
       <Route element={<AppShell key={`${activeBusiness?.id??'business'}:${activeLocation?.id??'location'}`} />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
