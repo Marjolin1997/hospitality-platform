@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Boxes, Check, Copy, FileText, Mail, MapPin, PackagePlus, Pencil, Plus, ReceiptText, Search, Settings2, ShieldCheck, Trash2, UserPlus, Users, WalletCards, X } from 'lucide-react';
+import { AlertTriangle, Boxes, FileText, MapPin, PackagePlus, Pencil, Plus, ReceiptText, Search, Settings2, WalletCards, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
-import { canDisableCategory, canDisableLocation, canManageRolePermissions } from '../../lib/managementGuards';
+import { canDisableCategory, canDisableLocation } from '../../lib/managementGuards';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { StaffAccessPage } from './StaffAccessPage';
 
@@ -17,16 +17,6 @@ type InvoiceCreditNote={id:string;number:string;status:string;fiscalization_stat
 type Invoice={id:string;number:string;status:string;fiscalization_status?:string;fiscalization_error?:string|null;nslf?:string|null;nivf?:string|null;currency:string;grand_total:string;customer_name:string|null;customer_tax_number?:string|null;order_number_snapshot?:string|null;issued_at:string|null;credit_note?:InvoiceCreditNote|null};
 type InvoiceableOrder={id:string;number:string;location_id:string;currency:string;grand_total:string;updated_at:string;fiscal_invoice_type:'CASH'|'NONCASH'|null};
 type FiscalRegister={id:string;name:string;code:string;fiscal_tcr_code:string|null};
-type Staff={id:number;name:string;email:string;status:string;role_id:string|null;role_name:string|null};
-type Role={id:string;name:string;slug:string};
-type StaffResponse={staff:Staff[];roles:Role[];assignable_role_ids:string[]};
-type StaffInvitation={id:string;email:string;role_id:string|null;role_name:string;role_name_snapshot:string;role_is_current:boolean;status:'pending'|'accepted'|'revoked'|'expired';expires_at:string;accepted_at:string|null;revoked_at:string|null;created_at:string;invited_by_name:string;accepted_by_name:string|null};
-type InvitationDraft={email:string;role_id:string;expires_in_days:number};
-type CreatedInvitation={id:string;email:string;role_id:string;role_name:string;status:string;expires_at:string;invitation_url:string};
-type PermissionItem={key:string;group:string;description:string|null};
-type ManagedRole={id:string;name:string;slug:string;is_system:boolean;member_count:number;permissions:PermissionItem[]};
-type RoleManagementResponse={roles:ManagedRole[];permissions:PermissionItem[]};
-type RoleDraft={id?:string;name:string;permissions:string[]};
 type FiscalizationProfile={provider:'direct_dpt';environment:'test'|'production';status:string;software_code:string|null;is_issuer_in_vat:boolean|null;endpoint:string|null;certificate_reference_configured:boolean;certificate_password_reference_configured:boolean;last_verified_at:string|null;last_test_verified_at:string|null;last_production_verified_at:string|null;production_activated_at:string|null;preflight_checked_at:string|null;preflight_status:string|null;certificate_not_before:string|null;certificate_not_after:string|null;certificate_fingerprint_sha256:string|null;ready_for_verification:boolean};
 type FiscalPreflightCheck={key:string;label:string;status:'pass'|'warning'|'fail';blocking:boolean;message:string};
 type FiscalPreflight={status:'ready'|'warning'|'blocked';blocking_failures:number;warnings:number;environment:'test'|'production'|null;can_fiscalize_test:boolean;can_activate_production:boolean;production_active:boolean;checked_at:string;checks:FiscalPreflightCheck[];certificate:null|{valid_now:boolean;not_before:string;not_after:string;days_remaining:number;fingerprint_sha256:string;subject_cn:string|null;issuer_cn:string|null;private_key_matches:boolean}};
