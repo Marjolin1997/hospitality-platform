@@ -367,6 +367,7 @@ final class ManageStaffInvitation
             ->where('sie.business_id', $business->getKey())
             ->where('sie.staff_invitation_id', $invitationId)
             ->orderByDesc('sie.occurred_at')
+            ->orderByDesc('sie.id')
             ->get([
                 'sie.id',
                 'sie.event',
