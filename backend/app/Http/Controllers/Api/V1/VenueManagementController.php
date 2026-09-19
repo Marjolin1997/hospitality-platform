@@ -214,6 +214,80 @@ final class VenueManagementController extends Controller
         ]);
     }
 
+    public function areaEvents(string $area): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->configurationEvents(app(Business::class), 'venue_area', $area),
+        ]);
+    }
+
+    public function tableEvents(string $table): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->configurationEvents(app(Business::class), 'venue_table', $table),
+        ]);
+    }
+
+    public function registerEvents(string $register): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->configurationEvents(app(Business::class), 'cash_register', $register),
+        ]);
+    }
+
+    private function configurationEvents(Business $business, string $entityType, string $entityId): array
+    {
+        $exists = match ($entityType) {
+            'venue_area' => DB::table('venue_areas')
+                ->where('business_id', $business->getKey())
+                ->where('id', $entityId)
+                ->exists(),
+            'venue_table' => DB::table('venue_tables')
+                ->where('business_id', $business->getKey())
+                ->where('id', $entityId)
+                ->exists(),
+            'cash_register' => DB::table('cash_registers')
+                ->where('business_id', $business->getKey())
+                ->where('id', $entityId)
+                ->exists(),
+            default => false,
+        };
+
+        abort_unless($exists, 404);
+
+        return DB::table('business_configuration_audits as bca')
+            ->join('users as actor', 'actor.id', '=', 'bca.performed_by_user_id')
+            ->where('bca.business_id', $business->getKey())
+            ->where('bca.entity_type', $entityType)
+            ->where('bca.entity_id', $entityId)
+            ->orderByDesc('bca.performed_at')
+            ->orderByDesc('bca.id')
+            ->limit(100)
+            ->get([
+                'bca.id',
+                'bca.action',
+                'bca.previous_state',
+                'bca.new_state',
+                'bca.performed_at',
+                'actor.id as performed_by_user_id',
+                'actor.name as performed_by_name',
+            ])
+            ->map(fn (object $event): array => [
+                'id' => $event->id,
+                'action' => $event->action,
+                'previous_state' => $event->previous_state
+                    ? json_decode($event->previous_state, true, 512, JSON_THROW_ON_ERROR)
+                    : null,
+                'new_state' => $event->new_state
+                    ? json_decode($event->new_state, true, 512, JSON_THROW_ON_ERROR)
+                    : null,
+                'performed_at' => $event->performed_at,
+                'performed_by_user_id' => (int) $event->performed_by_user_id,
+                'performed_by_name' => $event->performed_by_name,
+            ])
+            ->all();
+    }
+
     private function locationId(Request $request, Business $business): string
     {
         $locationId = $request->string('location_id')->toString();
