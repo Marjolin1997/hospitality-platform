@@ -475,6 +475,14 @@ export function VenueSetupPage() {
                       </button>
                       <button
                         type="button"
+                        className="secondary-button"
+                        onClick={() => setHistoryTarget({ type: 'area', id: area.id, name: area.name })}
+                      >
+                        <History size={14} />
+                        History
+                      </button>
+                      <button
+                        type="button"
                         className={area.is_active ? 'secondary-button subtle-danger' : 'secondary-button'}
                         disabled={toggleArea.isPending}
                         onClick={() => {
@@ -584,9 +592,23 @@ export function VenueSetupPage() {
                         </td>
                         <td>
                           <div className="inline-actions">
-                            <button type="button" className="secondary-button" onClick={() => openTableEditor(table)}>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              disabled={table.open_order_count > 0}
+                              title={table.open_order_count > 0 ? 'Close or move the live order before editing this table.' : undefined}
+                              onClick={() => openTableEditor(table)}
+                            >
                               <Pencil size={14} />
                               Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => setHistoryTarget({ type: 'table', id: table.id, name: table.name })}
+                            >
+                              <History size={14} />
+                              History
                             </button>
                             <button
                               type="button"
@@ -717,9 +739,23 @@ export function VenueSetupPage() {
                       </td>
                       <td>
                         <div className="inline-actions">
-                          <button type="button" className="secondary-button" onClick={() => openRegisterEditor(register)}>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={register.open_session_count > 0}
+                            title={register.open_session_count > 0 ? 'Close the open cash shift before editing this register.' : undefined}
+                            onClick={() => openRegisterEditor(register)}
+                          >
                             <Pencil size={14} />
                             Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => setHistoryTarget({ type: 'register', id: register.id, name: register.name })}
+                          >
+                            <History size={14} />
+                            History
                           </button>
                           <button
                             type="button"
