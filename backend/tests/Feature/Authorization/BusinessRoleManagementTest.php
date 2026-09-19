@@ -196,6 +196,37 @@ test('role managers cannot delegate or modify permissions above their own access
         ->and(Role::query()->whereKey($elevatedRole)->value('name'))->toBe('Elevated Custom');
 });
 
+test('custom roles with live staff invitations cannot be deleted until the invite is revoked', function (): void {
+    $business = brmBusiness('Role Invitation Guard');
+    $actor = brmActor($business);
+    $headers = brmHeaders($actor, $business);
+
+    $roleId = $this->postJson('/api/v1/roles', [
+        'name' => 'Invited Role',
+        'permissions' => ['orders.view'],
+    ], $headers)->assertCreated()->json('data.id');
+
+    $invitation = $this->postJson('/api/v1/staff-invitations', [
+        'email' => 'pending-role-invite@example.test',
+        'role_id' => $roleId,
+        'expires_in_days' => 7,
+    ], $headers)->assertCreated();
+
+    $this->deleteJson("/api/v1/roles/{$roleId}", [], $headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('role');
+
+    expect(Role::query()->whereKey($roleId)->exists())->toBeTrue();
+
+    $this->postJson('/api/v1/staff-invitations/'.$invitation->json('data.id').'/revoke', [], $headers)
+        ->assertOk();
+
+    $this->deleteJson("/api/v1/roles/{$roleId}", [], $headers)->assertOk();
+
+    expect(Role::query()->whereKey($roleId)->exists())->toBeFalse()
+        ->and(DB::table('staff_invitations')->where('id', $invitation->json('data.id'))->value('role_id'))->toBeNull();
+});
+
 test('system role templates are immutable through custom role endpoints', function (): void {
     $business = brmBusiness('System Roles');
     app(ProvisionBusinessRoles::class)->handle($business);
