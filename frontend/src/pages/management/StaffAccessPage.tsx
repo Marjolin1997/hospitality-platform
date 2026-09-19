@@ -243,11 +243,12 @@ export function StaffAccessPage() {
       role_id: string;
       status: string;
     }) => api.patch(`/staff/${member.id}`, { role_id, status }),
-    onSuccess: async () => {
+    onSuccess: async (_response, variables) => {
       setDeactivating(null);
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['staff', activeBusiness?.id] }),
         qc.invalidateQueries({ queryKey: ['roles', activeBusiness?.id] }),
+        qc.invalidateQueries({ queryKey: ['staff-events', activeBusiness?.id, variables.member.id] }),
       ]);
       await refreshUser();
     },
