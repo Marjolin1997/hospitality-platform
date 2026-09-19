@@ -22,3 +22,16 @@ export function canManageRolePermissions(
 
   return rolePermissions.every(permission => assignable.has(permission));
 }
+
+
+export function canDisableVenueArea(activeTableCount: number): boolean {
+  return activeTableCount === 0;
+}
+
+export function canDisableVenueTable(openOrderCount: number): boolean {
+  return openOrderCount === 0;
+}
+
+export function canDisableCashRegister(openSessionCount: number): boolean {
+  return openSessionCount === 0;
+}
