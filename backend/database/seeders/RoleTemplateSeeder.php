@@ -5,11 +5,11 @@ class RoleTemplateSeeder extends Seeder{
  public function run():void{
   $templates=[
    'owner'=>['*'],
-   'manager'=>['orders.*','payments.*','cash_sessions.*','cash_movements.create','cash_registers.manage','venue.manage','products.*','inventory.*','finance.view','expenses.*','invoices.*','fiscalization.view','fiscalization.issue','fiscalization.retry','reports.*','users.view'],
+   'manager'=>['orders.*','payments.*','cash_sessions.*','cash_movements.create','cash_registers.manage','venue.manage','products.*','inventory.*','purchasing.*','finance.view','expenses.*','invoices.*','fiscalization.view','fiscalization.issue','fiscalization.retry','reports.*','users.view'],
    'waiter'=>['orders.view','orders.create','orders.update','orders.send_to_station','orders.split','orders.merge','payments.collect','products.view'],
    'bartender'=>['orders.view','orders.prepare','products.view'],
    'cashier'=>['orders.view','payments.collect','payments.refund','cash_sessions.view','cash_sessions.open','cash_sessions.close','cash_movements.create','invoices.view'],
-   'inventory'=>['products.view','inventory.*'],
+   'inventory'=>['products.view','inventory.*','purchasing.view'],
    'finance'=>['orders.view','finance.view','expenses.*','invoices.*','fiscalization.view','fiscalization.issue','fiscalization.retry','reports.financial.view'],
   ];
   $all=Permission::all();
