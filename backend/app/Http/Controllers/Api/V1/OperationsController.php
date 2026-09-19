@@ -168,6 +168,47 @@ final class OperationsController extends Controller
         ]);
     }
 
+    public function staffEvents(int $user): JsonResponse
+    {
+        $business = app(Business::class);
+
+        $member = DB::table('business_user as bu')
+            ->join('users as u', 'u.id', '=', 'bu.user_id')
+            ->where('bu.business_id', $business->getKey())
+            ->where('bu.user_id', $user)
+            ->first(['u.id', 'u.name', 'u.email']);
+
+        abort_unless($member, 404);
+
+        $events = DB::table('business_membership_audits as bma')
+            ->join('users as actor', 'actor.id', '=', 'bma.performed_by_user_id')
+            ->where('bma.business_id', $business->getKey())
+            ->where('bma.target_user_id', $user)
+            ->orderByDesc('bma.performed_at')
+            ->orderByDesc('bma.id')
+            ->limit(100)
+            ->get([
+                'bma.id',
+                'bma.action',
+                'bma.previous_role_name',
+                'bma.previous_role_slug',
+                'bma.previous_status',
+                'bma.new_role_name',
+                'bma.new_role_slug',
+                'bma.new_status',
+                'bma.performed_at',
+                'actor.id as performed_by_user_id',
+                'actor.name as performed_by_name',
+            ]);
+
+        return response()->json([
+            'data' => [
+                'member' => $member,
+                'events' => $events,
+            ],
+        ]);
+    }
+
     public function updateStaff(Request $request, int $user, UpdateBusinessMembership $update): JsonResponse
     {
         $data = $request->validate([
