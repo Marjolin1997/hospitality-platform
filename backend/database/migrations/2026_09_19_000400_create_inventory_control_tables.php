@@ -14,12 +14,15 @@ return new class extends Migration {
             $table->foreignUlid('destination_location_id')->constrained('locations')->restrictOnDelete();
             $table->foreignId('created_by_user_id')->constrained('users')->restrictOnDelete();
             $table->string('number', 48);
+            $table->string('idempotency_key', 64);
+            $table->json('request_snapshot');
             $table->string('status', 24)->default('posted');
             $table->text('note');
             $table->timestamp('posted_at');
             $table->timestamps();
 
             $table->unique(['business_id', 'number'], 'inventory_transfer_number_uq');
+            $table->unique(['business_id', 'idempotency_key'], 'inventory_transfer_idempotency_uq');
             $table->index(['business_id', 'source_location_id', 'posted_at'], 'inventory_transfer_source_idx');
             $table->index(['business_id', 'destination_location_id', 'posted_at'], 'inventory_transfer_destination_idx');
         });
