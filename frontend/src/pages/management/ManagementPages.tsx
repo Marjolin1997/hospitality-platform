@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Boxes, FileText, MapPin, PackagePlus, Pencil, Plus, ReceiptText, Search, Settings2, WalletCards, X } from 'lucide-react';
+import { AlertTriangle, Boxes, FileText, History, MapPin, PackagePlus, Pencil, Plus, ReceiptText, Search, Settings2, WalletCards, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { canDisableCategory, canDisableLocation } from '../../lib/managementGuards';
@@ -10,7 +10,10 @@ type Product={id:string;name:string;sku:string|null;product_category_id:string|n
 type Category={id:string;name:string};
 type ManagedCategory={id:string;name:string;color:string|null;sort_order:number;is_active:boolean;product_count:number;active_product_count:number};
 type CategoryDraft={id?:string;name:string;color:string;sort_order:string};
-type ProductResponse={products:Product[];categories:Category[]};
+type PreparationStation={id:string;name:string;code:string;sort_order:number;is_active:boolean;product_count:number;active_product_count:number};
+type StationDraft={id?:string;name:string;code:string;sort_order:string};
+type StationEvent={id:string;action:string;previous_state:Record<string,unknown>|null;new_state:Record<string,unknown>|null;performed_at:string;performed_by_name:string};
+type ProductResponse={products:Product[];categories:Category[];stations:Array<{id:string;name:string;code:string}>};
 type Stock={id:string;name:string;sku:string|null;quantity_on_hand:string;reorder_level:string};
 type Expense={id:string;category:string;description:string;amount:string;currency:string;expense_date:string;status:string;reversal_of_expense_id?:string|null;reversal_reason?:string|null};
 type InvoiceCreditNote={id:string;number:string;status:string;fiscalization_status?:string;fiscalization_error?:string|null;nslf?:string|null;nivf?:string|null;currency:string;grand_total:string;reason:string;issued_at:string;refunded_total?:string};
