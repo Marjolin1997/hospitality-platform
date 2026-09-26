@@ -76,8 +76,48 @@ final class PurchasingController extends Controller
                 app(Business::class),
                 $supplier,
                 (bool) $request->validated('is_active'),
+                (int) $request->user()->id,
             ),
         ]);
+    }
+
+    public function supplierEvents(string $supplier): JsonResponse
+    {
+        $business = app(Business::class);
+
+        abort_unless(
+            DB::table('suppliers')
+                ->where('business_id', $business->getKey())
+                ->where('id', $supplier)
+                ->exists(),
+            404,
+        );
+
+        $rows = DB::table('business_configuration_audits as bca')
+            ->join('users as actor', 'actor.id', '=', 'bca.performed_by_user_id')
+            ->where('bca.business_id', $business->getKey())
+            ->where('bca.entity_type', 'supplier')
+            ->where('bca.entity_id', $supplier)
+            ->orderByDesc('bca.performed_at')
+            ->orderByDesc('bca.id')
+            ->get([
+                'bca.id',
+                'bca.action',
+                'bca.previous_state',
+                'bca.new_state',
+                'bca.performed_at',
+                'actor.name as performed_by_name',
+            ])
+            ->map(fn (object $event): array => [
+                'id' => $event->id,
+                'action' => $event->action,
+                'previous_state' => $event->previous_state ? json_decode($event->previous_state, true, 512, JSON_THROW_ON_ERROR) : null,
+                'new_state' => $event->new_state ? json_decode($event->new_state, true, 512, JSON_THROW_ON_ERROR) : null,
+                'performed_at' => $event->performed_at,
+                'performed_by_name' => $event->performed_by_name,
+            ]);
+
+        return response()->json(['data' => $rows]);
     }
 
     public function options(Request $request): JsonResponse
