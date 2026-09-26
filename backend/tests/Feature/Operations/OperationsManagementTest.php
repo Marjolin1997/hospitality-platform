@@ -341,3 +341,86 @@ test('business operational settings changes are audited once and remain tenant s
         ->assertJsonCount(0, 'data');
 });
 
+test('business profile updates are audited and protect transactional currency timezone and fiscal identity', function (): void {
+    $business = omtBusiness('Profile Audit');
+    $user = omtUser($business);
+    $headers = omtHeaders($user, $business);
+
+    $initial = [
+        'name' => 'Profile Audit Updated',
+        'legal_name' => 'Profile Audit GmbH',
+        'tax_number' => 'DE-TEST-1',
+        'currency' => 'USD',
+        'timezone' => 'Europe/Tirane',
+    ];
+
+    $this->putJson('/api/v1/settings/business-profile', $initial, $headers)
+        ->assertOk()
+        ->assertJsonPath('data.name', 'Profile Audit Updated')
+        ->assertJsonPath('data.currency', 'USD')
+        ->assertJsonPath('data.timezone', 'Europe/Tirane');
+
+    $this->putJson('/api/v1/settings/business-profile', $initial, $headers)->assertOk();
+
+    $events = $this->getJson('/api/v1/settings/business-profile/events', $headers)
+        ->assertOk()
+        ->json('data');
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]['action'])->toBe('updated')
+        ->and($events[0]['performed_by_name'])->toBe($user->name)
+        ->and($events[0]['new_state']['currency'])->toBe('USD');
+
+    $profileId = (string) Str::ulid();
+    DB::table('fiscalization_profiles')->insert([
+        'id' => $profileId,
+        'business_id' => $business->id,
+        'provider' => 'direct_dpt',
+        'environment' => 'production',
+        'status' => 'active',
+        'preflight_checked_at' => now(),
+        'preflight_status' => 'ready',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $renamed = [...$initial, 'name' => 'Profile Audit Renamed'];
+
+    $this->putJson('/api/v1/settings/business-profile', $renamed, $headers)
+        ->assertOk()
+        ->assertJsonPath('data.name', 'Profile Audit Renamed');
+
+    $profile = DB::table('fiscalization_profiles')->where('id', $profileId)->first();
+    expect($profile->preflight_checked_at)->toBeNull()
+        ->and($profile->preflight_status)->toBeNull();
+
+    $location = omtLocation($business, 'PA1');
+    omtOrder($business, $location, $user, 'open');
+
+    $this->putJson('/api/v1/settings/business-profile', [
+        ...$renamed,
+        'currency' => 'GBP',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('currency');
+
+    $this->putJson('/api/v1/settings/business-profile', [
+        ...$renamed,
+        'timezone' => 'Europe/London',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('timezone');
+
+    DB::table('fiscalization_profiles')->where('id', $profileId)->update([
+        'production_activated_at' => now(),
+        'production_activated_by_user_id' => $user->id,
+        'updated_at' => now(),
+    ]);
+
+    $this->putJson('/api/v1/settings/business-profile', [
+        ...$renamed,
+        'tax_number' => 'DE-TEST-2',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('tax_number');
+
+    expect(DB::table('businesses')->where('id', $business->id)->value('tax_number'))->toBe('DE-TEST-1');
+});
+
