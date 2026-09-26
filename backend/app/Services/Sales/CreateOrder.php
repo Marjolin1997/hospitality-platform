@@ -8,6 +8,8 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\VenueTable;
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -19,6 +21,28 @@ final class CreateOrder
     public function execute(Business $business, User $user, array $payload): Order
     {
         return DB::transaction(function () use ($business, $user, $payload): Order {
+            DB::table('businesses')
+                ->where('id', $business->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $requestSnapshot = $this->requestSnapshot($payload);
+            $existing = Order::query()
+                ->forBusiness($business)
+                ->where('idempotency_key', $payload['idempotency_key'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing) {
+                if ($existing->request_snapshot !== $requestSnapshot) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => 'This idempotency key was already used for a different order request.',
+                    ]);
+                }
+
+                return $existing->load('items');
+            }
+
             $location = Location::query()
                 ->whereKey($payload['location_id'])
                 ->where('business_id', $business->getKey())
@@ -42,6 +66,19 @@ final class CreateOrder
 
                 if (! $table) {
                     throw ValidationException::withMessages(['venue_table_id' => 'The selected table is not available at this location.']);
+                }
+
+                $occupied = Order::query()
+                    ->forBusiness($business)
+                    ->where('location_id', $location->getKey())
+                    ->where('venue_table_id', $table->getKey())
+                    ->whereIn('status', ['open', 'payment_due'])
+                    ->exists();
+
+                if ($occupied) {
+                    throw ValidationException::withMessages([
+                        'venue_table_id' => 'This table already has an active order. Open that order instead of creating another one.',
+                    ]);
                 }
             }
 
@@ -90,6 +127,8 @@ final class CreateOrder
                 'venue_table_id' => $table?->getKey(),
                 'opened_by_user_id' => $user->getKey(),
                 'number' => $this->nextNumber($business, $businessNow),
+                'idempotency_key' => $payload['idempotency_key'],
+                'request_snapshot' => $requestSnapshot,
                 'type' => $payload['type'],
                 'status' => 'open',
                 'currency' => $business->currency,
@@ -126,6 +165,29 @@ final class CreateOrder
 
             return $order->load('items');
         }, attempts: 3);
+    }
+
+    private function requestSnapshot(array $payload): array
+    {
+        return [
+            'location_id' => (string) $payload['location_id'],
+            'venue_table_id' => isset($payload['venue_table_id']) && $payload['venue_table_id'] !== ''
+                ? (string) $payload['venue_table_id']
+                : null,
+            'type' => (string) $payload['type'],
+            'items' => collect($payload['items'])
+                ->map(fn (array $item): array => [
+                    'product_id' => (string) $item['product_id'],
+                    'quantity' => (string) BigDecimal::of((string) $item['quantity'])
+                        ->toScale(4, RoundingMode::HALF_UP),
+                    'note' => array_key_exists('note', $item) && $item['note'] !== null
+                        ? (string) $item['note']
+                        : null,
+                ])
+                ->sortBy('product_id')
+                ->values()
+                ->all(),
+        ];
     }
 
     private function nextNumber(Business $business, CarbonImmutable $businessNow): string
