@@ -12,6 +12,7 @@ const navigation=[
   {label:'Inventory',to:'/inventory',icon:Boxes,permissions:['inventory.view','inventory.receive','inventory.transfer','inventory.adjust'],section:'Management'},
   {label:'Purchasing',to:'/purchasing',icon:Truck,permissions:['purchasing.view','purchasing.manage'],section:'Management'},
   {label:'Finance',to:'/finance',icon:BarChart3,permissions:['finance.view','expenses.view','expenses.create','expenses.approve'],section:'Management'},
+  {label:'Reports',to:'/reports',icon:BarChart3,permissions:['reports.operational.view','reports.financial.view'],section:'Management'},
   {label:'Invoices',to:'/invoices',icon:FileText,permissions:['invoices.view','invoices.issue'],section:'Management'},
   {label:'Venue Setup',to:'/venue-setup',icon:LayoutGrid,permissions:['venue.manage','cash_registers.manage'],section:'Management'},
   {label:'Staff',to:'/staff',icon:Users,permissions:['users.view','users.manage','roles.manage'],section:'Administration'},
