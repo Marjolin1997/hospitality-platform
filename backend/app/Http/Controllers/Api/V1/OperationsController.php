@@ -136,7 +136,7 @@ final class OperationsController extends Controller
     public function adjustInventory(Request $request): JsonResponse
     {
         $business=app(Business::class); $location=$this->location($request,$business);
-        $data=$request->validate(['product_id'=>['required','string'],'quantity_delta'=>['required','numeric','not_in:0'],'note'=>['nullable','string','max:500']]);
+        $data=$request->validate(['idempotency_key'=>['required','string','min:16','max:64'],'product_id'=>['required','string'],'quantity_delta'=>['required','numeric','not_in:0'],'note'=>['nullable','string','max:500']]);
         $this->operations->adjustInventory($business, $location, $data, $request->user()->id);
         return response()->json(['message'=>'Inventory adjusted.']);
     }
