@@ -547,6 +547,91 @@ final class OperationsService
         ];
     }
 
+    public function updateBusinessProfile(Business $business, array $data, int $actorUserId): object
+    {
+        return DB::transaction(function () use ($business, $data, $actorUserId): object {
+            $record = DB::table('businesses')
+                ->where('id', $business->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $before = [
+                'name' => $record->name,
+                'legal_name' => $record->legal_name,
+                'tax_number' => $record->tax_number,
+                'currency' => $record->currency,
+                'timezone' => $record->timezone,
+            ];
+
+            $currencyChanged = $record->currency !== $data['currency'];
+            $timezoneChanged = $record->timezone !== $data['timezone'];
+            $taxNumberChanged = (string) ($record->tax_number ?? '') !== (string) ($data['tax_number'] ?? '');
+
+            if ($currencyChanged || $timezoneChanged) {
+                $transactionalHistory = DB::table('orders')->where('business_id', $business->id)->exists()
+                    || DB::table('payments')->where('business_id', $business->id)->exists()
+                    || DB::table('expenses')->where('business_id', $business->id)->exists()
+                    || DB::table('invoices')->where('business_id', $business->id)->exists()
+                    || DB::table('purchase_orders')->where('business_id', $business->id)->exists()
+                    || DB::table('inventory_movements')->where('business_id', $business->id)->exists();
+
+                if ($transactionalHistory) {
+                    throw ValidationException::withMessages([
+                        $currencyChanged ? 'currency' : 'timezone' => 'Currency and timezone are locked after transactional history exists. Use a controlled migration workflow instead.',
+                    ]);
+                }
+            }
+
+            if ($taxNumberChanged) {
+                $productionFiscalization = DB::table('fiscalization_profiles')
+                    ->where('business_id', $business->id)
+                    ->whereNotNull('production_activated_at')
+                    ->exists();
+
+                if ($productionFiscalization) {
+                    throw ValidationException::withMessages([
+                        'tax_number' => 'Tax number cannot be changed after production fiscalization activation without a dedicated fiscal migration workflow.',
+                    ]);
+                }
+            }
+
+            $after = [
+                'name' => trim($data['name']),
+                'legal_name' => $data['legal_name'] ?? null,
+                'tax_number' => $data['tax_number'] ?? null,
+                'currency' => $data['currency'],
+                'timezone' => $data['timezone'],
+            ];
+
+            if ($before !== $after) {
+                DB::table('businesses')->where('id', $business->id)->update([
+                    ...$after,
+                    'updated_at' => now(),
+                ]);
+
+                DB::table('fiscalization_profiles')
+                    ->where('business_id', $business->id)
+                    ->update([
+                        'preflight_checked_at' => null,
+                        'preflight_status' => null,
+                        'updated_at' => now(),
+                    ]);
+
+                $this->configurationAudit(
+                    $business,
+                    $actorUserId,
+                    'business_profile',
+                    (string) $business->id,
+                    'updated',
+                    $before,
+                    $after,
+                );
+            }
+
+            return DB::table('businesses')->where('id', $business->id)->firstOrFail();
+        }, attempts: 3);
+    }
+
     public function updateSettings(Business $business, array $data, ?int $actorUserId = null): void
     {
         DB::transaction(function () use ($business, $data, $actorUserId): void {
