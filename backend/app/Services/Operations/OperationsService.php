@@ -280,13 +280,24 @@ final class OperationsService
 
     public function adjustInventory(Business $business, string $locationId, array $data, int $userId): void
     {
-        abort_unless(
-            DB::table('products')->where('business_id', $business->id)->where('id', $data['product_id'])->where('tracks_stock', true)->exists(),
-            422,
-            'Invalid stock product.'
-        );
-
         DB::transaction(function () use ($business, $locationId, $data, $userId): void {
+            DB::table('businesses')
+                ->where('id', $business->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $product = DB::table('products')
+                ->where('business_id', $business->id)
+                ->where('id', $data['product_id'])
+                ->lockForUpdate()
+                ->first();
+
+            if (! $product || ! (bool) $product->tracks_stock) {
+                throw ValidationException::withMessages([
+                    'product_id' => 'Select a stock-tracked product from this business.',
+                ]);
+            }
+
             $stock = DB::table('inventory_stocks')
                 ->where(['business_id' => $business->id, 'location_id' => $locationId, 'product_id' => $data['product_id']])
                 ->lockForUpdate()
