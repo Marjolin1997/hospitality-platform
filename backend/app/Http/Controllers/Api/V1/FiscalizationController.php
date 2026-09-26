@@ -34,7 +34,7 @@ final class FiscalizationController extends Controller
 
     public function update(SaveFiscalizationProfileRequest $request, SaveFiscalizationProfile $save): JsonResponse
     {
-        $profile = $save->execute(app(Business::class), $request->validated());
+        $profile = $save->execute(app(Business::class), $request->validated(), (int) $request->user()->id);
 
         return response()->json([
             'data' => $this->resource($profile),
@@ -51,7 +51,7 @@ final class FiscalizationController extends Controller
     public function updateSetup(SaveFiscalizationSetupRequest $request, SaveFiscalizationSetup $setup): JsonResponse
     {
         return response()->json([
-            'data' => $setup->execute(app(Business::class), $request->validated()),
+            'data' => $setup->execute(app(Business::class), $request->validated(), (int) $request->user()->id),
         ]);
     }
 
@@ -60,6 +60,46 @@ final class FiscalizationController extends Controller
         return response()->json([
             'data' => $preflight->run(app(Business::class)),
         ]);
+    }
+
+    public function configurationEvents(): JsonResponse
+    {
+        $business = app(Business::class);
+
+        $rows = DB::table('business_configuration_audits as bca')
+            ->join('users as actor', 'actor.id', '=', 'bca.performed_by_user_id')
+            ->where('bca.business_id', $business->id)
+            ->whereIn('bca.entity_type', [
+                'fiscalization_profile',
+                'fiscalization_setup',
+                'fiscalization_activation',
+            ])
+            ->orderByDesc('bca.performed_at')
+            ->orderByDesc('bca.id')
+            ->get([
+                'bca.id',
+                'bca.entity_type',
+                'bca.action',
+                'bca.previous_state',
+                'bca.new_state',
+                'bca.performed_at',
+                'actor.name as performed_by_name',
+            ])
+            ->map(fn (object $event): array => [
+                'id' => $event->id,
+                'entity_type' => $event->entity_type,
+                'action' => $event->action,
+                'previous_state' => $event->previous_state
+                    ? json_decode($event->previous_state, true, 512, JSON_THROW_ON_ERROR)
+                    : null,
+                'new_state' => $event->new_state
+                    ? json_decode($event->new_state, true, 512, JSON_THROW_ON_ERROR)
+                    : null,
+                'performed_at' => $event->performed_at,
+                'performed_by_name' => $event->performed_by_name,
+            ]);
+
+        return response()->json(['data' => $rows]);
     }
 
     public function monitoring(FiscalizationMonitoring $monitoring): JsonResponse
