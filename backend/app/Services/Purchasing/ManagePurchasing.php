@@ -134,6 +134,27 @@ final class ManagePurchasing
         return DB::transaction(function () use ($business, $data, $actorUserId): object {
             $this->lockBusiness($business);
 
+            $requestSnapshot = $this->purchaseOrderCreateSnapshot($data);
+            $existingOrder = DB::table('purchase_orders')
+                ->where('business_id', $business->getKey())
+                ->where('idempotency_key', $data['idempotency_key'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($existingOrder) {
+                $storedSnapshot = $existingOrder->request_snapshot
+                    ? json_decode($existingOrder->request_snapshot, true, 512, JSON_THROW_ON_ERROR)
+                    : null;
+
+                if ($storedSnapshot !== $requestSnapshot) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => 'This idempotency key was already used for a different purchase order request.',
+                    ]);
+                }
+
+                return $existingOrder;
+            }
+
             $location = DB::table('locations')
                 ->where('business_id', $business->getKey())
                 ->where('id', $data['location_id'])
@@ -193,6 +214,8 @@ final class ManagePurchasing
                 'supplier_name_snapshot' => $supplier->name,
                 'supplier_tax_number_snapshot' => $supplier->tax_number,
                 'number' => $number,
+                'idempotency_key' => $data['idempotency_key'],
+                'request_snapshot' => json_encode($requestSnapshot, JSON_THROW_ON_ERROR),
                 'status' => 'draft',
                 'currency' => $business->currency,
                 'total_cost' => '0.0000',
@@ -830,6 +853,28 @@ final class ManagePurchasing
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    private function purchaseOrderCreateSnapshot(array $data): array
+    {
+        return [
+            'location_id' => (string) $data['location_id'],
+            'supplier_id' => (string) $data['supplier_id'],
+            'notes' => isset($data['notes']) && trim((string) $data['notes']) !== ''
+                ? trim((string) $data['notes'])
+                : null,
+            'items' => collect($data['items'])
+                ->map(fn (array $item): array => [
+                    'product_id' => (string) $item['product_id'],
+                    'quantity_ordered' => (string) BigDecimal::of((string) $item['quantity_ordered'])
+                        ->toScale(self::SCALE, RoundingMode::HALF_UP),
+                    'unit_cost' => (string) BigDecimal::of((string) $item['unit_cost'])
+                        ->toScale(self::SCALE, RoundingMode::HALF_UP),
+                ])
+                ->sortBy('product_id')
+                ->values()
+                ->all(),
+        ];
     }
 
     private function receiptSnapshot(array $data): array
