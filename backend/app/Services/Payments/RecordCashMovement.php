@@ -18,6 +18,11 @@ final class RecordCashMovement
     public function execute(Business $business, User $user, CashSession $session, array $payload): CashMovement
     {
         return DB::transaction(function () use ($business, $user, $session, $payload): CashMovement {
+            DB::table('businesses')
+                ->where('id', $business->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
             $session = CashSession::query()
                 ->forBusiness($business)
                 ->whereKey($session->getKey())
