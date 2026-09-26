@@ -197,6 +197,7 @@ export function InventoryPage() {
   const [adjusting, setAdjusting] = useState<Stock | null>(null);
   const [adjustmentDelta, setAdjustmentDelta] = useState('1');
   const [adjustmentNote, setAdjustmentNote] = useState('');
+  const [adjustmentIdempotencyKey, setAdjustmentIdempotencyKey] = useState(() => crypto.randomUUID());
   const [reorderTarget, setReorderTarget] = useState<Stock | null>(null);
   const [reorderLevel, setReorderLevelValue] = useState('0');
   const [reorderHistoryTarget, setReorderHistoryTarget] = useState<Stock | null>(null);
@@ -302,8 +303,9 @@ export function InventoryPage() {
   };
 
   const adjust = useMutation({
-    mutationFn: ({ id, delta, note }: { id: string; delta: number; note: string }) =>
+    mutationFn: ({ id, delta, note, idempotencyKey }: { id: string; delta: number; note: string; idempotencyKey: string }) =>
       api.post('/inventory/adjustments', {
+        idempotency_key: idempotencyKey,
         location_id: activeLocation!.id,
         product_id: id,
         quantity_delta: delta,
@@ -313,6 +315,7 @@ export function InventoryPage() {
       setAdjusting(null);
       setAdjustmentDelta('1');
       setAdjustmentNote('');
+      setAdjustmentIdempotencyKey(crypto.randomUUID());
       await invalidateInventory();
     },
   });
@@ -570,7 +573,7 @@ export function InventoryPage() {
           <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Item</th><th>SKU</th><th>On hand</th><th>Reorder</th><th>Health</th><th>Action</th></tr></thead><tbody>{filteredStocks.map(stock => {
             const isLow = Number(stock.quantity_on_hand) <= Number(stock.reorder_level);
             const isOut = Number(stock.quantity_on_hand) <= 0;
-            return <tr key={stock.id}><td><strong>{stock.name}</strong></td><td>{stock.sku ?? '—'}</td><td><strong>{qty(stock.quantity_on_hand)}</strong></td><td>{qty(stock.reorder_level)}</td><td><span className={`status-badge ${isOut ? 'danger' : isLow ? 'warning' : 'success'}`}>{isOut ? 'Out of stock' : isLow ? 'Low stock' : 'Healthy'}</span></td><td><div className="inline-actions inventory-stock-actions">{canAdjust && <button type="button" className="secondary-button" onClick={() => { adjust.reset(); setAdjusting(stock); setAdjustmentDelta('1'); setAdjustmentNote(''); }}><PackagePlus size={15} /> Adjust</button>}{canAdjust && <button type="button" className="secondary-button" onClick={() => { saveReorderLevel.reset(); setReorderTarget(stock); setReorderLevelValue(stock.reorder_level); }}><Settings2 size={15} /> Reorder level</button>}<button type="button" className="secondary-button" onClick={() => setReorderHistoryTarget(stock)}><History size={15} /> History</button></div></td></tr>;
+            return <tr key={stock.id}><td><strong>{stock.name}</strong></td><td>{stock.sku ?? '—'}</td><td><strong>{qty(stock.quantity_on_hand)}</strong></td><td>{qty(stock.reorder_level)}</td><td><span className={`status-badge ${isOut ? 'danger' : isLow ? 'warning' : 'success'}`}>{isOut ? 'Out of stock' : isLow ? 'Low stock' : 'Healthy'}</span></td><td><div className="inline-actions inventory-stock-actions">{canAdjust && <button type="button" className="secondary-button" onClick={() => { adjust.reset(); setAdjusting(stock); setAdjustmentDelta('1'); setAdjustmentNote(''); setAdjustmentIdempotencyKey(crypto.randomUUID()); }}><PackagePlus size={15} /> Adjust</button>}{canAdjust && <button type="button" className="secondary-button" onClick={() => { saveReorderLevel.reset(); setReorderTarget(stock); setReorderLevelValue(stock.reorder_level); }}><Settings2 size={15} /> Reorder level</button>}<button type="button" className="secondary-button" onClick={() => setReorderHistoryTarget(stock)}><History size={15} /> History</button></div></td></tr>;
           })}</tbody></table></div>
         )}
       </section>
