@@ -521,6 +521,28 @@ final class ManagePurchasing
     {
         return DB::transaction(function () use ($business, $purchaseOrderId, $data, $actorUserId): object {
             $this->lockBusiness($business);
+
+            $requestSnapshot = $this->receiptSnapshot($data);
+            $existingReceipt = DB::table('goods_receipts')
+                ->where('business_id', $business->getKey())
+                ->where('idempotency_key', $data['idempotency_key'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($existingReceipt) {
+                $storedSnapshot = json_decode($existingReceipt->request_snapshot, true, 512, JSON_THROW_ON_ERROR);
+                $sameRequest = (string) $existingReceipt->purchase_order_id === $purchaseOrderId
+                    && $storedSnapshot === $requestSnapshot;
+
+                if (! $sameRequest) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => 'This idempotency key was already used for a different goods receipt request.',
+                    ]);
+                }
+
+                return $this->goodsReceipt($business, (string) $existingReceipt->id);
+            }
+
             $order = $this->lockedPurchaseOrder($business, $purchaseOrderId);
 
             if (! in_array($order->status, ['ordered', 'partially_received'], true)) {
@@ -567,6 +589,8 @@ final class ManagePurchasing
                 'purchase_order_id' => $purchaseOrderId,
                 'received_by_user_id' => $actorUserId,
                 'number' => $receiptNumber,
+                'idempotency_key' => $data['idempotency_key'],
+                'request_snapshot' => json_encode($requestSnapshot, JSON_THROW_ON_ERROR),
                 'note' => isset($data['note']) && trim((string) $data['note']) !== ''
                     ? trim((string) $data['note'])
                     : null,
@@ -806,6 +830,26 @@ final class ManagePurchasing
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    private function receiptSnapshot(array $data): array
+    {
+        $items = collect($data['items'])
+            ->map(fn (array $item): array => [
+                'purchase_order_item_id' => (string) $item['purchase_order_item_id'],
+                'quantity_received' => (string) BigDecimal::of((string) $item['quantity_received'])
+                    ->toScale(self::SCALE, RoundingMode::HALF_UP),
+            ])
+            ->sortBy('purchase_order_item_id')
+            ->values()
+            ->all();
+
+        return [
+            'note' => isset($data['note']) && trim((string) $data['note']) !== ''
+                ? trim((string) $data['note'])
+                : null,
+            'items' => $items,
+        ];
     }
 
     private function nextNumber(
