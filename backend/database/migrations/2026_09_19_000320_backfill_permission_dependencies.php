@@ -15,6 +15,8 @@ return new class extends Migration {
         'orders.override_price' => ['orders.view'],
         'orders.split' => ['orders.view'],
         'orders.merge' => ['orders.view'],
+        'payments.collect' => ['orders.view'],
+        'payments.refund' => ['orders.view'],
         'products.manage' => ['products.view'],
         'stations.manage' => ['stations.view'],
         'purchasing.manage' => ['purchasing.view'],
@@ -26,6 +28,8 @@ return new class extends Migration {
         'expenses.view' => ['finance.view'],
         'invoices.issue' => ['invoices.view'],
         'invoices.correct' => ['invoices.view'],
+        'fiscalization.issue' => ['invoices.view'],
+        'fiscalization.retry' => ['invoices.view'],
         'users.manage' => ['users.view'],
     ];
 
