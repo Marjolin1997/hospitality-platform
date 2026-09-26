@@ -108,6 +108,130 @@ function icmStock(Business $business, Location $location, string $productId, str
     ]);
 }
 
+test('reorder thresholds are configuration changes with immutable audit history', function (): void {
+    $business = icmBusiness('Reorder Audit');
+    $location = icmLocation($business, 'Main');
+    $user = icmUser($business, ['inventory.view', 'inventory.adjust']);
+    $headers = icmHeaders($user, $business);
+    $product = icmProduct($business, 'Tonic Water');
+
+    $this->putJson("/api/v1/inventory/products/{$product}/reorder-level", [
+        'location_id' => $location->id,
+        'reorder_level' => '3.5000',
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.product_id', $product)
+        ->assertJsonPath('data.reorder_level', '3.5000');
+
+    expect((string) DB::table('inventory_stocks')
+        ->where('business_id', $business->id)
+        ->where('location_id', $location->id)
+        ->where('product_id', $product)
+        ->value('quantity_on_hand'))->toBe('0.0000')
+        ->and((string) DB::table('inventory_stocks')
+        ->where('business_id', $business->id)
+        ->where('location_id', $location->id)
+        ->where('product_id', $product)
+        ->value('reorder_level'))->toBe('3.5000')
+        ->and(DB::table('inventory_movements')->where('product_id', $product)->count())->toBe(0);
+
+    $this->putJson("/api/v1/inventory/products/{$product}/reorder-level", [
+        'location_id' => $location->id,
+        'reorder_level' => '5',
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.reorder_level', '5.0000');
+
+    // A no-op must not create duplicate audit noise.
+    $this->putJson("/api/v1/inventory/products/{$product}/reorder-level", [
+        'location_id' => $location->id,
+        'reorder_level' => '5.0000',
+    ], $headers)->assertOk();
+
+    $audits = DB::table('business_configuration_audits')
+        ->where('business_id', $business->id)
+        ->where('location_id', $location->id)
+        ->where('entity_type', 'inventory_stock')
+        ->where('action', 'reorder_level_changed')
+        ->get();
+
+    expect($audits)->toHaveCount(2);
+
+    $history = $this->getJson(
+        "/api/v1/inventory/products/{$product}/reorder-level/events?location_id={$location->id}",
+        $headers,
+    )->assertOk()->json('data');
+
+    expect($history)->toHaveCount(2)
+        ->and($history[0]['new_state']['reorder_level'])->toBe('5.0000')
+        ->and($history[0]['performed_by_name'])->toBe('Inventory User');
+
+    $other = icmBusiness('Reorder Foreign');
+    $otherLocation = icmLocation($other, 'Other');
+    $otherUser = icmUser($other, ['inventory.view', 'inventory.adjust']);
+
+    $this->getJson(
+        "/api/v1/inventory/products/{$product}/reorder-level/events?location_id={$otherLocation->id}",
+        icmHeaders($otherUser, $other),
+    )->assertNotFound();
+});
+
+test('stock tracking cannot be disabled while physical stock or a draft count still exists', function (): void {
+    $business = icmBusiness('Tracking Safety');
+    $location = icmLocation($business, 'Main');
+    $user = icmUser($business, ['inventory.view', 'inventory.adjust', 'products.view', 'products.manage']);
+    $headers = icmHeaders($user, $business);
+    $product = icmProduct($business, 'Tracked Product');
+
+    icmStock($business, $location, $product, '5.0000');
+    $row = DB::table('products')->where('id', $product)->firstOrFail();
+
+    $payload = [
+        'id' => $product,
+        'name' => $row->name,
+        'category_id' => null,
+        'sku' => $row->sku,
+        'sale_price' => $row->sale_price,
+        'tax_rate' => $row->tax_rate,
+        'unit_code' => $row->unit_code,
+        'unit_label' => $row->unit_label,
+        'preparation_station' => null,
+        'tracks_stock' => false,
+        'is_active' => true,
+    ];
+
+    $this->postJson('/api/v1/management/products', $payload, $headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('tracks_stock');
+
+    $this->postJson('/api/v1/inventory/adjustments', [
+        'location_id' => $location->id,
+        'product_id' => $product,
+        'quantity_delta' => '-5',
+        'note' => 'Verified zero balance before policy change',
+    ], $headers)->assertOk();
+
+    $countId = $this->postJson('/api/v1/inventory/counts', [
+        'location_id' => $location->id,
+    ], $headers)->assertCreated()->json('data.id');
+
+    $this->postJson('/api/v1/management/products', $payload, $headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('tracks_stock');
+
+    $this->postJson("/api/v1/inventory/counts/{$countId}/cancel", [
+        'reason' => 'Close count before stock policy change',
+    ], $headers)->assertOk();
+
+    $this->postJson('/api/v1/management/products', $payload, $headers)
+        ->assertOk()
+        ->assertJsonPath('data.tracks_stock', false);
+
+    expect(DB::table('inventory_stocks')
+        ->where('business_id', $business->id)
+        ->where('product_id', $product)
+        ->where('quantity_on_hand', '!=', 0)
+        ->exists())->toBeFalse();
+});
+
 test('stock transfer posts balanced immutable ledger movements across locations', function (): void {
     $business = icmBusiness('Transfer Balance');
     $source = icmLocation($business, 'Source');
