@@ -105,7 +105,6 @@ export function InvoicePrintPage(){
           </tr></thead>
           <tbody>
             {invoice.lines.map(line=>{
-              const qty=Number(line.quantity)||1;
               const taxFactor=1+(Number(line.tax_rate)/100);
               const unitNet=taxFactor===0?Number(line.unit_price):Number(line.unit_price)/taxFactor;
               return <tr key={line.id}>
