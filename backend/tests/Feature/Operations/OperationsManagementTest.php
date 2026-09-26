@@ -433,3 +433,44 @@ test('business profile updates are audited and protect transactional currency ti
     expect(DB::table('businesses')->where('id', $business->id)->value('tax_number'))->toBe('DE-TEST-1');
 });
 
+test('expense posting retries are exactly once and idempotency keys are payload-bound', function (): void {
+    $business = omtBusiness('Expense Idempotency');
+    $location = omtLocation($business, 'EXI');
+    $user = omtUser($business);
+    $headers = omtHeaders($user, $business);
+    $key = (string) Str::uuid();
+
+    $payload = [
+        'idempotency_key' => $key,
+        'location_id' => $location->id,
+        'category' => 'Supplies',
+        'description' => 'Retry-safe paper goods',
+        'amount' => '12.5000',
+        'expense_date' => now($business->timezone)->toDateString(),
+    ];
+
+    $first = $this->postJson('/api/v1/expenses', $payload, $headers)->assertCreated();
+    $second = $this->postJson('/api/v1/expenses', $payload, $headers)->assertCreated();
+
+    expect($second->json('data.id'))->toBe($first->json('data.id'))
+        ->and(DB::table('expenses')
+            ->where('business_id', $business->id)
+            ->where('idempotency_key', $key)
+            ->count())->toBe(1)
+        ->and((string) DB::table('expenses')
+            ->where('business_id', $business->id)
+            ->where('idempotency_key', $key)
+            ->value('amount'))->toBe('12.5000');
+
+    $this->postJson('/api/v1/expenses', [
+        ...$payload,
+        'amount' => '13.5000',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('idempotency_key');
+
+    expect(DB::table('expenses')
+        ->where('business_id', $business->id)
+        ->where('idempotency_key', $key)
+        ->count())->toBe(1);
+});
+
