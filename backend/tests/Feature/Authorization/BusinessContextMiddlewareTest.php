@@ -7,6 +7,7 @@ use App\Services\Authorization\ProvisionBusinessRoles;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleTemplateSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Sanctum;
 
@@ -31,6 +32,14 @@ beforeEach(function (): void {
         'tenant',
         'permission:orders.create',
     ])->get('/api/test/orders-create', fn () => response()->json([
+        'allowed' => true,
+    ]));
+
+    Route::middleware([
+        'auth:sanctum',
+        'tenant',
+        'permission:payments.collect,cash_sessions.view',
+    ])->get('/api/test/cash-read', fn () => response()->json([
         'allowed' => true,
     ]));
 });
@@ -195,6 +204,53 @@ test('permission middleware denies a business role without the requested permiss
         ->assertJson([
             'message' => 'You do not have permission to perform this action.',
         ]);
+});
+
+test('permission middleware accepts any matching permission from a shared read gate', function (): void {
+    $business = createRbacBusiness('Any Permission Business');
+    $user = createRbacUser('cash-view-only@example.test');
+
+    $role = Role::query()->create([
+        'business_id' => $business->getKey(),
+        'name' => 'Cash Viewer',
+        'slug' => 'cash-viewer',
+        'is_system' => false,
+    ]);
+
+    $permissionId = DB::table('permissions')->where('key', 'cash_sessions.view')->value('id');
+    DB::table('permission_role')->insert([
+        'role_id' => $role->getKey(),
+        'permission_id' => $permissionId,
+    ]);
+
+    attachRbacMembership($user, $business, $role);
+    Sanctum::actingAs($user);
+
+    $this->withHeader('X-Business-Id', $business->getKey())
+        ->getJson('/api/test/cash-read')
+        ->assertOk()
+        ->assertJson(['allowed' => true]);
+
+    $this->withHeader('X-Business-Id', $business->getKey())
+        ->getJson('/api/test/orders-create')
+        ->assertForbidden();
+});
+
+test('permission middleware denies shared read gate when none of the permissions match', function (): void {
+    $business = createRbacBusiness('Any Permission Deny');
+    $user = createRbacUser('cash-read-denied@example.test');
+
+    attachRbacMembership(
+        $user,
+        $business,
+        businessRole($business, 'bartender')
+    );
+
+    Sanctum::actingAs($user);
+
+    $this->withHeader('X-Business-Id', $business->getKey())
+        ->getJson('/api/test/cash-read')
+        ->assertForbidden();
 });
 
 test('membership in one business cannot authorize another business', function (): void {
