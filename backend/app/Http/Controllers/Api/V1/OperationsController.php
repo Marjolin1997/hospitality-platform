@@ -79,7 +79,7 @@ final class OperationsController extends Controller
 
     public function saveCategory(SaveProductCategoryRequest $request): JsonResponse
     {
-        $category = $this->operations->saveCategory(app(Business::class), $request->validated());
+        $category = $this->operations->saveCategory(app(Business::class), $request->validated(), (int) $request->user()->id);
 
         return response()->json(
             ['data' => $category],
@@ -94,19 +94,34 @@ final class OperationsController extends Controller
                 app(Business::class),
                 $category,
                 (bool) $request->validated('is_active'),
+                (int) $request->user()->id,
             ),
+        ]);
+    }
+
+    public function categoryEvents(string $category): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->configurationEvents('product_category', $category, 'product_categories'),
+        ]);
+    }
+
+    public function productEvents(string $product): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->configurationEvents('product', $product, 'products'),
         ]);
     }
 
     public function saveProduct(SaveProductRequest $request): JsonResponse
     {
-        $product = $this->operations->saveProduct(app(Business::class), $request->validated());
+        $product = $this->operations->saveProduct(app(Business::class), $request->validated(), (int) $request->user()->id);
         return response()->json(['data'=>$product], $request->filled('id') ? 200 : 201);
     }
 
     public function setProductStatus(SetProductStatusRequest $request, string $product): JsonResponse
     {
-        return response()->json(['data'=>$this->operations->setProductStatus(app(Business::class), $product, (bool)$request->validated('is_active'))]);
+        return response()->json(['data'=>$this->operations->setProductStatus(app(Business::class), $product, (bool)$request->validated('is_active'), (int) $request->user()->id)]);
     }
 
     public function inventory(Request $request): JsonResponse
@@ -243,6 +258,44 @@ final class OperationsController extends Controller
         $business=app(Business::class); $data=$request->validate(['receipt_footer'=>['nullable','string','max:500'],'service_charge_enabled'=>['required','boolean'],'low_stock_alerts'=>['required','boolean']]);
         $this->operations->updateSettings($business,$data);
         return response()->json(['message'=>'Settings saved.']);
+    }
+
+    private function configurationEvents(string $entityType, string $entityId, string $table): array
+    {
+        $business = app(Business::class);
+
+        abort_unless(
+            DB::table($table)
+                ->where('business_id', $business->id)
+                ->where('id', $entityId)
+                ->exists(),
+            404,
+        );
+
+        return DB::table('business_configuration_audits as bca')
+            ->join('users as actor', 'actor.id', '=', 'bca.performed_by_user_id')
+            ->where('bca.business_id', $business->id)
+            ->where('bca.entity_type', $entityType)
+            ->where('bca.entity_id', $entityId)
+            ->orderByDesc('bca.performed_at')
+            ->orderByDesc('bca.id')
+            ->get([
+                'bca.id',
+                'bca.action',
+                'bca.previous_state',
+                'bca.new_state',
+                'bca.performed_at',
+                'actor.name as performed_by_name',
+            ])
+            ->map(fn (object $event): array => [
+                'id' => $event->id,
+                'action' => $event->action,
+                'previous_state' => $event->previous_state ? json_decode($event->previous_state, true, 512, JSON_THROW_ON_ERROR) : null,
+                'new_state' => $event->new_state ? json_decode($event->new_state, true, 512, JSON_THROW_ON_ERROR) : null,
+                'performed_at' => $event->performed_at,
+                'performed_by_name' => $event->performed_by_name,
+            ])
+            ->all();
     }
 
     private function location(Request $request, Business $business): string
