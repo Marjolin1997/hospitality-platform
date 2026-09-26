@@ -77,6 +77,16 @@ test('fiscalization profile stores only a secret reference and never exposes it'
         ->assertJsonPath('data.certificate_password_reference_configured', true)
         ->assertJsonMissingPath('data.certificate_secret_ref')
         ->assertJsonMissingPath('data.certificate_password_secret_ref');
+
+    $history = $this->getJson('/api/v1/fiscalization/configuration-events', $headers)
+        ->assertOk()
+        ->assertJsonPath('data.0.entity_type', 'fiscalization_profile')
+        ->assertJsonPath('data.0.action', 'created');
+
+    expect(json_encode($history->json()))->not->toContain('env:FISCAL_CERTIFICATE_P12')
+        ->and(json_encode($history->json()))->not->toContain('env:FISCAL_CERTIFICATE_PASSWORD')
+        ->and(json_encode($history->json()))->not->toContain('certificate_secret_ref')
+        ->and(json_encode($history->json()))->not->toContain('certificate_password_secret_ref');
 });
 
 test('raw certificates and non-https endpoints are rejected before persistence', function (): void {
