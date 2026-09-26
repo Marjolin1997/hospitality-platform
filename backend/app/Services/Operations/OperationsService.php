@@ -191,6 +191,20 @@ final class OperationsService
                 }
             }
 
+            if ($isActive && $product->preparation_station) {
+                $station = DB::table('preparation_stations')
+                    ->where('business_id', $business->id)
+                    ->where('code', $product->preparation_station)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $station || ! (bool) $station->is_active) {
+                    throw ValidationException::withMessages([
+                        'product' => 'Reassign this product to an active preparation station, remove its routing, or reactivate the station before enabling it.',
+                    ]);
+                }
+            }
+
             if ($isActive && $product->product_category_id) {
                 $category = DB::table('product_categories')
                     ->where('business_id', $business->id)
