@@ -245,6 +245,7 @@ test('stock transfer posts balanced immutable ledger movements across locations'
     icmStock($business, $source, $milk, '8.0000');
 
     $response = $this->postJson('/api/v1/inventory/transfers', [
+        'idempotency_key' => (string) Str::uuid(),
         'source_location_id' => $source->id,
         'destination_location_id' => $destination->id,
         'note' => 'Replenish second bar',
@@ -283,6 +284,48 @@ test('stock transfer posts balanced immutable ledger movements across locations'
         ->toBe(['transfer_out', 'transfer_out']);
 });
 
+test('stock transfer idempotency prevents duplicate balance movement on retries', function (): void {
+    $business = icmBusiness('Transfer Idempotency');
+    $source = icmLocation($business, 'Source');
+    $destination = icmLocation($business, 'Destination');
+    $user = icmUser($business, ['inventory.view', 'inventory.transfer']);
+    $headers = icmHeaders($user, $business);
+    $product = icmProduct($business, 'Retry Product');
+
+    icmStock($business, $source, $product, '10.0000');
+
+    $key = (string) Str::uuid();
+    $payload = [
+        'idempotency_key' => $key,
+        'source_location_id' => $source->id,
+        'destination_location_id' => $destination->id,
+        'note' => 'Retry-safe transfer',
+        'items' => [['product_id' => $product, 'quantity' => '4']],
+    ];
+
+    $first = $this->postJson('/api/v1/inventory/transfers', $payload, $headers)
+        ->assertCreated();
+
+    $second = $this->postJson('/api/v1/inventory/transfers', $payload, $headers)
+        ->assertCreated();
+
+    expect($second->json('data.id'))->toBe($first->json('data.id'))
+        ->and(DB::table('inventory_transfers')->count())->toBe(1)
+        ->and(DB::table('inventory_transfer_items')->count())->toBe(1)
+        ->and(DB::table('inventory_movements')->where('reference_type', 'inventory_transfer')->count())->toBe(2)
+        ->and((string) DB::table('inventory_stocks')->where('location_id', $source->id)->where('product_id', $product)->value('quantity_on_hand'))->toBe('6.0000')
+        ->and((string) DB::table('inventory_stocks')->where('location_id', $destination->id)->where('product_id', $product)->value('quantity_on_hand'))->toBe('4.0000');
+
+    $this->postJson('/api/v1/inventory/transfers', [
+        ...$payload,
+        'note' => 'Different transfer payload',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('idempotency_key');
+
+    expect(DB::table('inventory_transfers')->count())->toBe(1)
+        ->and((string) DB::table('inventory_stocks')->where('location_id', $source->id)->where('product_id', $product)->value('quantity_on_hand'))->toBe('6.0000');
+});
+
 test('over transfer rolls back every stock and ledger mutation', function (): void {
     $business = icmBusiness('Transfer Rollback');
     $source = icmLocation($business, 'Source');
@@ -294,6 +337,7 @@ test('over transfer rolls back every stock and ledger mutation', function (): vo
     icmStock($business, $source, $product, '2.0000');
 
     $this->postJson('/api/v1/inventory/transfers', [
+        'idempotency_key' => (string) Str::uuid(),
         'source_location_id' => $source->id,
         'destination_location_id' => $destination->id,
         'note' => 'Too much transfer',
@@ -453,6 +497,7 @@ test('inventory control permissions and tenant boundaries are enforced', functio
     $viewerHeaders = icmHeaders($viewer, $a);
     $this->getJson('/api/v1/inventory/movements?location_id='.$a1->id, $viewerHeaders)->assertOk();
     $this->postJson('/api/v1/inventory/transfers', [
+        'idempotency_key' => (string) Str::uuid(),
         'source_location_id' => $a1->id,
         'destination_location_id' => $a2->id,
         'note' => 'Blocked transfer',
@@ -474,6 +519,7 @@ test('inventory control permissions and tenant boundaries are enforced', functio
     $this->getJson("/api/v1/inventory/counts/{$countId}/events", $foreignHeaders)->assertNotFound();
 
     $this->postJson('/api/v1/inventory/transfers', [
+        'idempotency_key' => (string) Str::uuid(),
         'source_location_id' => $b1->id,
         'destination_location_id' => $a2->id,
         'note' => 'Cross tenant destination',
