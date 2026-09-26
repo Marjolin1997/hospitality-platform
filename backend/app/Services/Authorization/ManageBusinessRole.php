@@ -11,6 +11,16 @@ use Illuminate\Validation\ValidationException;
 
 final class ManageBusinessRole
 {
+    private const PERMISSION_DEPENDENCIES = [
+        'products.manage' => ['products.view'],
+        'stations.manage' => ['stations.view'],
+        'purchasing.manage' => ['purchasing.view'],
+        'inventory.receive' => ['inventory.view'],
+        'inventory.transfer' => ['inventory.view'],
+        'inventory.adjust' => ['inventory.view'],
+        'users.manage' => ['users.view'],
+    ];
+
     public function __construct(private readonly RoleDelegationPolicy $delegation) {}
 
     public function create(Business $business, array $data, int $performedByUserId): Role
@@ -184,8 +194,21 @@ final class ManageBusinessRole
             ->map(fn ($key) => trim((string) $key))
             ->filter()
             ->unique()
-            ->sort()
             ->values();
+
+        $expanded = $keys->all();
+        do {
+            $before = count($expanded);
+            foreach ($expanded as $key) {
+                foreach (self::PERMISSION_DEPENDENCIES[$key] ?? [] as $dependency) {
+                    if (! in_array($dependency, $expanded, true)) {
+                        $expanded[] = $dependency;
+                    }
+                }
+            }
+        } while (count($expanded) !== $before);
+
+        $keys = collect($expanded)->unique()->sort()->values();
 
         $permissions = Permission::query()
             ->whereIn('key', $keys)
