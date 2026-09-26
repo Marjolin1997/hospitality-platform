@@ -14,7 +14,7 @@ const CreditNotePrintPage = lazy(() => import('./pages/invoices/CreditNotePrintP
 const FiscalReceiptPage = lazy(() => import('./pages/invoices/FiscalReceiptPage').then(module => ({ default: module.FiscalReceiptPage })));
 
 const ProductsPage = lazy(() => import('./pages/management/ManagementPages').then(module => ({ default: module.ProductsPage })));
-const InventoryPage = lazy(() => import('./pages/management/ManagementPages').then(module => ({ default: module.InventoryPage })));
+const InventoryPage = lazy(() => import('./pages/management/InventoryPage').then(module => ({ default: module.InventoryPage })));
 const FinancePage = lazy(() => import('./pages/management/ManagementPages').then(module => ({ default: module.FinancePage })));
 const InvoicesPage = lazy(() => import('./pages/management/ManagementPages').then(module => ({ default: module.InvoicesPage })));
 const StaffPage = lazy(() => import('./pages/management/ManagementPages').then(module => ({ default: module.StaffPage })));
