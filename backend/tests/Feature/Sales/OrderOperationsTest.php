@@ -27,7 +27,29 @@ function ooProduct(Business $b,string $name='Coffee',string $price='10.0000'): s
 function ooOrder(Business $b,Location $l,User $u,string $product,string $status='open',?string $table=null): array { $oid=(string)Str::ulid();$iid=(string)Str::ulid(); DB::table('orders')->insert(['id'=>$oid,'business_id'=>$b->id,'location_id'=>$l->id,'venue_table_id'=>$table,'opened_by_user_id'=>$u->id,'number'=>'OPS-'.Str::random(8),'type'=>$table?'table':'takeaway','status'=>$status,'currency'=>'EUR','subtotal'=>'10.0000','discount_total'=>'0.0000','tax_total'=>'0.0000','grand_total'=>'10.0000','opened_at'=>now(),'created_at'=>now(),'updated_at'=>now()]); DB::table('order_items')->insert(['id'=>$iid,'business_id'=>$b->id,'order_id'=>$oid,'product_id'=>$product,'product_name_snapshot'=>'Coffee','quantity'=>'1.0000','unit_price'=>'10.0000','tax_rate'=>'0.0000','line_subtotal'=>'10.0000','line_tax'=>'0.0000','line_total'=>'10.0000','preparation_station'=>'bar','preparation_status'=>'pending','created_at'=>now(),'updated_at'=>now()]); return [$oid,$iid]; }
 function ooTable(Business $b,Location $l,string $name): string { $id=(string)Str::ulid(); DB::table('venue_tables')->insert(['id'=>$id,'business_id'=>$b->id,'location_id'=>$l->id,'name'=>$name,'capacity'=>4,'is_active'=>true,'created_at'=>now(),'updated_at'=>now()]); return $id; }
 
-test('unsent items can be added edited and removed with exact total recalculation', function(){ [$b,$l,$u,$h]=ooContext();$p=ooProduct($b);[$o,$i]=ooOrder($b,$l,$u,$p);$p2=ooProduct($b,'Tea','5.0000'); $this->postJson("/api/v1/orders/$o/items",['product_id'=>$p2,'quantity'=>'2'],$h)->assertOk()->assertJsonPath('data.grand_total','20.0000'); $added=DB::table('order_items')->where('order_id',$o)->where('product_id',$p2)->value('id'); $this->patchJson("/api/v1/order-items/$added",['quantity'=>'3'],$h)->assertOk()->assertJsonPath('data.grand_total','25.0000'); $this->deleteJson("/api/v1/order-items/$added",['reason'=>'Guest changed selection'],$h)->assertOk()->assertJsonPath('data.grand_total','10.0000'); expect(DB::table('order_items')->where('id',$added)->value('preparation_status'))->toBe('voided'); });
+test('unsent items can be added edited and removed with exact total recalculation', function(){ [$b,$l,$u,$h]=ooContext();$p=ooProduct($b);[$o,$i]=ooOrder($b,$l,$u,$p);$p2=ooProduct($b,'Tea','5.0000'); $this->postJson("/api/v1/orders/$o/items",['idempotency_key'=>(string)Str::uuid(),'product_id'=>$p2,'quantity'=>'2'],$h)->assertOk()->assertJsonPath('data.grand_total','20.0000'); $added=DB::table('order_items')->where('order_id',$o)->where('product_id',$p2)->value('id'); $this->patchJson("/api/v1/order-items/$added",['quantity'=>'3'],$h)->assertOk()->assertJsonPath('data.grand_total','25.0000'); $this->deleteJson("/api/v1/order-items/$added",['reason'=>'Guest changed selection'],$h)->assertOk()->assertJsonPath('data.grand_total','10.0000'); expect(DB::table('order_items')->where('id',$added)->value('preparation_status'))->toBe('voided'); });
+
+test('add item retries are exactly once and idempotency keys are payload-bound', function(){
+    [$b,$l,$u,$h]=ooContext();
+    $p=ooProduct($b);
+    [$o,$i]=ooOrder($b,$l,$u,$p);
+    $p2=ooProduct($b,'Retry Tea','5.0000');
+    $key=(string)Str::uuid();
+    $payload=['idempotency_key'=>$key,'product_id'=>$p2,'quantity'=>'2'];
+
+    $first=$this->postJson("/api/v1/orders/$o/items",$payload,$h)->assertOk();
+    $second=$this->postJson("/api/v1/orders/$o/items",$payload,$h)->assertOk();
+
+    expect($second->json('data.grand_total'))->toBe($first->json('data.grand_total'))
+        ->and(DB::table('order_items')->where('order_id',$o)->where('idempotency_key',$key)->count())->toBe(1)
+        ->and(DB::table('order_items')->where('order_id',$o)->count())->toBe(2)
+        ->and(DB::table('orders')->where('id',$o)->value('grand_total'))->toBe('20.0000');
+
+    $this->postJson("/api/v1/orders/$o/items",[...$payload,'quantity'=>'3'],$h)
+        ->assertStatus(422)->assertJsonValidationErrors('idempotency_key');
+
+    expect(DB::table('order_items')->where('order_id',$o)->count())->toBe(2);
+});
 
 test('sent items cannot be silently edited or removed', function(){ [$b,$l,$u,$h]=ooContext();$p=ooProduct($b);[$o,$i]=ooOrder($b,$l,$u,$p); DB::table('order_items')->where('id',$i)->update(['preparation_status'=>'sent','sent_at'=>now()]); $this->patchJson("/api/v1/order-items/$i",['quantity'=>'2'],$h)->assertStatus(422); $this->deleteJson("/api/v1/order-items/$i",['reason'=>'Changed after send'],$h)->assertStatus(422); });
 
@@ -38,7 +60,7 @@ test('table move is tenant location occupancy and audit safe', function(){ [$b,$
 test('any active payment attempt freezes every commercial mutation and preparation send', function(){
     [$b,$l,$u,$h]=ooContext(); $p=ooProduct($b); [$o,$i]=ooOrder($b,$l,$u,$p,'payment_due'); $p2=ooProduct($b,'Tea','5.0000'); $from=ooTable($b,$l,'T1'); $to=ooTable($b,$l,'T2'); DB::table('orders')->where('id',$o)->update(['type'=>'table','venue_table_id'=>$from]);
     DB::table('payments')->insert(['id'=>(string)Str::ulid(),'business_id'=>$b->id,'order_id'=>$o,'collected_by_user_id'=>$u->id,'method'=>'card','status'=>'pending','amount'=>'1.0000','currency'=>'EUR','amount_base'=>'1.0000','base_currency'=>'EUR','exchange_rate'=>'1.0000000000','idempotency_key'=>'ops-'.Str::uuid(),'paid_at'=>now(),'created_at'=>now(),'updated_at'=>now()]);
-    $this->postJson("/api/v1/orders/$o/items",['product_id'=>$p2,'quantity'=>'1'],$h)->assertStatus(422);
+    $this->postJson("/api/v1/orders/$o/items",['idempotency_key'=>(string)Str::uuid(),'product_id'=>$p2,'quantity'=>'1'],$h)->assertStatus(422);
     $this->patchJson("/api/v1/order-items/$i",['quantity'=>'2'],$h)->assertStatus(422);
     $this->deleteJson("/api/v1/order-items/$i",['reason'=>'Too late removal'],$h)->assertStatus(422);
     $this->putJson("/api/v1/orders/$o/discount",['amount'=>'1','reason'=>'Too late discount'],$h)->assertStatus(422);
