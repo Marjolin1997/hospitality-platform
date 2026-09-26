@@ -22,20 +22,72 @@ final class OrderOperationsService
     public function addItem(Business $business, Order $order, array $payload): Order
     {
         return DB::transaction(function () use ($business, $order, $payload): Order {
-            $order = $this->lockEditableOrder($business, $order);
+            $order = Order::query()
+                ->forBusiness($business)
+                ->whereKey($order->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $quantity = $this->positiveDecimal($payload['quantity'], 'quantity');
+            $snapshot = [
+                'order_id' => (string) $order->getKey(),
+                'product_id' => (string) $payload['product_id'],
+                'quantity' => $quantity,
+                'note' => array_key_exists('note', $payload) && $payload['note'] !== null
+                    ? (string) $payload['note']
+                    : null,
+            ];
+
+            $existing = OrderItem::query()
+                ->forBusiness($business)
+                ->where('idempotency_key', $payload['idempotency_key'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing) {
+                if ((string) $existing->order_id !== (string) $order->getKey()
+                    || $existing->request_snapshot !== $snapshot) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => 'This idempotency key was already used for a different add-item request.',
+                    ]);
+                }
+
+                return $order->fresh(['items', 'payments.refunds']);
+            }
+
+            if (! in_array($order->status, self::EDITABLE_ORDER_STATES, true)) {
+                throw ValidationException::withMessages([
+                    'order' => 'This order is not editable in its current state.',
+                ]);
+            }
+
             $this->assertPaymentNotStarted($order, 'Items cannot be added after payment has started.');
 
-            $product = Product::query()->forBusiness($business)->whereKey($payload['product_id'])->where('is_active', true)->lockForUpdate()->firstOrFail();
-            $quantity = $this->positiveDecimal($payload['quantity'], 'quantity');
+            $product = Product::query()
+                ->forBusiness($business)
+                ->whereKey($payload['product_id'])
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->firstOrFail();
+
             $line = $this->lineAmounts($quantity, (string) $product->sale_price, (string) $product->tax_rate);
 
             $order->items()->create([
-                'business_id' => $business->getKey(), 'product_id' => $product->getKey(), 'product_name_snapshot' => $product->name,
-                'sku_snapshot' => $product->sku, 'quantity' => $quantity,
+                'business_id' => $business->getKey(),
+                'product_id' => $product->getKey(),
+                'product_name_snapshot' => $product->name,
+                'sku_snapshot' => $product->sku,
+                'quantity' => $quantity,
                 'unit_price' => (string) BigDecimal::of((string) $product->sale_price)->toScale(4, RoundingMode::HALF_UP),
                 'tax_rate' => (string) BigDecimal::of((string) $product->tax_rate)->toScale(4, RoundingMode::HALF_UP),
-                ...$line, 'preparation_station' => $product->preparation_station, 'preparation_status' => 'pending', 'note' => $payload['note'] ?? null,
+                ...$line,
+                'preparation_station' => $product->preparation_station,
+                'preparation_status' => 'pending',
+                'note' => $snapshot['note'],
+                'idempotency_key' => $payload['idempotency_key'],
+                'request_snapshot' => $snapshot,
             ]);
+
             return $this->recalculate($order);
         }, attempts: 3);
     }
