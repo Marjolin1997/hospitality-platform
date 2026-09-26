@@ -70,11 +70,14 @@ return new class extends Migration {
             $table->foreignUlid('purchase_order_id')->constrained()->restrictOnDelete();
             $table->foreignId('received_by_user_id')->constrained('users')->restrictOnDelete();
             $table->string('number', 48);
+            $table->string('idempotency_key', 64);
+            $table->json('request_snapshot');
             $table->text('note')->nullable();
             $table->timestamp('received_at');
             $table->timestamps();
 
             $table->unique(['business_id', 'number'], 'goods_receipt_business_number_uq');
+            $table->unique(['business_id', 'idempotency_key'], 'goods_receipt_business_idempotency_uq');
             $table->index(['business_id', 'purchase_order_id', 'received_at'], 'goods_receipt_po_time_idx');
         });
 
