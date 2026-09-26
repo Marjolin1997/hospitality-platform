@@ -132,6 +132,25 @@ final class ManageInventoryControl
         return DB::transaction(function () use ($business, $data, $actorUserId): object {
             $this->lockBusiness($business);
 
+            $requestSnapshot = $this->transferSnapshot($data);
+            $existingTransfer = DB::table('inventory_transfers')
+                ->where('business_id', $business->getKey())
+                ->where('idempotency_key', $data['idempotency_key'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($existingTransfer) {
+                $storedSnapshot = json_decode($existingTransfer->request_snapshot, true, 512, JSON_THROW_ON_ERROR);
+
+                if ($storedSnapshot !== $requestSnapshot) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => 'This idempotency key was already used for a different stock transfer request.',
+                    ]);
+                }
+
+                return $existingTransfer;
+            }
+
             if ((string) $data['source_location_id'] === (string) $data['destination_location_id']) {
                 throw ValidationException::withMessages([
                     'destination_location_id' => 'Source and destination locations must be different.',
@@ -224,6 +243,8 @@ final class ManageInventoryControl
                 'destination_location_id' => $data['destination_location_id'],
                 'created_by_user_id' => $actorUserId,
                 'number' => $number,
+                'idempotency_key' => $data['idempotency_key'],
+                'request_snapshot' => json_encode($requestSnapshot, JSON_THROW_ON_ERROR),
                 'status' => 'posted',
                 'note' => trim((string) $data['note']),
                 'posted_at' => now(),
@@ -744,6 +765,24 @@ final class ManageInventoryControl
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    private function transferSnapshot(array $data): array
+    {
+        return [
+            'source_location_id' => (string) $data['source_location_id'],
+            'destination_location_id' => (string) $data['destination_location_id'],
+            'note' => trim((string) $data['note']),
+            'items' => collect($data['items'])
+                ->map(fn (array $item): array => [
+                    'product_id' => (string) $item['product_id'],
+                    'quantity' => (string) BigDecimal::of((string) $item['quantity'])
+                        ->toScale(self::SCALE, RoundingMode::HALF_UP),
+                ])
+                ->sortBy('product_id')
+                ->values()
+                ->all(),
+        ];
     }
 
     private function countEvent(
