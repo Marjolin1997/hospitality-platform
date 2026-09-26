@@ -15,6 +15,7 @@ final class StoreExpenseRequest extends FormRequest
         $business = app(Business::class);
 
         return [
+            'idempotency_key' => ['required', 'string', 'min:16', 'max:64'],
             'location_id' => ['nullable','string', Rule::exists('locations','id')->where(fn ($q) => $q->where('business_id',$business->id)->where('is_active',true))],
             'category' => ['required','string','max:80'],
             'description' => ['required','string','max:255'],
