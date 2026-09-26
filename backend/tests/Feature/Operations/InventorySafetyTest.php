@@ -65,6 +65,7 @@ test('manual inventory adjustment cannot make stock negative', function (): void
     [$business, $location, $product, $headers] = inventorySafetyContext();
 
     $this->postJson('/api/v1/inventory/adjustments', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id,
         'product_id' => $product,
         'quantity_delta' => '5.0000',
@@ -72,6 +73,7 @@ test('manual inventory adjustment cannot make stock negative', function (): void
     ], $headers)->assertOk();
 
     $this->postJson('/api/v1/inventory/adjustments', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id,
         'product_id' => $product,
         'quantity_delta' => '-6.0000',
@@ -95,6 +97,7 @@ test('failed negative opening adjustment creates neither stock nor ledger moveme
     [$business, $location, $product, $headers] = inventorySafetyContext();
 
     $this->postJson('/api/v1/inventory/adjustments', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id,
         'product_id' => $product,
         'quantity_delta' => '-1.0000',
