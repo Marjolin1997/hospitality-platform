@@ -84,12 +84,27 @@ type RoleDraft = {
 };
 
 const permissionDependencies: Record<string, string[]> = {
+  'orders.view': ['products.view'],
+  'orders.create': ['orders.view'],
+  'orders.update': ['orders.view'],
+  'orders.send_to_station': ['orders.view'],
+  'orders.prepare': ['orders.view'],
+  'orders.cancel': ['orders.view'],
+  'orders.apply_discount': ['orders.view'],
+  'orders.override_price': ['orders.view'],
+  'orders.split': ['orders.view'],
+  'orders.merge': ['orders.view'],
   'products.manage': ['products.view'],
   'stations.manage': ['stations.view'],
   'purchasing.manage': ['purchasing.view'],
   'inventory.receive': ['inventory.view'],
   'inventory.transfer': ['inventory.view'],
   'inventory.adjust': ['inventory.view'],
+  'expenses.create': ['finance.view'],
+  'expenses.approve': ['finance.view'],
+  'expenses.view': ['finance.view'],
+  'invoices.issue': ['invoices.view'],
+  'invoices.correct': ['invoices.view'],
   'users.manage': ['users.view'],
 };
 
