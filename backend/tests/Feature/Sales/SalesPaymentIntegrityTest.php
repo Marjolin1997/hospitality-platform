@@ -503,6 +503,20 @@ test('manual cash movement retries are exactly once and idempotency keys are pay
             ->where('idempotency_key', $key)
             ->sum('amount_base'))->toBe('5.0000');
 
+    $this->postJson("/api/v1/cash-sessions/{$session}/close", [
+        'location_id' => $location->id,
+        'counted_cash' => '25.0000',
+    ], $headers)->assertOk();
+
+    $closedReplay = $this->postJson("/api/v1/cash-sessions/{$session}/movements", $payload, $headers)
+        ->assertCreated();
+
+    expect($closedReplay->json('data.id'))->toBe($first->json('data.id'))
+        ->and(DB::table('cash_movements')
+            ->where('business_id', $business->id)
+            ->where('idempotency_key', $key)
+            ->count())->toBe(1);
+
     $this->postJson("/api/v1/cash-sessions/{$session}/movements", [
         ...$payload,
         'amount' => '6.0000',
