@@ -34,8 +34,12 @@ final class OperationsController extends Controller
             ->select('products.*','product_categories.name as category_name')->orderBy('products.name')->get();
         $categories = DB::table('product_categories')->where('business_id',$business->id)->where('is_active',true)
             ->select('id','name')->orderBy('sort_order')->orderBy('name')->get();
-        $stations = DB::table('preparation_stations')->where('business_id',$business->id)->where('is_active',true)
-            ->select('id','name','code')->orderBy('sort_order')->orderBy('name')->get();
+        $stations = DB::table('preparation_stations')->where('business_id',$business->id)
+            ->select('id','name','code','is_active')->orderByDesc('is_active')->orderBy('sort_order')->orderBy('name')->get()
+            ->map(function (object $station): object {
+                $station->is_active = (bool) $station->is_active;
+                return $station;
+            });
         return response()->json(['data'=>['products'=>$rows,'categories'=>$categories,'stations'=>$stations]]);
     }
 
