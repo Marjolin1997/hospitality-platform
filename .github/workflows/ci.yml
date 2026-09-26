@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend lint, test and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+  backend:
+    name: Laravel test suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare environment
+        run: cp backend/.env.example backend/.env
+
+      - name: Start test infrastructure
+        run: docker compose up -d mysql redis
+
+      - name: Wait for MySQL
+        run: |
+          for attempt in {1..30}; do
+            if docker compose exec -T mysql mysqladmin ping -h localhost -uroot -proot --silent; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs mysql
+          exit 1
+
+      - name: Create isolated test database
+        run: |
+          docker compose exec -T mysql mysql -uroot -proot -e "
+            CREATE DATABASE IF NOT EXISTS hospitality_test;
+            GRANT ALL PRIVILEGES ON hospitality_test.* TO 'hospitality'@'%';
+            FLUSH PRIVILEGES;
+          "
+
+      - name: Build backend image
+        run: docker compose build backend
+
+      - name: Install backend dependencies and generate application key
+        run: |
+          docker compose run --rm -T backend sh -lc "
+            composer install --no-interaction --prefer-dist &&
+            php artisan key:generate --force
+          "
+
+      - name: Run Laravel tests against hospitality_test
+        run: docker compose run --rm -T backend ./bin/test
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs --no-color mysql redis
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down -v
