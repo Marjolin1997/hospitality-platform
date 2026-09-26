@@ -109,6 +109,15 @@ test('location management creates updates lists and audits tenant state', functi
         ->and($audits[1]->action)->toBe('updated')
         ->and(json_decode($audits[1]->previous_state, true)['name'])->toBe('Main Branch')
         ->and(json_decode($audits[1]->new_state, true)['name'])->toBe('Central Bar');
+
+    $history = $this->getJson("/api/v1/management/locations/{$locationId}/events", $headers)
+        ->assertOk()
+        ->json('data');
+
+    expect($history)->toHaveCount(2)
+        ->and($history[0]['action'])->toBe('updated')
+        ->and($history[0]['performed_by_name'])->toBe($user->name)
+        ->and($history[0]['new_state']['name'])->toBe('Central Bar');
 });
 
 test('location names and codes are case-insensitively unique inside a business', function (): void {
@@ -314,6 +323,9 @@ test('location mutation cannot cross tenant boundaries', function (): void {
     ], $headersA)->assertNotFound();
 
     $this->patchJson("/api/v1/management/locations/{$foreign}/status", ['is_active' => false], $headersA)
+        ->assertNotFound();
+
+    $this->getJson("/api/v1/management/locations/{$foreign}/events", $headersA)
         ->assertNotFound();
 
     expect(DB::table('locations')->where('id', $foreign)->value('name'))->toBe('Foreign');
