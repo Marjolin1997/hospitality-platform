@@ -124,6 +124,25 @@ final class OperationsService
 
             abort_unless($product, 404);
 
+            if (! $isActive) {
+                $hasOutstandingPurchasing = DB::table('purchase_order_items as poi')
+                    ->join('purchase_orders as po', function ($join) use ($business): void {
+                        $join->on('po.id', '=', 'poi.purchase_order_id')
+                            ->where('po.business_id', $business->id);
+                    })
+                    ->where('poi.business_id', $business->id)
+                    ->where('poi.product_id', $productId)
+                    ->whereIn('po.status', ['draft', 'ordered', 'partially_received'])
+                    ->whereColumn('poi.quantity_received', '<', 'poi.quantity_ordered')
+                    ->exists();
+
+                if ($hasOutstandingPurchasing) {
+                    throw ValidationException::withMessages([
+                        'product' => 'Complete or cancel outstanding purchase orders before disabling this product.',
+                    ]);
+                }
+            }
+
             if ($isActive && $product->product_category_id) {
                 $category = DB::table('product_categories')
                     ->where('business_id', $business->id)
