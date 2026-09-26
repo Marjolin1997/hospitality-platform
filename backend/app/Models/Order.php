@@ -16,7 +16,7 @@ class Order extends Model
     protected $fillable = [
         'business_id', 'location_id', 'venue_table_id', 'previous_venue_table_id', 'opened_by_user_id',
         'cancelled_by_user_id', 'discount_applied_by_user_id', 'table_moved_by_user_id',
-        'number', 'type', 'status', 'cancel_reason', 'table_move_reason',
+        'number', 'idempotency_key', 'request_snapshot', 'type', 'status', 'cancel_reason', 'table_move_reason',
         'currency', 'subtotal', 'discount_total', 'discount_reason', 'tax_total', 'grand_total',
         'opened_at', 'closed_at', 'cancelled_at', 'discount_applied_at', 'table_moved_at',
     ];
@@ -24,6 +24,7 @@ class Order extends Model
     protected function casts(): array
     {
         return [
+            'request_snapshot' => 'array',
             'subtotal' => 'decimal:4',
             'discount_total' => 'decimal:4',
             'tax_total' => 'decimal:4',
