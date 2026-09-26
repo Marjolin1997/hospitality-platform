@@ -273,3 +273,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .count-entry-wrap{max-height:none}.inventory-count-entry-table input{width:110px}
   .inventory-count-detail-modal .modal-actions{display:grid;grid-template-columns:1fr}.inventory-count-detail-modal .modal-actions button{width:100%}
 }
+
+
+/* Inventory stock configuration */
+.inventory-stock-actions{min-width:max-content;flex-wrap:wrap}.inventory-stock-actions .secondary-button{min-height:34px;padding:7px 9px;font-size:9px}
+.inventory-reorder-modal .inventory-reason-field input{width:100%;min-height:43px;border:1px solid #dce4df;border-radius:10px;padding:9px 10px;background:#fff;color:#293b31;outline:none;font-variant-numeric:tabular-nums}
+.inventory-reorder-modal .inventory-reason-field input:focus{border-color:#789640;box-shadow:0 0 0 3px rgba(118,150,61,.11)}
+.inventory-reorder-history-modal{width:min(680px,100%)}
+@media(max-width:680px){.inventory-stock-actions{min-width:0}.inventory-stock-actions .secondary-button{flex:1}}
