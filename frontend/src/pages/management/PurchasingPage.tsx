@@ -402,8 +402,8 @@ export function PurchasingPage() {
     },
   });
 
-  const suppliers = suppliersQuery.data ?? [];
-  const orders = ordersQuery.data ?? [];
+  const suppliers = useMemo(() => suppliersQuery.data ?? [], [suppliersQuery.data]);
+  const orders = useMemo(() => ordersQuery.data ?? [], [ordersQuery.data]);
   const options = optionsQuery.data;
   const currency = activeBusiness?.currency ?? 'EUR';
 
