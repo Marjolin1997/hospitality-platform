@@ -68,6 +68,7 @@ type ManagedRole = {
   slug: string;
   is_system: boolean;
   member_count: number;
+  pending_invitation_count: number;
   permissions: PermissionItem[];
 };
 
@@ -81,6 +82,20 @@ type RoleDraft = {
   name: string;
   permissions: string[];
 };
+
+type RoleAuditEvent = {
+  id: string;
+  action: string;
+  role_slug: string;
+  previous_name: string | null;
+  new_name: string | null;
+  previous_permissions: string[] | null;
+  new_permissions: string[] | null;
+  performed_at: string;
+  performed_by_name: string;
+};
+
+
 
 type StaffInvitation = {
   id: string;
@@ -176,6 +191,7 @@ export function StaffAccessPage() {
 
   const [roleEditor, setRoleEditor] = useState<RoleDraft | null>(null);
   const [deletingRole, setDeletingRole] = useState<ManagedRole | null>(null);
+  const [roleHistoryTarget, setRoleHistoryTarget] = useState<ManagedRole | null>(null);
 
   const [inviteSearch, setInviteSearch] = useState('');
   const [inviteStatus, setInviteStatus] = useState('all');
@@ -210,6 +226,14 @@ export function StaffAccessPage() {
     enabled: Boolean(activeBusiness) && Boolean(historyMember),
     queryFn: () => api
       .get<{ data: StaffHistoryResponse }>(`/staff/${historyMember!.id}/events`)
+      .then(response => response.data.data),
+  });
+
+  const roleHistoryQuery = useQuery({
+    queryKey: ['role-events', activeBusiness?.id, roleHistoryTarget?.id],
+    enabled: Boolean(activeBusiness && roleHistoryTarget && can('roles.manage')),
+    queryFn: () => api
+      .get<{ data: RoleAuditEvent[] }>(`/roles/${roleHistoryTarget!.id}/events`)
       .then(response => response.data.data),
   });
 
@@ -272,6 +296,7 @@ export function StaffAccessPage() {
         qc.invalidateQueries({ queryKey: ['roles', activeBusiness?.id] }),
         qc.invalidateQueries({ queryKey: ['staff', activeBusiness?.id] }),
         qc.invalidateQueries({ queryKey: ['staff-invitations', activeBusiness?.id] }),
+        qc.invalidateQueries({ queryKey: ['role-events', activeBusiness?.id] }),
       ]);
       await refreshUser();
     },
@@ -922,7 +947,7 @@ export function StaffAccessPage() {
                           {role.is_system ? 'System' : manageable ? 'Custom' : 'Restricted'}
                         </span>
                       </div>
-                      <small>{role.member_count} member{role.member_count === 1 ? '' : 's'} · {role.permissions.length} permissions</small>
+                      <small>{role.member_count} member{role.member_count === 1 ? '' : 's'} · {role.pending_invitation_count} pending invite{role.pending_invitation_count === 1 ? '' : 's'} · {role.permissions.length} permissions</small>
                     </header>
                     <details>
                       <summary>View permissions</summary>
@@ -937,6 +962,10 @@ export function StaffAccessPage() {
                         <span className="field-hint">Contains permissions above your access level</span>
                       ) : (
                         <div className="inline-actions">
+                          <button type="button" className="secondary-button" onClick={() => setRoleHistoryTarget(role)}>
+                            <History size={14} />
+                            History
+                          </button>
                           <button type="button" className="secondary-button" onClick={() => openRole(role)}>
                             <Pencil size={14} />
                             Edit
@@ -944,10 +973,12 @@ export function StaffAccessPage() {
                           <button
                             type="button"
                             className="secondary-button subtle-danger"
-                            disabled={role.member_count > 0}
+                            disabled={role.member_count > 0 || role.pending_invitation_count > 0}
                             title={role.member_count > 0
                               ? 'Reassign all members before deleting this role'
-                              : 'Delete custom role'}
+                              : role.pending_invitation_count > 0
+                                ? 'Revoke or let pending invitations expire before deleting this role'
+                                : 'Delete custom role'}
                             onClick={() => setDeletingRole(role)}
                           >
                             <Trash2 size={14} />
@@ -961,6 +992,65 @@ export function StaffAccessPage() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {roleHistoryTarget && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget) setRoleHistoryTarget(null);
+          }}
+        >
+          <div className="modal-card management-modal invitation-history-modal role-history-modal" role="dialog" aria-modal="true" aria-label="Role audit history">
+            <header>
+              <div>
+                <span className="eyebrow">ROLE AUDIT</span>
+                <h2>{roleHistoryTarget.name}</h2>
+                <p>{roleHistoryTarget.slug} · immutable role and permission history</p>
+              </div>
+              <button type="button" className="icon-button" aria-label="Close role history" onClick={() => setRoleHistoryTarget(null)}>
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="invitation-history-summary">
+              <div><span>Members</span><strong>{roleHistoryTarget.member_count}</strong></div>
+              <div><span>Pending invites</span><strong>{roleHistoryTarget.pending_invitation_count}</strong></div>
+              <div><span>Permissions</span><strong>{roleHistoryTarget.permissions.length}</strong></div>
+            </div>
+
+            {roleHistoryQuery.isLoading ? (
+              <div className="management-state">Loading role history…</div>
+            ) : roleHistoryQuery.isError ? (
+              <div className="management-state error">
+                <AlertTriangle size={18} />
+                <div><strong>Role history unavailable</strong><span>{apiMessage(roleHistoryQuery.error)}</span></div>
+                <button type="button" className="secondary-button" onClick={() => roleHistoryQuery.refetch()}>Try again</button>
+              </div>
+            ) : (
+              <div className="invitation-timeline">
+                {(roleHistoryQuery.data ?? []).map(event => (
+                  <article key={event.id} className="invitation-timeline-event">
+                    <span className="timeline-dot" aria-hidden="true" />
+                    <div>
+                      <header><strong>{event.action.replaceAll('_', ' ')}</strong><time>{new Date(event.performed_at).toLocaleString()}</time></header>
+                      <p>{event.previous_name ?? 'New role'} → {event.new_name ?? 'Deleted'}</p>
+                      <small>
+                        {event.previous_permissions?.length ?? 0} → {event.new_permissions?.length ?? 0} permissions · performed by {event.performed_by_name}
+                      </small>
+                    </div>
+                  </article>
+                ))}
+                {(roleHistoryQuery.data ?? []).length === 0 && <Empty>No role lifecycle events have been recorded yet.</Empty>}
+              </div>
+            )}
+
+            <footer className="modal-actions">
+              <button type="button" className="primary-button" onClick={() => setRoleHistoryTarget(null)}>Done</button>
+            </footer>
+          </div>
         </div>
       )}
 
