@@ -589,6 +589,10 @@ final class ManageInventoryControl
             return;
         }
 
+        if ($quantity->isZero()) {
+            return;
+        }
+
         DB::table('inventory_stocks')->insert([
             'id' => (string) Str::ulid(),
             'business_id' => $business->getKey(),
