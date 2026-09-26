@@ -292,3 +292,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .report-definition-panel{display:grid;gap:7px;padding:13px 15px;border:1px solid #dfe6e2;border-radius:12px;background:#f8faf9}.report-definition-panel p{margin:0;color:#6e7c74;font-size:9.5px;line-height:1.55}.report-definition-panel p:before{content:"i";display:inline-grid;place-items:center;width:16px;height:16px;margin-right:7px;border:1px solid #cfd9d3;border-radius:50%;color:#64766b;font-size:8px;font-weight:900;vertical-align:middle}
 @media(max-width:900px){.reports-grid{grid-template-columns:1fr}.report-filter-row{align-items:stretch}.report-date-fields{flex:1}.report-date-fields label{flex:1}.report-filter-row>.primary-button{align-self:end}}
 @media(max-width:680px){.report-filter-row,.report-date-fields,.report-presets,.report-range-meta{align-items:stretch;flex-direction:column}.report-presets{display:grid;grid-template-columns:repeat(3,1fr)}.report-filter-row>.primary-button{width:100%;align-self:auto}.report-range-meta{gap:4px}.reports-tabs{width:100%;display:grid;grid-template-columns:1fr 1fr}.reports-tabs button{justify-content:center}}
+
+
+/* Preparation station management */
+.station-toolbar{max-width:660px;min-width:min(100%,520px);flex-wrap:wrap}.station-toolbar>select{width:150px}
+.station-table td:nth-child(2){min-width:160px}.station-table code{display:inline-flex;padding:4px 7px;border:1px solid #e0e7e3;border-radius:7px;background:#f7f9f8;color:#42534a;font-size:9px}
+.station-actions{min-width:max-content;flex-wrap:wrap}.station-actions .secondary-button{min-height:34px;padding:7px 9px;font-size:9px}
+.station-editor-modal{width:min(650px,100%)}.station-editor-modal .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}.station-editor-modal label{display:grid;gap:6px;color:#526159;font-size:10px;font-weight:800}.station-editor-modal label:last-child{grid-column:1/-1}
+.station-editor-modal input{width:100%;min-height:43px;border:1px solid #dce4df;border-radius:10px;padding:9px 10px;background:#fff;color:#293b31;outline:none}.station-editor-modal input:focus{border-color:#789640;box-shadow:0 0 0 3px rgba(118,150,61,.11)}.station-editor-modal small{color:#859189;font-size:8.5px;font-weight:600}
+.station-history-modal{width:min(700px,100%)}
+@media(max-width:900px){.station-toolbar{width:100%;max-width:none;min-width:0}}
+@media(max-width:680px){.station-toolbar{align-items:stretch;flex-direction:column}.station-toolbar>select{width:100%}.station-actions{min-width:0}.station-actions .secondary-button{flex:1}.station-editor-modal .form-grid{grid-template-columns:1fr}.station-editor-modal label:last-child{grid-column:auto}}
