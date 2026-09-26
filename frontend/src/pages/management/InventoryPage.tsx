@@ -752,7 +752,7 @@ export function InventoryPage() {
                 { countId: countDetail.count.id, items: countDraftItems },
                 { onSuccess: () => postCount.mutate(countDetail.count.id) },
               );
-            }}>{postCount.isPending ? 'Posting…' : 'Save & post count'}</button>}
+            }}>{saveCount.isPending ? 'Saving…' : postCount.isPending ? 'Posting…' : 'Save & post count'}</button>}
           </footer>
         </div>
       </div>
