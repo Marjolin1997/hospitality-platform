@@ -48,13 +48,21 @@ final class ManagePurchasing
                 'updated_at' => now(),
             ];
 
+            $before = $supplier ? $this->supplierState($supplier) : null;
+
             if ($supplier) {
                 DB::table('suppliers')
                     ->where('business_id', $business->getKey())
                     ->where('id', $supplier->id)
                     ->update($payload);
 
-                return $this->supplier($business, (string) $supplier->id);
+                $updated = $this->supplier($business, (string) $supplier->id);
+                $after = $this->supplierState($updated);
+                if ($before !== $after) {
+                    $this->supplierAudit($business, $actorUserId, (string) $supplier->id, 'updated', $before, $after);
+                }
+
+                return $updated;
             }
 
             $id = (string) Str::ulid();
@@ -66,13 +74,16 @@ final class ManagePurchasing
                 'created_at' => now(),
             ]);
 
-            return $this->supplier($business, $id);
+            $created = $this->supplier($business, $id);
+            $this->supplierAudit($business, $actorUserId, $id, 'created', null, $this->supplierState($created));
+
+            return $created;
         }, 3);
     }
 
-    public function setSupplierStatus(Business $business, string $supplierId, bool $isActive): object
+    public function setSupplierStatus(Business $business, string $supplierId, bool $isActive, int $actorUserId): object
     {
-        return DB::transaction(function () use ($business, $supplierId, $isActive): object {
+        return DB::transaction(function () use ($business, $supplierId, $isActive, $actorUserId): object {
             $this->lockBusiness($business);
 
             $supplier = DB::table('suppliers')
@@ -101,6 +112,8 @@ final class ManagePurchasing
                 }
             }
 
+            $before = $this->supplierState($supplier);
+
             DB::table('suppliers')
                 ->where('business_id', $business->getKey())
                 ->where('id', $supplierId)
@@ -109,7 +122,10 @@ final class ManagePurchasing
                     'updated_at' => now(),
                 ]);
 
-            return $this->supplier($business, $supplierId);
+            $updated = $this->supplier($business, $supplierId);
+            $this->supplierAudit($business, $actorUserId, $supplierId, 'status_changed', $before, $this->supplierState($updated));
+
+            return $updated;
         }, 3);
     }
 
@@ -833,4 +849,42 @@ final class ManagePurchasing
 
         return (string) $decimal->toScale(self::SCALE, RoundingMode::HALF_UP);
     }
+
+    private function supplierState(object $supplier): array
+    {
+        return [
+            'name' => $supplier->name,
+            'tax_number' => $supplier->tax_number,
+            'contact_name' => $supplier->contact_name,
+            'email' => $supplier->email,
+            'phone' => $supplier->phone,
+            'address' => $supplier->address,
+            'is_active' => (bool) $supplier->is_active,
+        ];
+    }
+
+    private function supplierAudit(
+        Business $business,
+        int $actorUserId,
+        string $supplierId,
+        string $action,
+        ?array $before,
+        ?array $after,
+    ): void {
+        DB::table('business_configuration_audits')->insert([
+            'id' => (string) Str::ulid(),
+            'business_id' => $business->getKey(),
+            'location_id' => null,
+            'performed_by_user_id' => $actorUserId,
+            'entity_type' => 'supplier',
+            'entity_id' => $supplierId,
+            'action' => $action,
+            'previous_state' => $before === null ? null : json_encode($before, JSON_THROW_ON_ERROR),
+            'new_state' => $after === null ? null : json_encode($after, JSON_THROW_ON_ERROR),
+            'performed_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
 }
