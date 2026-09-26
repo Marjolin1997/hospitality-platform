@@ -141,6 +141,73 @@ test('custom role lifecycle is tenant scoped audited and exposes the permission 
         ->and(json_decode($deleteAudit->previous_permissions, true))->toBe(['orders.update', 'orders.view', 'products.view']);
 });
 
+test('functional permissions automatically include required view prerequisites', function (): void {
+    $business = brmBusiness('Permission Dependencies');
+    $actor = brmActor($business);
+    $headers = brmHeaders($actor, $business);
+
+    $created = $this->postJson('/api/v1/roles', [
+        'name' => 'Operations Specialist',
+        'permissions' => [
+            'products.manage',
+            'stations.manage',
+            'purchasing.manage',
+            'inventory.receive',
+            'inventory.transfer',
+            'inventory.adjust',
+            'users.manage',
+        ],
+    ], $headers)->assertCreated();
+
+    $roleId = $created->json('data.id');
+    $permissions = Role::query()
+        ->findOrFail($roleId)
+        ->permissions()
+        ->orderBy('key')
+        ->pluck('key')
+        ->all();
+
+    expect($permissions)->toContain(
+        'products.manage',
+        'products.view',
+        'stations.manage',
+        'stations.view',
+        'purchasing.manage',
+        'purchasing.view',
+        'inventory.receive',
+        'inventory.transfer',
+        'inventory.adjust',
+        'inventory.view',
+        'users.manage',
+        'users.view',
+    );
+
+    $this->putJson("/api/v1/roles/{$roleId}", [
+        'name' => 'Operations Specialist',
+        'permissions' => ['purchasing.manage'],
+    ], $headers)->assertOk();
+
+    expect(Role::query()->findOrFail($roleId)->permissions()->orderBy('key')->pluck('key')->all())
+        ->toBe(['purchasing.manage', 'purchasing.view']);
+});
+
+test('dependency expansion still respects the actor delegation boundary', function (): void {
+    $business = brmBusiness('Dependency Delegation');
+    $limited = brmActor($business, ['roles.manage', 'purchasing.manage']);
+    $headers = brmHeaders($limited, $business);
+
+    $this->postJson('/api/v1/roles', [
+        'name' => 'Broken Buyer',
+        'permissions' => ['purchasing.manage'],
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('permissions');
+
+    expect(Role::query()
+        ->where('business_id', $business->getKey())
+        ->where('name', 'Broken Buyer')
+        ->exists())->toBeFalse();
+});
+
 test('custom role names are case-insensitively unique inside a business', function (): void {
     $business = brmBusiness('Unique Roles');
     $actor = brmActor($business);
