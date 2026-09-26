@@ -404,10 +404,10 @@ export function InventoryPage() {
     },
   });
 
-  const stocks = stockQuery.data ?? [];
-  const movements = movementsQuery.data ?? [];
-  const transfers = transfersQuery.data ?? [];
-  const counts = countsQuery.data ?? [];
+  const stocks = useMemo(() => stockQuery.data ?? [], [stockQuery.data]);
+  const movements = useMemo(() => movementsQuery.data ?? [], [movementsQuery.data]);
+  const transfers = useMemo(() => transfersQuery.data ?? [], [transfersQuery.data]);
+  const counts = useMemo(() => countsQuery.data ?? [], [countsQuery.data]);
   const transferOptions = transferOptionsQuery.data;
 
   const lowStocks = stocks.filter(stock => Number(stock.quantity_on_hand) <= Number(stock.reorder_level));
