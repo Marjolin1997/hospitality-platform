@@ -40,7 +40,7 @@ final class SaveProductRequest extends FormRequest
             'tax_rate' => ['required', 'decimal:0,4', 'min:0', 'max:100'],
             'unit_code' => ['required', 'string', 'max:16'],
             'unit_label' => ['required', 'string', 'max:64'],
-            'preparation_station' => ['nullable', Rule::in(['bar', 'kitchen'])],
+            'preparation_station' => ['nullable', 'string', 'max:32', 'regex:/^[a-z0-9][a-z0-9_-]*$/'],
             'tracks_stock' => ['required', 'boolean'],
             'is_active' => ['required', 'boolean'],
         ];
