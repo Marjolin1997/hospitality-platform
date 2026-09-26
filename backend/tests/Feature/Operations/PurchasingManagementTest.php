@@ -161,6 +161,75 @@ test('supplier lifecycle is tenant scoped unique and cannot disable with open pu
     ], pcmHeaders($otherUser, $other))->assertNotFound();
 });
 
+test('draft purchase orders can be edited atomically and become immutable after placement', function (): void {
+    $business = pcmBusiness('PO Draft Edit');
+    $location = pcmLocation($business);
+    $manager = pcmUser($business, ['purchasing.view', 'purchasing.manage']);
+    $headers = pcmHeaders($manager, $business);
+
+    $supplierA = pcmSupplier($this, $headers, 'Supplier A');
+    $supplierB = pcmSupplier($this, $headers, 'Supplier B');
+    $coffee = pcmProduct($business, 'Coffee');
+    $tea = pcmProduct($business, 'Tea');
+
+    $po = pcmOrder($this, $headers, $location->id, $supplierA, [[
+        'product_id' => $coffee,
+        'quantity_ordered' => '2',
+        'unit_cost' => '5',
+    ]]);
+
+    $this->putJson("/api/v1/purchase-orders/{$po}", [
+        'location_id' => $location->id,
+        'supplier_id' => $supplierB,
+        'notes' => 'Updated draft',
+        'items' => [
+            ['product_id' => $coffee, 'quantity_ordered' => '3', 'unit_cost' => '4'],
+            ['product_id' => $tea, 'quantity_ordered' => '5', 'unit_cost' => '2'],
+        ],
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.status', 'draft')
+        ->assertJsonPath('data.supplier_id', $supplierB)
+        ->assertJsonPath('data.supplier_name_snapshot', 'Supplier B')
+        ->assertJsonPath('data.total_cost', '22.0000');
+
+    $detail = $this->getJson("/api/v1/purchase-orders/{$po}", $headers)
+        ->assertOk()
+        ->assertJsonPath('data.order.notes', 'Updated draft')
+        ->json('data');
+
+    expect($detail['items'])->toHaveCount(2)
+        ->and(collect($detail['items'])->pluck('product_name_snapshot')->sort()->values()->all())
+        ->toBe(['Coffee', 'Tea']);
+
+    $event = DB::table('purchase_order_events')
+        ->where('purchase_order_id', $po)
+        ->where('event', 'draft_updated')
+        ->first();
+
+    expect($event)->not->toBeNull()
+        ->and($event->previous_status)->toBe('draft')
+        ->and($event->new_status)->toBe('draft');
+
+    $this->postJson("/api/v1/purchase-orders/{$po}/place", [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.status', 'ordered');
+
+    $this->putJson("/api/v1/purchase-orders/{$po}", [
+        'location_id' => $location->id,
+        'supplier_id' => $supplierA,
+        'notes' => 'Should fail',
+        'items' => [[
+            'product_id' => $coffee,
+            'quantity_ordered' => '1',
+            'unit_cost' => '1',
+        ]],
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('purchase_order');
+
+    expect(DB::table('purchase_order_items')->where('purchase_order_id', $po)->count())->toBe(2)
+        ->and((string) DB::table('purchase_orders')->where('id', $po)->value('total_cost'))->toBe('22.0000');
+});
+
 test('purchase order placement snapshots cost and partial receipts update inventory exactly once', function (): void {
     $business = pcmBusiness('PO Receiving');
     $location = pcmLocation($business);
@@ -194,8 +263,8 @@ test('purchase order placement snapshots cost and partial receipts update invent
     $receipt1 = $this->postJson("/api/v1/purchase-orders/{$po}/receipts", [
         'note' => 'First delivery',
         'items' => [
-            ['purchase_order_item_id' => $coffeeLine->id ?? $coffeeLine['id'], 'quantity_received' => '4'],
-            ['purchase_order_item_id' => $milkLine->id ?? $milkLine['id'], 'quantity_received' => '20'],
+            ['purchase_order_item_id' => $coffeeLine['id'], 'quantity_received' => '4'],
+            ['purchase_order_item_id' => $milkLine['id'], 'quantity_received' => '20'],
         ],
     ], $headers)->assertCreated();
 
@@ -209,13 +278,13 @@ test('purchase order placement snapshots cost and partial receipts update invent
     $this->postJson("/api/v1/purchase-orders/{$po}/receipts", [
         'note' => 'Final delivery',
         'items' => [
-            ['purchase_order_item_id' => $coffeeLine->id ?? $coffeeLine['id'], 'quantity_received' => '6'],
+            ['purchase_order_item_id' => $coffeeLine['id'], 'quantity_received' => '6'],
         ],
     ], $headers)->assertCreated();
 
     expect(DB::table('purchase_orders')->where('id', $po)->value('status'))->toBe('received')
         ->and((string) DB::table('inventory_stocks')->where('location_id', $location->id)->where('product_id', $coffee)->value('quantity_on_hand'))->toBe('10.0000')
-        ->and((string) DB::table('purchase_order_items')->where('id', $coffeeLine->id ?? $coffeeLine['id'])->value('quantity_received'))->toBe('10.0000')
+        ->and((string) DB::table('purchase_order_items')->where('id', $coffeeLine['id'])->value('quantity_received'))->toBe('10.0000')
         ->and(DB::table('goods_receipts')->where('purchase_order_id', $po)->count())->toBe(2);
 
     $events = $this->getJson("/api/v1/purchase-orders/{$po}/events", $headers)
@@ -377,6 +446,10 @@ test('location disable and stock tracking changes respect open purchasing depend
 
     $row = DB::table('products')->where('id', $product)->firstOrFail();
 
+    $this->patchJson("/api/v1/management/products/{$product}/status", [
+        'is_active' => false,
+    ], $headers)->assertStatus(422)->assertJsonValidationErrors('product');
+
     $this->postJson('/api/v1/management/products', [
         'id' => $product,
         'name' => $row->name,
@@ -394,6 +467,16 @@ test('location disable and stock tracking changes respect open purchasing depend
     $this->postJson("/api/v1/purchase-orders/{$po}/cancel", [
         'reason' => 'Cancel dependency',
     ], $headers)->assertOk();
+
+    $this->patchJson("/api/v1/management/products/{$product}/status", [
+        'is_active' => false,
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.is_active', false);
+
+    $this->patchJson("/api/v1/management/products/{$product}/status", [
+        'is_active' => true,
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.is_active', true);
 
     $this->postJson('/api/v1/management/products', [
         'id' => $product,
