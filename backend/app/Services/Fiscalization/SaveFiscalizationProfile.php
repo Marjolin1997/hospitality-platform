@@ -5,13 +5,14 @@ namespace App\Services\Fiscalization;
 use App\Models\Business;
 use App\Models\FiscalizationProfile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 final class SaveFiscalizationProfile
 {
-    public function execute(Business $business, array $payload): FiscalizationProfile
+    public function execute(Business $business, array $payload, ?int $actorUserId = null): FiscalizationProfile
     {
-        return DB::transaction(function () use ($business, $payload): FiscalizationProfile {
+        return DB::transaction(function () use ($business, $payload, $actorUserId): FiscalizationProfile {
             DB::table('businesses')->where('id', $business->id)->lockForUpdate()->firstOrFail();
 
             $profile = FiscalizationProfile::query()
@@ -19,6 +20,8 @@ final class SaveFiscalizationProfile
                 ->where('business_id', $business->id)
                 ->lockForUpdate()
                 ->first();
+
+            $before = $this->auditState($profile);
 
             $secretRef = $profile?->certificate_secret_ref;
             $passwordRef = $profile?->certificate_password_secret_ref;
@@ -124,15 +127,53 @@ final class SaveFiscalizationProfile
 
             if ($profile) {
                 $profile->forceFill($values)->save();
-
-                return $profile->refresh();
+                $saved = $profile->refresh();
+            } else {
+                $saved = FiscalizationProfile::query()->create([
+                    'business_id' => $business->id,
+                    ...$values,
+                ]);
             }
 
-            return FiscalizationProfile::query()->create([
-                'business_id' => $business->id,
-                ...$values,
-            ]);
+            $after = $this->auditState($saved);
+            if ($actorUserId !== null && $before !== $after) {
+                DB::table('business_configuration_audits')->insert([
+                    'id' => (string) Str::ulid(),
+                    'business_id' => $business->id,
+                    'location_id' => null,
+                    'performed_by_user_id' => $actorUserId,
+                    'entity_type' => 'fiscalization_profile',
+                    'entity_id' => (string) $business->id,
+                    'action' => $before === null ? 'created' : 'updated',
+                    'previous_state' => $before === null ? null : json_encode($before, JSON_THROW_ON_ERROR),
+                    'new_state' => json_encode($after, JSON_THROW_ON_ERROR),
+                    'performed_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            return $saved;
         }, attempts: 3);
+    }
+
+    private function auditState(?FiscalizationProfile $profile): ?array
+    {
+        if ($profile === null) {
+            return null;
+        }
+
+        return [
+            'provider' => $profile->provider,
+            'environment' => $profile->environment,
+            'status' => $profile->status,
+            'software_code' => $profile->software_code,
+            'is_issuer_in_vat' => $profile->is_issuer_in_vat,
+            'endpoint' => $profile->endpoint,
+            'certificate_reference_configured' => filled($profile->certificate_secret_ref),
+            'certificate_password_reference_configured' => filled($profile->certificate_password_secret_ref),
+            'production_activated' => $profile->production_activated_at !== null,
+        ];
     }
 
     private function assertReferenceOnly(?string $reference): void
