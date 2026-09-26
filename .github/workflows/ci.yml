@@ -44,29 +44,23 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Prepare environment
-        run: cp backend/.env.example backend/.env
+        run: |
+          cp backend/.env.example backend/.env
+          echo "MYSQL_DATABASE=hospitality_test" >> "$GITHUB_ENV"
 
       - name: Start test infrastructure
         run: docker compose up -d mysql redis
 
-      - name: Wait for MySQL
+      - name: Wait for isolated MySQL test database
         run: |
-          for attempt in {1..30}; do
-            if docker compose exec -T mysql mysqladmin ping -h localhost -uroot -proot --silent; then
+          for attempt in {1..40}; do
+            if docker compose exec -T mysql mysql -h127.0.0.1 -uhospitality -phospitality hospitality_test -e "SELECT 1" >/dev/null 2>&1; then
               exit 0
             fi
             sleep 2
           done
           docker compose logs mysql
           exit 1
-
-      - name: Create isolated test database
-        run: |
-          docker compose exec -T mysql mysql -uroot -proot -e "
-            CREATE DATABASE IF NOT EXISTS hospitality_test;
-            GRANT ALL PRIVILEGES ON hospitality_test.* TO 'hospitality'@'%';
-            FLUSH PRIVILEGES;
-          "
 
       - name: Build backend image
         run: docker compose build backend
