@@ -15,6 +15,7 @@ class StoreOrderRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'idempotency_key' => ['required', 'string', 'min:16', 'max:64'],
             'location_id' => ['required', 'string'],
             'venue_table_id' => ['nullable', 'string'],
             'type' => ['required', Rule::in(['table', 'takeaway', 'counter'])],
