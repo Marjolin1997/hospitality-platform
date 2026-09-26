@@ -16,6 +16,11 @@ final class OperationsService
     public function saveProduct(Business $business, array $data): object
     {
         return DB::transaction(function () use ($business, $data): object {
+            DB::table('businesses')
+                ->where('id', $business->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
             $existing = null;
 
             if (! empty($data['id'])) {
