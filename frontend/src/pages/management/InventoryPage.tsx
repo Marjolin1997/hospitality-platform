@@ -648,7 +648,7 @@ export function InventoryPage() {
       }}>
         <form className="modal-card management-modal inventory-adjustment-modal" role="dialog" aria-modal="true" aria-label={`Adjust stock for ${adjusting.name}`} onSubmit={event => {
           event.preventDefault();
-          if (adjustmentValid) adjust.mutate({ id: adjusting.id, delta: adjustmentDeltaNumber, note: adjustmentNote.trim() });
+          if (adjustmentValid) adjust.mutate({ id: adjusting.id, delta: adjustmentDeltaNumber, note: adjustmentNote.trim(), idempotencyKey: adjustmentIdempotencyKey });
         }}>
           <header><div><span className="eyebrow">INVENTORY LEDGER</span><h2>Adjust {adjusting.name}</h2><p>Use a signed quantity and a reason. The balance is never edited silently.</p></div><button type="button" className="icon-button" aria-label="Close inventory adjustment" disabled={adjust.isPending} onClick={() => setAdjusting(null)}><X size={18} /></button></header>
           <div className="reconciliation-summary"><span>Current <strong>{qty(adjusting.quantity_on_hand)}</strong></span><span>Adjustment <strong>{Number.isFinite(adjustmentDeltaNumber) && adjustmentDeltaNumber > 0 ? '+' : ''}{Number.isFinite(adjustmentDeltaNumber) ? qty(adjustmentDeltaNumber) : '—'}</strong></span><span>Result <strong>{Number.isFinite(projected) ? qty(projected) : '—'}</strong></span></div>
