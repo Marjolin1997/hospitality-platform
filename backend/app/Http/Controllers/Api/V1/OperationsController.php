@@ -34,7 +34,9 @@ final class OperationsController extends Controller
             ->select('products.*','product_categories.name as category_name')->orderBy('products.name')->get();
         $categories = DB::table('product_categories')->where('business_id',$business->id)->where('is_active',true)
             ->select('id','name')->orderBy('sort_order')->orderBy('name')->get();
-        return response()->json(['data'=>['products'=>$rows,'categories'=>$categories]]);
+        $stations = DB::table('preparation_stations')->where('business_id',$business->id)->where('is_active',true)
+            ->select('id','name','code')->orderBy('sort_order')->orderBy('name')->get();
+        return response()->json(['data'=>['products'=>$rows,'categories'=>$categories,'stations'=>$stations]]);
     }
 
     public function categories(): JsonResponse
