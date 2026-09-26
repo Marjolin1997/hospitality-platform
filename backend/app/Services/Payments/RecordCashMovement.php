@@ -21,13 +21,8 @@ final class RecordCashMovement
             $session = CashSession::query()
                 ->forBusiness($business)
                 ->whereKey($session->getKey())
-                ->where('status', 'open')
                 ->lockForUpdate()
-                ->first();
-
-            if (! $session) {
-                throw ValidationException::withMessages(['session' => 'An open cash session is required.']);
-            }
+                ->firstOrFail();
 
             $snapshot = $this->snapshot($session, $payload);
             $existing = CashMovement::query()
@@ -48,6 +43,10 @@ final class RecordCashMovement
                 }
 
                 return $existing;
+            }
+
+            if ($session->status !== 'open') {
+                throw ValidationException::withMessages(['session' => 'An open cash session is required.']);
             }
 
             if ($payload['currency'] !== $business->currency) {
