@@ -19,6 +19,7 @@ final class CreateInventoryTransferRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'idempotency_key' => ['required', 'string', 'min:16', 'max:64'],
             'source_location_id' => ['required', 'string', 'different:destination_location_id'],
             'destination_location_id' => ['required', 'string', 'different:source_location_id'],
             'note' => ['required', 'string', 'min:3', 'max:1000'],
