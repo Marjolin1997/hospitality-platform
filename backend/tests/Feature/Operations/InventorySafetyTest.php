@@ -116,3 +116,42 @@ test('failed negative opening adjustment creates neither stock nor ledger moveme
         ->where('product_id', $product)
         ->exists())->toBeFalse();
 });
+
+test('manual inventory adjustment retries are exactly once and key reuse is payload-bound', function (): void {
+    [$business, $location, $product, $headers] = inventorySafetyContext();
+    $key = (string) Str::uuid();
+
+    $payload = [
+        'idempotency_key' => $key,
+        'location_id' => $location->id,
+        'product_id' => $product,
+        'quantity_delta' => '5.0000',
+        'note' => 'Retry-safe opening count',
+    ];
+
+    $this->postJson('/api/v1/inventory/adjustments', $payload, $headers)->assertOk();
+    $this->postJson('/api/v1/inventory/adjustments', $payload, $headers)->assertOk();
+
+    expect((string) DB::table('inventory_stocks')
+        ->where('business_id', $business->id)
+        ->where('location_id', $location->id)
+        ->where('product_id', $product)
+        ->value('quantity_on_hand'))->toBe('5.0000')
+        ->and(DB::table('inventory_movements')
+            ->where('business_id', $business->id)
+            ->where('idempotency_key', $key)
+            ->count())->toBe(1);
+
+    $this->postJson('/api/v1/inventory/adjustments', [
+        ...$payload,
+        'quantity_delta' => '1.0000',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('idempotency_key');
+
+    expect((string) DB::table('inventory_stocks')
+        ->where('business_id', $business->id)
+        ->where('location_id', $location->id)
+        ->where('product_id', $product)
+        ->value('quantity_on_hand'))->toBe('5.0000');
+});
+
