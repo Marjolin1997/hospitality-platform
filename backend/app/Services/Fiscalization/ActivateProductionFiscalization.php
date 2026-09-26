@@ -6,6 +6,7 @@ use App\Models\Business;
 use App\Models\FiscalizationProfile;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 final class ActivateProductionFiscalization
@@ -43,6 +44,13 @@ final class ActivateProductionFiscalization
                 ]);
             }
 
+            $before = [
+                'environment' => $profile->environment,
+                'status' => $profile->status,
+                'production_activated' => $profile->production_activated_at !== null,
+                'preflight_status' => $profile->preflight_status,
+            ];
+
             $profile->forceFill([
                 'status' => 'active',
                 'production_activated_at' => now(),
@@ -51,7 +59,29 @@ final class ActivateProductionFiscalization
                 'preflight_checked_at' => now(),
             ])->save();
 
-            return $profile->refresh();
+            $saved = $profile->refresh();
+
+            DB::table('business_configuration_audits')->insert([
+                'id' => (string) Str::ulid(),
+                'business_id' => $business->id,
+                'location_id' => null,
+                'performed_by_user_id' => $user->id,
+                'entity_type' => 'fiscalization_activation',
+                'entity_id' => (string) $business->id,
+                'action' => 'production_activated',
+                'previous_state' => json_encode($before, JSON_THROW_ON_ERROR),
+                'new_state' => json_encode([
+                    'environment' => $saved->environment,
+                    'status' => $saved->status,
+                    'production_activated' => true,
+                    'preflight_status' => $saved->preflight_status,
+                ], JSON_THROW_ON_ERROR),
+                'performed_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            return $saved;
         }, attempts: 3);
     }
 }
