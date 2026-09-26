@@ -12,6 +12,7 @@ class StoreCashMovementRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'idempotency_key' => ['required', 'string', 'min:16', 'max:64'],
             'type' => ['required', Rule::in(['cash_in', 'cash_out'])],
             'amount' => ['required', 'decimal:0,4', 'gt:0', 'max:99999999999999.9999'],
             'currency' => ['required', Rule::in(['ALL', 'EUR', 'USD', 'GBP'])],
