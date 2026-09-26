@@ -28,6 +28,8 @@ return new class extends Migration {
         'expenses.view' => ['finance.view'],
         'invoices.issue' => ['invoices.view'],
         'invoices.correct' => ['invoices.view'],
+        'fiscalization.manage' => ['fiscalization.view'],
+        'fiscalization.activate_production' => ['fiscalization.view'],
         'fiscalization.issue' => ['invoices.view'],
         'fiscalization.retry' => ['invoices.view'],
         'users.manage' => ['users.view'],
