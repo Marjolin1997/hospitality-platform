@@ -83,6 +83,54 @@ type RoleDraft = {
   permissions: string[];
 };
 
+const permissionDependencies: Record<string, string[]> = {
+  'products.manage': ['products.view'],
+  'stations.manage': ['stations.view'],
+  'purchasing.manage': ['purchasing.view'],
+  'inventory.receive': ['inventory.view'],
+  'inventory.transfer': ['inventory.view'],
+  'inventory.adjust': ['inventory.view'],
+  'users.manage': ['users.view'],
+};
+
+function expandPermissionDependencies(keys: string[]): string[] {
+  const expanded = new Set(keys);
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    for (const key of [...expanded]) {
+      for (const dependency of permissionDependencies[key] ?? []) {
+        if (!expanded.has(dependency)) {
+          expanded.add(dependency);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  return [...expanded];
+}
+
+function removePermissionWithDependents(keys: string[], removedKey: string): string[] {
+  const next = new Set(keys);
+  next.delete(removedKey);
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const key of [...next]) {
+      const dependencies = permissionDependencies[key] ?? [];
+      if (dependencies.some(dependency => !next.has(dependency))) {
+        next.delete(key);
+        changed = true;
+      }
+    }
+  }
+
+  return [...next];
+}
+
 type RoleAuditEvent = {
   id: string;
   action: string;
@@ -417,14 +465,15 @@ export function StaffAccessPage() {
   };
 
   const togglePermission = (key: string) => {
-    setRoleEditor(current => current
-      ? {
-          ...current,
-          permissions: current.permissions.includes(key)
-            ? current.permissions.filter(value => value !== key)
-            : [...current.permissions, key],
-        }
-      : current);
+    setRoleEditor(current => {
+      if (!current) return current;
+
+      const permissions = current.permissions.includes(key)
+        ? removePermissionWithDependents(current.permissions, key)
+        : expandPermissionDependencies([...current.permissions, key]);
+
+      return { ...current, permissions };
+    });
   };
 
   const toggleGroup = (permissions: PermissionItem[]) => {
@@ -434,11 +483,16 @@ export function StaffAccessPage() {
       const keys = permissions.map(permission => permission.key);
       const selected = keys.every(key => current.permissions.includes(key));
 
+      const permissions = selected
+        ? keys.reduce(
+            (result, key) => removePermissionWithDependents(result, key),
+            current.permissions,
+          )
+        : expandPermissionDependencies([...current.permissions, ...keys]);
+
       return {
         ...current,
-        permissions: selected
-          ? current.permissions.filter(key => !keys.includes(key))
-          : Array.from(new Set([...current.permissions, ...keys])),
+        permissions,
       };
     });
   };
@@ -1599,6 +1653,9 @@ export function StaffAccessPage() {
               <span>Selected permissions</span>
               <strong>{roleEditor.permissions.length}</strong>
             </div>
+            <p className="field-hint">
+              Functional prerequisites are enforced automatically. For example, manage/receive/transfer permissions keep the required view permission selected.
+            </p>
 
             <div className="permission-group-grid">
               {Object.entries(permissionGroups).map(([group, permissions]) => {
