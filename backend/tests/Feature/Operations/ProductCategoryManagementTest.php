@@ -228,3 +228,82 @@ test('category reads require products view and writes require products manage', 
     $noAccess = ccmUser($business, ['orders.view']);
     $this->getJson('/api/v1/management/categories', ccmHeaders($noAccess, $business))->assertForbidden();
 });
+
+test('catalog product and category configuration changes are audited and tenant scoped', function (): void {
+    $business = ccmBusiness('Catalog Audit');
+    $user = ccmUser($business, ['products.view', 'products.manage']);
+    $headers = ccmHeaders($user, $business);
+
+    $category = $this->postJson('/api/v1/management/categories', [
+        'name' => 'Audit Coffee',
+        'color' => '#654321',
+        'sort_order' => 10,
+    ], $headers)->assertCreated()->json('data.id');
+
+    $this->postJson('/api/v1/management/categories', [
+        'id' => $category,
+        'name' => 'Audit Specialty Coffee',
+        'color' => '#765432',
+        'sort_order' => 5,
+    ], $headers)->assertOk();
+
+    $product = $this->postJson('/api/v1/management/products', [
+        'name' => 'Audit Espresso',
+        'category_id' => $category,
+        'sku' => 'AUD-ESP',
+        'sale_price' => '3.0000',
+        'tax_rate' => '20',
+        'unit_code' => 'C62',
+        'unit_label' => 'pcs',
+        'preparation_station' => null,
+        'tracks_stock' => false,
+        'is_active' => true,
+    ], $headers)->assertCreated()->json('data.id');
+
+    $this->postJson('/api/v1/management/products', [
+        'id' => $product,
+        'name' => 'Audit Double Espresso',
+        'category_id' => $category,
+        'sku' => 'AUD-ESP',
+        'sale_price' => '4.0000',
+        'tax_rate' => '20',
+        'unit_code' => 'C62',
+        'unit_label' => 'pcs',
+        'preparation_station' => null,
+        'tracks_stock' => false,
+        'is_active' => true,
+    ], $headers)->assertOk();
+
+    $this->patchJson("/api/v1/management/products/{$product}/status", [
+        'is_active' => false,
+    ], $headers)->assertOk();
+
+    $productEvents = $this->getJson("/api/v1/management/products/{$product}/events", $headers)
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($productEvents)->pluck('action')->all())
+        ->toContain('created', 'updated', 'status_changed')
+        ->and($productEvents[0]['performed_by_name'])->toBe($user->name);
+
+    $categoryEvents = $this->getJson("/api/v1/management/categories/{$category}/events", $headers)
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($categoryEvents)->pluck('action')->all())
+        ->toContain('created', 'updated');
+
+    $other = ccmBusiness('Catalog Audit Other');
+    $otherUser = ccmUser($other, ['products.view']);
+
+    $this->getJson(
+        "/api/v1/management/products/{$product}/events",
+        ccmHeaders($otherUser, $other),
+    )->assertNotFound();
+
+    $this->getJson(
+        "/api/v1/management/categories/{$category}/events",
+        ccmHeaders($otherUser, $other),
+    )->assertNotFound();
+});
+
