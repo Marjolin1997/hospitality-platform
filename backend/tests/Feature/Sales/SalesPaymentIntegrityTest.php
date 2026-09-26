@@ -298,9 +298,11 @@ test('cash control blocks drawer overdraft and requires a note for closing varia
     ], $headers)->assertCreated()->json('data.id');
 
     $this->postJson("/api/v1/cash-sessions/{$session}/movements", [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id, 'type' => 'cash_out', 'amount' => '101.0000', 'currency' => 'EUR', 'reason' => 'Supplier payout',
     ], $headers)->assertStatus(422)->assertJsonValidationErrors(['amount']);
     $this->postJson("/api/v1/cash-sessions/{$session}/movements", [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id, 'type' => 'cash_in', 'amount' => '1.0000', 'currency' => 'EUR', 'reason' => 'x',
     ], $headers)->assertStatus(422)->assertJsonValidationErrors(['reason']);
     expect(DB::table('cash_movements')->where('cash_session_id', $session)->count())->toBe(0);
@@ -338,7 +340,8 @@ test('cash refund cannot overdraw the reconciled drawer balance', function (): v
     $register=(string)Str::ulid();DB::table('cash_registers')->insert(['id'=>$register,'business_id'=>$business->id,'location_id'=>$location->id,'name'=>'Refund Drawer','code'=>'REFUND','is_active'=>true,'created_at'=>now(),'updated_at'=>now()]);
     $session=$this->postJson('/api/v1/cash-sessions',['location_id'=>$location->id,'cash_register_id'=>$register,'opening_cash'=>'0.0000'],$headers)->assertCreated()->json('data.id');
     $payment=$this->postJson("/api/v1/orders/{$order}/payments",['location_id'=>$location->id,'cash_session_id'=>$session,'method'=>'cash','currency'=>'EUR','amount'=>'100.0000','tendered_amount'=>'100.0000','idempotency_key'=>'cash-'.Str::uuid()],$headers)->assertCreated()->json('data.id');
-    $this->postJson("/api/v1/cash-sessions/{$session}/movements",['location_id'=>$location->id,'type'=>'cash_out','amount'=>'80.0000','currency'=>'EUR','reason'=>'Safe drop'],$headers)->assertCreated();
+    $this->postJson("/api/v1/cash-sessions/{$session}/movements",[
+        'idempotency_key' => (string) Str::uuid(),'location_id'=>$location->id,'type'=>'cash_out','amount'=>'80.0000','currency'=>'EUR','reason'=>'Safe drop'],$headers)->assertCreated();
     $this->postJson("/api/v1/payments/{$payment}/refunds",['location_id'=>$location->id,'cash_session_id'=>$session,'amount'=>'30.0000','reason'=>'Customer refund','idempotency_key'=>'refund-'.Str::uuid()],$headers)->assertStatus(422)->assertJsonValidationErrors('amount');
     expect(DB::table('payment_refunds')->where('payment_id',$payment)->count())->toBe(0)->and(DB::table('cash_movements')->where('cash_session_id',$session)->where('type','refund')->count())->toBe(0);
 });
@@ -388,6 +391,7 @@ test('physical cash rejects foreign currency and excessive monetary precision', 
     ],$headers)->assertStatus(422)->assertJsonValidationErrors('currency');
 
     $this->postJson("/api/v1/cash-sessions/{$session}/movements",[
+        'idempotency_key' => (string) Str::uuid(),
         'location_id'=>$location->id,'type'=>'cash_in','amount'=>'10.0000','currency'=>'USD','reason'=>'Foreign notes',
     ],$headers)->assertStatus(422)->assertJsonValidationErrors('currency');
 
