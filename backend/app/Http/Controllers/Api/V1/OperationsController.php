@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\SaveProductRequest;
 use App\Http\Requests\Api\V1\SetProductCategoryStatusRequest;
 use App\Http\Requests\Api\V1\SetProductStatusRequest;
 use App\Http\Requests\Api\V1\StoreExpenseRequest;
+use App\Http\Requests\Api\V1\UpdateBusinessProfileRequest;
 use App\Http\Requests\Api\V1\ReverseExpenseRequest;
 use App\Models\Business;
 use App\Services\Authorization\RoleDelegationPolicy;
@@ -251,6 +252,48 @@ final class OperationsController extends Controller
     public function settings(): JsonResponse
     {
         $business=app(Business::class); $settings=DB::table('business_settings')->where('business_id',$business->id)->pluck('value','key')->map(fn($v)=>json_decode($v,true)); return response()->json(['data'=>['business'=>['name'=>$business->name,'legal_name'=>$business->legal_name,'tax_number'=>$business->tax_number,'currency'=>$business->currency,'timezone'=>$business->timezone],'settings'=>$settings]]);
+    }
+
+    public function updateBusinessProfile(UpdateBusinessProfileRequest $request): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->operations->updateBusinessProfile(
+                app(Business::class),
+                $request->validated(),
+                (int) $request->user()->id,
+            ),
+        ]);
+    }
+
+    public function businessProfileEvents(): JsonResponse
+    {
+        $business = app(Business::class);
+
+        $rows = DB::table('business_configuration_audits as bca')
+            ->join('users as actor', 'actor.id', '=', 'bca.performed_by_user_id')
+            ->where('bca.business_id', $business->id)
+            ->where('bca.entity_type', 'business_profile')
+            ->where('bca.entity_id', $business->id)
+            ->orderByDesc('bca.performed_at')
+            ->orderByDesc('bca.id')
+            ->get([
+                'bca.id',
+                'bca.action',
+                'bca.previous_state',
+                'bca.new_state',
+                'bca.performed_at',
+                'actor.name as performed_by_name',
+            ])
+            ->map(fn (object $event): array => [
+                'id' => $event->id,
+                'action' => $event->action,
+                'previous_state' => $event->previous_state ? json_decode($event->previous_state, true, 512, JSON_THROW_ON_ERROR) : null,
+                'new_state' => $event->new_state ? json_decode($event->new_state, true, 512, JSON_THROW_ON_ERROR) : null,
+                'performed_at' => $event->performed_at,
+                'performed_by_name' => $event->performed_by_name,
+            ]);
+
+        return response()->json(['data' => $rows]);
     }
 
     public function settingsEvents(): JsonResponse
