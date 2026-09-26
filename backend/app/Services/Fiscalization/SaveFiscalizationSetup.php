@@ -5,15 +5,18 @@ namespace App\Services\Fiscalization;
 use App\Models\Business;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 final class SaveFiscalizationSetup
 {
-    public function execute(Business $business, array $payload): array
+    public function execute(Business $business, array $payload, ?int $actorUserId = null): array
     {
         try {
-            return DB::transaction(function () use ($business, $payload): array {
+            return DB::transaction(function () use ($business, $payload, $actorUserId): array {
                 DB::table('businesses')->where('id', $business->id)->lockForUpdate()->firstOrFail();
+
+                $before = $this->auditState($business);
 
                 foreach ($payload['locations'] ?? [] as $row) {
                     $updated = DB::table('locations')
@@ -67,7 +70,27 @@ final class SaveFiscalizationSetup
                         'updated_at' => now(),
                     ]);
 
-                return $this->read($business);
+                $result = $this->read($business);
+                $after = $this->auditState($business);
+
+                if ($actorUserId !== null && $before !== $after) {
+                    DB::table('business_configuration_audits')->insert([
+                        'id' => (string) Str::ulid(),
+                        'business_id' => $business->id,
+                        'location_id' => null,
+                        'performed_by_user_id' => $actorUserId,
+                        'entity_type' => 'fiscalization_setup',
+                        'entity_id' => (string) $business->id,
+                        'action' => 'updated',
+                        'previous_state' => json_encode($before, JSON_THROW_ON_ERROR),
+                        'new_state' => json_encode($after, JSON_THROW_ON_ERROR),
+                        'performed_at' => now(),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+
+                return $result;
             }, attempts: 3);
         } catch (QueryException $e) {
             if ((string) $e->getCode() === '23000') {
@@ -78,6 +101,42 @@ final class SaveFiscalizationSetup
 
             throw $e;
         }
+    }
+
+    private function auditState(Business $business): array
+    {
+        return [
+            'locations' => DB::table('locations')
+                ->where('business_id', $business->id)
+                ->orderBy('id')
+                ->get(['id', 'fiscal_business_unit_code'])
+                ->map(fn (object $row): array => [
+                    'id' => $row->id,
+                    'fiscal_business_unit_code' => $row->fiscal_business_unit_code,
+                ])
+                ->values()
+                ->all(),
+            'cash_registers' => DB::table('cash_registers')
+                ->where('business_id', $business->id)
+                ->orderBy('id')
+                ->get(['id', 'fiscal_tcr_code'])
+                ->map(fn (object $row): array => [
+                    'id' => $row->id,
+                    'fiscal_tcr_code' => $row->fiscal_tcr_code,
+                ])
+                ->values()
+                ->all(),
+            'operators' => DB::table('business_user')
+                ->where('business_id', $business->id)
+                ->orderBy('user_id')
+                ->get(['user_id', 'fiscal_operator_code'])
+                ->map(fn (object $row): array => [
+                    'user_id' => (int) $row->user_id,
+                    'fiscal_operator_code' => $row->fiscal_operator_code,
+                ])
+                ->values()
+                ->all(),
+        ];
     }
 
     public function read(Business $business): array
