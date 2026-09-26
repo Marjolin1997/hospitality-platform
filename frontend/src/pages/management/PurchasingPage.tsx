@@ -93,6 +93,15 @@ type PurchaseOrderDetail = {
   receipts: GoodsReceipt[];
 };
 
+type SupplierEvent = {
+  id: string;
+  action: string;
+  previous_state: Record<string, unknown> | null;
+  new_state: Record<string, unknown> | null;
+  performed_at: string;
+  performed_by_name: string;
+};
+
 type PurchaseOrderEvent = {
   id: string;
   event: string;
@@ -183,6 +192,7 @@ export function PurchasingPage() {
 
   const [supplierEditor, setSupplierEditor] = useState<SupplierDraft | null>(null);
   const [supplierDisableTarget, setSupplierDisableTarget] = useState<Supplier | null>(null);
+  const [supplierHistoryTarget, setSupplierHistoryTarget] = useState<Supplier | null>(null);
   const [purchaseEditor, setPurchaseEditor] = useState<PurchaseDraft | null>(null);
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
   const [receiveOrderId, setReceiveOrderId] = useState<string | null>(null);
@@ -196,6 +206,14 @@ export function PurchasingPage() {
     queryKey: ['purchasing-suppliers', activeBusiness?.id],
     enabled: Boolean(activeBusiness),
     queryFn: () => api.get<{ data: Supplier[] }>('/purchasing/suppliers').then(response => response.data.data),
+  });
+
+  const supplierHistoryQuery = useQuery({
+    queryKey: ['supplier-events', activeBusiness?.id, supplierHistoryTarget?.id],
+    enabled: Boolean(activeBusiness && supplierHistoryTarget),
+    queryFn: () => api
+      .get<{ data: SupplierEvent[] }>(`/purchasing/suppliers/${supplierHistoryTarget!.id}/events`)
+      .then(response => response.data.data),
   });
 
   const ordersQuery = useQuery({
@@ -605,6 +623,7 @@ export function PurchasingPage() {
                     phone: supplier.phone ?? '',
                     address: supplier.address ?? '',
                   }); }}><Pencil size={14} /> Edit</button>
+                  <button type="button" className="secondary-button" onClick={() => setSupplierHistoryTarget(supplier)}><History size={14} /> History</button>
                   <button type="button" className={supplier.is_active ? 'secondary-button subtle-danger' : 'secondary-button'} disabled={toggleSupplier.isPending} onClick={() => supplier.is_active ? setSupplierDisableTarget(supplier) : toggleSupplier.mutate(supplier)}>
                     {supplier.is_active ? 'Disable' : 'Enable'}
                   </button>
@@ -636,6 +655,18 @@ export function PurchasingPage() {
           {saveSupplier.isError && <p className="error-state">{apiMessage(saveSupplier.error)}</p>}
           <footer className="modal-actions"><button type="button" className="secondary-button" disabled={saveSupplier.isPending} onClick={() => setSupplierEditor(null)}>Cancel</button><button className="primary-button" disabled={saveSupplier.isPending || !supplierEditor.name.trim()}>{saveSupplier.isPending ? 'Saving…' : supplierEditor.id ? 'Save supplier' : 'Create supplier'}</button></footer>
         </form>
+      </div>
+    )}
+
+    {supplierHistoryTarget && (
+      <div className="modal-backdrop" role="presentation" onMouseDown={event => {
+        if (event.target === event.currentTarget) setSupplierHistoryTarget(null);
+      }}>
+        <div className="modal-card management-modal invitation-history-modal supplier-history-modal" role="dialog" aria-modal="true" aria-label="Supplier history">
+          <header><div><span className="eyebrow">SUPPLIER AUDIT</span><h2>{supplierHistoryTarget.name}</h2><p>Immutable supplier configuration and availability history.</p></div><button type="button" className="icon-button" aria-label="Close supplier history" onClick={() => setSupplierHistoryTarget(null)}><X size={18} /></button></header>
+          {supplierHistoryQuery.isLoading ? <div className="management-state">Loading supplier history…</div> : supplierHistoryQuery.isError ? <div className="management-state error"><AlertTriangle size={18} /><div><strong>Supplier history unavailable</strong><span>{apiMessage(supplierHistoryQuery.error)}</span></div><button type="button" className="secondary-button" onClick={() => supplierHistoryQuery.refetch()}>Try again</button></div> : <div className="invitation-timeline">{(supplierHistoryQuery.data ?? []).map(event => <article className="invitation-timeline-event" key={event.id}><span className="timeline-dot" aria-hidden="true" /><div><header><strong>{event.action.replaceAll('_', ' ')}</strong><time>{new Date(event.performed_at).toLocaleString()}</time></header><p>{event.previous_state ? 'Supplier configuration changed' : 'Supplier created'}{event.new_state ? ' · snapshot recorded' : ''}</p><small>Performed by {event.performed_by_name}</small></div></article>)}{(supplierHistoryQuery.data ?? []).length === 0 && <Empty>No supplier lifecycle events have been recorded yet.</Empty>}</div>}
+          <footer className="modal-actions"><button type="button" className="primary-button" onClick={() => setSupplierHistoryTarget(null)}>Done</button></footer>
+        </div>
       </div>
     )}
 
