@@ -13,9 +13,9 @@ final class OperationsService
 {
     private const SCALE = 4;
 
-    public function saveProduct(Business $business, array $data): object
+    public function saveProduct(Business $business, array $data, ?int $actorUserId = null): object
     {
-        return DB::transaction(function () use ($business, $data): object {
+        return DB::transaction(function () use ($business, $data, $actorUserId): object {
             DB::table('businesses')
                 ->where('id', $business->id)
                 ->lockForUpdate()
@@ -120,6 +120,8 @@ final class OperationsService
                 }
             }
 
+            $before = $existing ? $this->productState($existing) : null;
+
             $payload = [
                 'business_id' => $business->id,
                 'product_category_id' => $data['category_id'] ?? null,
@@ -157,13 +159,26 @@ final class OperationsService
             $product->is_active = (bool) $product->is_active;
             $product->tracks_stock = (bool) $product->tracks_stock;
 
+            $after = $this->productState($product);
+            if ($actorUserId !== null && ($before === null || $before !== $after)) {
+                $this->configurationAudit(
+                    $business,
+                    $actorUserId,
+                    'product',
+                    $id,
+                    $before === null ? 'created' : 'updated',
+                    $before,
+                    $after,
+                );
+            }
+
             return $product;
         }, attempts: 3);
     }
 
-    public function setProductStatus(Business $business, string $productId, bool $isActive): object
+    public function setProductStatus(Business $business, string $productId, bool $isActive, ?int $actorUserId = null): object
     {
-        return DB::transaction(function () use ($business, $productId, $isActive): object {
+        return DB::transaction(function () use ($business, $productId, $isActive, $actorUserId): object {
             $product = DB::table('products')
                 ->where('business_id', $business->id)
                 ->where('id', $productId)
@@ -219,6 +234,8 @@ final class OperationsService
                 }
             }
 
+            $before = $this->productState($product);
+
             if ((bool) $product->is_active !== $isActive) {
                 DB::table('products')
                     ->where('business_id', $business->id)
@@ -234,13 +251,18 @@ final class OperationsService
             $updated->is_active = (bool) $updated->is_active;
             $updated->tracks_stock = (bool) $updated->tracks_stock;
 
+            $after = $this->productState($updated);
+            if ($actorUserId !== null && $before !== $after) {
+                $this->configurationAudit($business, $actorUserId, 'product', $productId, 'status_changed', $before, $after);
+            }
+
             return $updated;
         }, attempts: 3);
     }
 
-    public function saveCategory(Business $business, array $data): object
+    public function saveCategory(Business $business, array $data, ?int $actorUserId = null): object
     {
-        return DB::transaction(function () use ($business, $data): object {
+        return DB::transaction(function () use ($business, $data, $actorUserId): object {
             DB::table('businesses')->where('id', $business->id)->lockForUpdate()->first();
             $name = trim($data['name']);
             $duplicate = DB::table('product_categories')
@@ -257,6 +279,20 @@ final class OperationsService
                 ]);
             }
 
+            $existingCategory = ! empty($data['id'])
+                ? DB::table('product_categories')
+                    ->where('business_id', $business->id)
+                    ->where('id', $data['id'])
+                    ->lockForUpdate()
+                    ->first()
+                : null;
+
+            if (! empty($data['id'])) {
+                abort_unless($existingCategory, 404);
+            }
+
+            $before = $existingCategory ? $this->categoryState($existingCategory) : null;
+
             $payload = [
                 'name' => $name,
                 'color' => $data['color'] ?? null,
@@ -265,13 +301,11 @@ final class OperationsService
             ];
 
             if (! empty($data['id'])) {
-                $query = DB::table('product_categories')
+                DB::table('product_categories')
                     ->where('business_id', $business->id)
-                    ->where('id', $data['id']);
-
-                abort_unless($query->exists(), 404);
-                $query->update($payload);
-                $id = $data['id'];
+                    ->where('id', $existingCategory->id)
+                    ->update($payload);
+                $id = (string) $existingCategory->id;
             } else {
                 $id = (string) Str::ulid();
                 DB::table('product_categories')->insert([
@@ -290,13 +324,26 @@ final class OperationsService
 
             $category->is_active = (bool) $category->is_active;
 
+            $after = $this->categoryState($category);
+            if ($actorUserId !== null && ($before === null || $before !== $after)) {
+                $this->configurationAudit(
+                    $business,
+                    $actorUserId,
+                    'product_category',
+                    $id,
+                    $before === null ? 'created' : 'updated',
+                    $before,
+                    $after,
+                );
+            }
+
             return $category;
         }, attempts: 3);
     }
 
-    public function setCategoryStatus(Business $business, string $categoryId, bool $isActive): object
+    public function setCategoryStatus(Business $business, string $categoryId, bool $isActive, ?int $actorUserId = null): object
     {
-        return DB::transaction(function () use ($business, $categoryId, $isActive): object {
+        return DB::transaction(function () use ($business, $categoryId, $isActive, $actorUserId): object {
             $category = DB::table('product_categories')
                 ->where('business_id', $business->id)
                 ->where('id', $categoryId)
@@ -319,6 +366,8 @@ final class OperationsService
                 }
             }
 
+            $before = $this->categoryState($category);
+
             if ((bool) $category->is_active !== $isActive) {
                 DB::table('product_categories')
                     ->where('business_id', $business->id)
@@ -335,6 +384,11 @@ final class OperationsService
                 ->first();
 
             $updated->is_active = (bool) $updated->is_active;
+
+            $after = $this->categoryState($updated);
+            if ($actorUserId !== null && $before !== $after) {
+                $this->configurationAudit($business, $actorUserId, 'product_category', $categoryId, 'status_changed', $before, $after);
+            }
 
             return $updated;
         }, attempts: 3);
@@ -514,4 +568,56 @@ final class OperationsService
     {
         return (string) BigDecimal::of((string) $value)->toScale(self::SCALE, RoundingMode::HALF_UP);
     }
+
+    private function productState(object $product): array
+    {
+        return [
+            'product_category_id' => $product->product_category_id,
+            'name' => $product->name,
+            'sku' => $product->sku,
+            'sale_price' => $this->decimal($product->sale_price),
+            'tax_rate' => $this->decimal($product->tax_rate),
+            'unit_code' => $product->unit_code,
+            'unit_label' => $product->unit_label,
+            'preparation_station' => $product->preparation_station,
+            'tracks_stock' => (bool) $product->tracks_stock,
+            'is_active' => (bool) $product->is_active,
+        ];
+    }
+
+    private function categoryState(object $category): array
+    {
+        return [
+            'name' => $category->name,
+            'color' => $category->color,
+            'sort_order' => (int) $category->sort_order,
+            'is_active' => (bool) $category->is_active,
+        ];
+    }
+
+    private function configurationAudit(
+        Business $business,
+        int $actorUserId,
+        string $entityType,
+        string $entityId,
+        string $action,
+        ?array $before,
+        ?array $after,
+    ): void {
+        DB::table('business_configuration_audits')->insert([
+            'id' => (string) Str::ulid(),
+            'business_id' => $business->id,
+            'location_id' => null,
+            'performed_by_user_id' => $actorUserId,
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
+            'action' => $action,
+            'previous_state' => $before === null ? null : json_encode($before, JSON_THROW_ON_ERROR),
+            'new_state' => $after === null ? null : json_encode($after, JSON_THROW_ON_ERROR),
+            'performed_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
 }
