@@ -203,6 +203,7 @@ test('stock tracking cannot be disabled while physical stock or a draft count st
         ->assertJsonValidationErrors('tracks_stock');
 
     $this->postJson('/api/v1/inventory/adjustments', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id,
         'product_id' => $product,
         'quantity_delta' => '-5',
@@ -433,6 +434,7 @@ test('stock count posting is blocked when stock changed after the snapshot', fun
     ], $headers)->assertOk();
 
     $this->postJson('/api/v1/inventory/adjustments', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id,
         'product_id' => $product,
         'quantity_delta' => '1',
