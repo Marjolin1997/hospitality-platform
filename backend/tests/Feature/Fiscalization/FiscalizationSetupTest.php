@@ -72,6 +72,15 @@ test('fiscal setup is tenant isolated and persists normalized official codes', f
         ->assertJsonCount(1,'data.locations')
         ->assertJsonCount(1,'data.cash_registers')
         ->assertJsonCount(1,'data.operators');
+
+    $history = $this->getJson('/api/v1/fiscalization/configuration-events', $headers)
+        ->assertOk()
+        ->assertJsonPath('data.0.entity_type', 'fiscalization_setup')
+        ->assertJsonPath('data.0.action', 'updated');
+
+    expect($history->json('data.0.new_state.locations.0.fiscal_business_unit_code'))->toBe('ab123ab123')
+        ->and($history->json('data.0.new_state.cash_registers.0.fiscal_tcr_code'))->toBe('cd123cd123')
+        ->and($history->json('data.0.new_state.operators.0.fiscal_operator_code'))->toBe('ef123ef123');
 });
 
 test('fiscal setup rejects foreign tenant rows duplicate codes and malformed values', function (): void {
