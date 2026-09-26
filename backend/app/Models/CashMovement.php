@@ -13,14 +13,15 @@ class CashMovement extends Model
 
     protected $fillable = [
         'business_id', 'cash_session_id', 'created_by_user_id', 'type', 'amount', 'currency',
-        'amount_base', 'exchange_rate', 'reason', 'reference_type', 'reference_id', 'occurred_at',
+        'amount_base', 'exchange_rate', 'reason', 'reference_type', 'reference_id',
+        'idempotency_key', 'request_snapshot', 'occurred_at',
     ];
 
     protected function casts(): array
     {
         return [
             'amount' => 'decimal:4', 'amount_base' => 'decimal:4',
-            'exchange_rate' => 'decimal:10', 'occurred_at' => 'datetime',
+            'exchange_rate' => 'decimal:10', 'request_snapshot' => 'array', 'occurred_at' => 'datetime',
         ];
     }
 
