@@ -42,10 +42,10 @@ services:
   mysql:
     image: mysql:8.4
     environment:
-      MYSQL_DATABASE: hospitality
-      MYSQL_USER: hospitality
-      MYSQL_PASSWORD: hospitality
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-hospitality}
+      MYSQL_USER: ${MYSQL_USER:-hospitality}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-hospitality}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
     ports: ["3310:3306"]
     volumes: ["mysql_data:/var/lib/mysql"]
     healthcheck: { test: ["CMD", "mysqladmin", "ping", "-h", "localhost"], interval: 5s, timeout: 5s, retries: 20 }
