@@ -6,7 +6,7 @@ import { useAuth } from '../../features/auth/AuthProvider';
 const navigation=[
   {label:'Dashboard',to:'/dashboard',icon:LayoutDashboard,permissions:[],section:'Overview'},
   {label:'POS',to:'/pos',icon:ShoppingCart,permissions:['orders.view','orders.create'],section:'Operations'},
-  {label:'Cash Register',to:'/cash-register',icon:WalletCards,permissions:['cash_sessions.open','cash_sessions.close','payments.collect'],section:'Operations'},
+  {label:'Cash Register',to:'/cash-register',icon:WalletCards,permissions:['cash_sessions.view','cash_sessions.open','cash_sessions.close','cash_movements.create','payments.collect'],section:'Operations'},
   {label:'Bar Queue',to:'/bar',icon:Coffee,permissions:['orders.view'],section:'Operations'},
   {label:'Menu & Products',to:'/products',icon:ReceiptText,permissions:['products.view','products.manage'],section:'Management'},
   {label:'Inventory',to:'/inventory',icon:Boxes,permissions:['inventory.view','inventory.receive','inventory.transfer','inventory.adjust'],section:'Management'},
@@ -25,7 +25,7 @@ export function AppShell(){
   const [mobileNavOpen,setMobileNavOpen]=useState(false);
   const {user,activeBusiness,activeLocation,selectBusiness,selectLocation,logout,canAny}=useAuth();
   const visibleNavigation=navigation.filter(item=>item.permissions.length===0||canAny([...item.permissions]));
-  const canUseCashRegister=canAny(['cash_sessions.open','cash_sessions.close','payments.collect']);
+  const canUseCashRegister=canAny(['cash_sessions.view','cash_sessions.open','cash_sessions.close','cash_movements.create','payments.collect']);
   const sections=[...new Set(visibleNavigation.map(item=>item.section))];
   const activeNavigation=navigation.find(item=>location.pathname===item.to)??navigation[0];
   const ActiveIcon=activeNavigation.icon;
