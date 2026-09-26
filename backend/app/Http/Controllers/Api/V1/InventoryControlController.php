@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\CancelInventoryCountRequest;
 use App\Http\Requests\Api\V1\CreateInventoryCountRequest;
 use App\Http\Requests\Api\V1\CreateInventoryTransferRequest;
+use App\Http\Requests\Api\V1\SetInventoryReorderLevelRequest;
 use App\Http\Requests\Api\V1\UpdateInventoryCountRequest;
 use App\Models\Business;
 use App\Services\Inventory\ManageInventoryControl;
@@ -17,6 +18,75 @@ use Illuminate\Validation\ValidationException;
 final class InventoryControlController extends Controller
 {
     public function __construct(private readonly ManageInventoryControl $inventory) {}
+
+    public function setReorderLevel(SetInventoryReorderLevelRequest $request, string $product): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->inventory->setReorderLevel(
+                app(Business::class),
+                (string) $request->validated('location_id'),
+                $product,
+                $request->validated('reorder_level'),
+                (int) $request->user()->id,
+            ),
+        ]);
+    }
+
+    public function reorderLevelEvents(Request $request, string $product): JsonResponse
+    {
+        $business = app(Business::class);
+        $locationId = $this->activeLocationId($request, $business);
+
+        $validProduct = DB::table('products')
+            ->where('business_id', $business->getKey())
+            ->where('id', $product)
+            ->where('tracks_stock', true)
+            ->exists();
+
+        abort_unless($validProduct, 404);
+
+        $stockId = DB::table('inventory_stocks')
+            ->where('business_id', $business->getKey())
+            ->where('location_id', $locationId)
+            ->where('product_id', $product)
+            ->value('id');
+
+        if (! $stockId) {
+            return response()->json(['data' => []]);
+        }
+
+        $rows = DB::table('business_configuration_audits as bca')
+            ->join('users as actor', 'actor.id', '=', 'bca.performed_by_user_id')
+            ->where('bca.business_id', $business->getKey())
+            ->where('bca.location_id', $locationId)
+            ->where('bca.entity_type', 'inventory_stock')
+            ->where('bca.entity_id', $stockId)
+            ->where('bca.action', 'reorder_level_changed')
+            ->orderByDesc('bca.performed_at')
+            ->orderByDesc('bca.id')
+            ->get([
+                'bca.id',
+                'bca.action',
+                'bca.previous_state',
+                'bca.new_state',
+                'bca.performed_at',
+                'actor.name as performed_by_name',
+            ])
+            ->map(fn (object $event): array => [
+                'id' => $event->id,
+                'action' => $event->action,
+                'previous_state' => $event->previous_state
+                    ? json_decode($event->previous_state, true, 512, JSON_THROW_ON_ERROR)
+                    : null,
+                'new_state' => $event->new_state
+                    ? json_decode($event->new_state, true, 512, JSON_THROW_ON_ERROR)
+                    : null,
+                'performed_at' => $event->performed_at,
+                'performed_by_name' => $event->performed_by_name,
+            ]);
+
+        return response()->json(['data' => $rows]);
+    }
 
     public function movements(Request $request): JsonResponse
     {
