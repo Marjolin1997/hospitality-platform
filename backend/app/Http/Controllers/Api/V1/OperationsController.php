@@ -253,10 +253,41 @@ final class OperationsController extends Controller
         $business=app(Business::class); $settings=DB::table('business_settings')->where('business_id',$business->id)->pluck('value','key')->map(fn($v)=>json_decode($v,true)); return response()->json(['data'=>['business'=>['name'=>$business->name,'legal_name'=>$business->legal_name,'tax_number'=>$business->tax_number,'currency'=>$business->currency,'timezone'=>$business->timezone],'settings'=>$settings]]);
     }
 
+    public function settingsEvents(): JsonResponse
+    {
+        $business = app(Business::class);
+
+        $rows = DB::table('business_configuration_audits as bca')
+            ->join('users as actor', 'actor.id', '=', 'bca.performed_by_user_id')
+            ->where('bca.business_id', $business->id)
+            ->where('bca.entity_type', 'business_settings')
+            ->where('bca.entity_id', $business->id)
+            ->orderByDesc('bca.performed_at')
+            ->orderByDesc('bca.id')
+            ->get([
+                'bca.id',
+                'bca.action',
+                'bca.previous_state',
+                'bca.new_state',
+                'bca.performed_at',
+                'actor.name as performed_by_name',
+            ])
+            ->map(fn (object $event): array => [
+                'id' => $event->id,
+                'action' => $event->action,
+                'previous_state' => $event->previous_state ? json_decode($event->previous_state, true, 512, JSON_THROW_ON_ERROR) : null,
+                'new_state' => $event->new_state ? json_decode($event->new_state, true, 512, JSON_THROW_ON_ERROR) : null,
+                'performed_at' => $event->performed_at,
+                'performed_by_name' => $event->performed_by_name,
+            ]);
+
+        return response()->json(['data' => $rows]);
+    }
+
     public function saveSettings(Request $request): JsonResponse
     {
         $business=app(Business::class); $data=$request->validate(['receipt_footer'=>['nullable','string','max:500'],'service_charge_enabled'=>['required','boolean'],'low_stock_alerts'=>['required','boolean']]);
-        $this->operations->updateSettings($business,$data);
+        $this->operations->updateSettings($business,$data,(int) $request->user()->id);
         return response()->json(['message'=>'Settings saved.']);
     }
 
