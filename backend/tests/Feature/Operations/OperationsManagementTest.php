@@ -309,3 +309,35 @@ test('staff update preserves at least one active owner while allowing a safe own
 });
 
 test('settings remain isolated by business',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$userA=omtUser($a);$userB=omtUser($b);$this->putJson('/api/v1/settings',['receipt_footer'=>'A footer','service_charge_enabled'=>true,'low_stock_alerts'=>true],omtHeaders($userA,$a))->assertOk();$this->putJson('/api/v1/settings',['receipt_footer'=>'B footer','service_charge_enabled'=>false,'low_stock_alerts'=>false],omtHeaders($userB,$b))->assertOk();$this->getJson('/api/v1/settings',omtHeaders($userA,$a))->assertOk()->assertJsonPath('data.settings.receipt_footer','A footer')->assertJsonPath('data.settings.service_charge_enabled',true);});
+
+test('business operational settings changes are audited once and remain tenant scoped', function (): void {
+    $business = omtBusiness('Settings Audit');
+    $user = omtUser($business);
+    $headers = omtHeaders($user, $business);
+
+    $payload = [
+        'receipt_footer' => 'Thank you for visiting',
+        'service_charge_enabled' => true,
+        'low_stock_alerts' => false,
+    ];
+
+    $this->putJson('/api/v1/settings', $payload, $headers)->assertOk();
+    $this->putJson('/api/v1/settings', $payload, $headers)->assertOk();
+
+    $events = $this->getJson('/api/v1/settings/events', $headers)
+        ->assertOk()
+        ->json('data');
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]['action'])->toBe('updated')
+        ->and($events[0]['performed_by_name'])->toBe($user->name)
+        ->and($events[0]['new_state'])->toBe($payload);
+
+    $other = omtBusiness('Settings Audit Other');
+    $otherUser = omtUser($other);
+
+    $this->getJson('/api/v1/settings/events', omtHeaders($otherUser, $other))
+        ->assertOk()
+        ->assertJsonCount(0, 'data');
+});
+
