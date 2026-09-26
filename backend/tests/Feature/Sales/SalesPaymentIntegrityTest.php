@@ -117,6 +117,7 @@ test('new orders reject duplicate product lines even before service normalizatio
     $product = spiProduct($business);
 
     $this->postJson('/api/v1/orders', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id,
         'type' => 'takeaway',
         'items' => [
@@ -141,12 +142,105 @@ test('order numbers are sequential per business day using the business timezone'
         'items' => [['product_id' => $product, 'quantity' => '1.0000']],
     ];
 
-    $first = $this->postJson('/api/v1/orders', $payload, spiHeaders($business))->assertCreated();
-    $second = $this->postJson('/api/v1/orders', $payload, spiHeaders($business))->assertCreated();
+    $first = $this->postJson('/api/v1/orders', [
+        ...$payload,
+        'idempotency_key' => (string) Str::uuid(),
+    ], spiHeaders($business))->assertCreated();
+    $second = $this->postJson('/api/v1/orders', [
+        ...$payload,
+        'idempotency_key' => (string) Str::uuid(),
+    ], spiHeaders($business))->assertCreated();
 
     $first->assertJsonPath('data.number', '20260917-0001');
     $second->assertJsonPath('data.number', '20260917-0002');
     expect(DB::table('business_order_counters')->where('business_id', $business->id)->where('business_date', '2026-09-17')->value('last_number'))->toBe(2);
+});
+
+test('order creation retries are exactly once and creation keys are payload-bound', function (): void {
+    $business = spiBusiness();
+    $location = spiLocation($business);
+    spiUser($business);
+    $product = spiProduct($business);
+    $key = (string) Str::uuid();
+
+    $payload = [
+        'idempotency_key' => $key,
+        'location_id' => $location->id,
+        'type' => 'takeaway',
+        'items' => [['product_id' => $product, 'quantity' => '1.0000']],
+    ];
+
+    $first = $this->postJson('/api/v1/orders', $payload, spiHeaders($business))->assertCreated();
+    $second = $this->postJson('/api/v1/orders', $payload, spiHeaders($business))->assertCreated();
+
+    expect($second->json('data.id'))->toBe($first->json('data.id'))
+        ->and(DB::table('orders')->where('business_id', $business->id)->where('idempotency_key', $key)->count())->toBe(1)
+        ->and(DB::table('order_items')->where('order_id', $first->json('data.id'))->count())->toBe(1)
+        ->and((int) DB::table('business_order_counters')->where('business_id', $business->id)->value('last_number'))->toBe(1);
+
+    $this->postJson('/api/v1/orders', [
+        ...$payload,
+        'items' => [['product_id' => $product, 'quantity' => '2.0000']],
+    ], spiHeaders($business))->assertStatus(422)
+        ->assertJsonValidationErrors('idempotency_key');
+
+    expect(DB::table('orders')->where('business_id', $business->id)->count())->toBe(1);
+});
+
+test('table order creation refuses a second active order for an occupied table', function (): void {
+    $business = spiBusiness();
+    $location = spiLocation($business);
+    spiUser($business);
+    $product = spiProduct($business);
+
+    $areaId = (string) Str::ulid();
+    DB::table('venue_areas')->insert([
+        'id' => $areaId,
+        'business_id' => $business->id,
+        'location_id' => $location->id,
+        'name' => 'Main Room',
+        'sort_order' => 1,
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $tableId = (string) Str::ulid();
+    DB::table('venue_tables')->insert([
+        'id' => $tableId,
+        'business_id' => $business->id,
+        'location_id' => $location->id,
+        'venue_area_id' => $areaId,
+        'name' => 'T1',
+        'capacity' => 4,
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $base = [
+        'location_id' => $location->id,
+        'venue_table_id' => $tableId,
+        'type' => 'table',
+        'items' => [['product_id' => $product, 'quantity' => '1.0000']],
+    ];
+
+    $this->postJson('/api/v1/orders', [
+        ...$base,
+        'idempotency_key' => (string) Str::uuid(),
+    ], spiHeaders($business))->assertCreated();
+
+    $this->postJson('/api/v1/orders', [
+        ...$base,
+        'idempotency_key' => (string) Str::uuid(),
+    ], spiHeaders($business))->assertStatus(422)
+        ->assertJsonValidationErrors('venue_table_id');
+
+    expect(DB::table('orders')
+        ->where('business_id', $business->id)
+        ->where('venue_table_id', $tableId)
+        ->whereIn('status', ['open', 'payment_due'])
+        ->count())->toBe(1);
 });
 
 test('payment idempotency replays identical requests and rejects conflicting payloads', function (): void {
