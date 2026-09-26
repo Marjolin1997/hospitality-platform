@@ -140,6 +140,18 @@ final class ManageBusinessLocation
                         'location' => 'Complete or cancel all open purchase orders before disabling this location.',
                     ]);
                 }
+
+                $hasDraftInventoryCount = DB::table('inventory_counts')
+                    ->where('business_id', $business->getKey())
+                    ->where('location_id', $locationId)
+                    ->where('status', 'draft')
+                    ->exists();
+
+                if ($hasDraftInventoryCount) {
+                    throw ValidationException::withMessages([
+                        'location' => 'Post or cancel the open stock count before disabling this location.',
+                    ]);
+                }
             }
 
             $before = $this->state($location);
