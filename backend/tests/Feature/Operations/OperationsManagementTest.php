@@ -24,7 +24,11 @@ function omtOrder(Business $business,Location $location,User $user,string $statu
 function omtOrderItem(Business $business,string $orderId,string $name='Invoice item'): string{$id=(string)Str::ulid();DB::table('order_items')->insert(['id'=>$id,'business_id'=>$business->id,'order_id'=>$orderId,'product_name_snapshot'=>$name,'sku_snapshot'=>'INV-SKU','quantity'=>'1.0000','unit_price'=>'10.0000','tax_rate'=>'20.0000','line_subtotal'=>'10.0000','line_tax'=>'2.0000','line_total'=>'12.0000','preparation_status'=>'served','created_at'=>now(),'updated_at'=>now()]);return $id;}
 function omtSettleOrder(Business $business,string $orderId,User $user,string $amount='12.0000'): string{$id=(string)Str::ulid();DB::table('payments')->insert(['id'=>$id,'business_id'=>$business->id,'order_id'=>$orderId,'collected_by_user_id'=>$user->id,'method'=>'card','status'=>'completed','amount'=>$amount,'amount_base'=>$amount,'currency'=>'EUR','base_currency'=>'EUR','exchange_rate'=>'1.0000000000','idempotency_key'=>'invoice-pay-'.Str::uuid(),'paid_at'=>now(),'created_at'=>now(),'updated_at'=>now()]);return $id;}
 
-test('inventory adjustment is tenant and stock tracking safe',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$la=omtLocation($a,'A1');$lb=omtLocation($b,'B1');$user=omtUser($a);$headers=omtHeaders($user,$a);$productA=omtProduct($a,true);$productB=omtProduct($b,true);$nonStock=omtProduct($a,false);$this->postJson('/api/v1/inventory/adjustments',['location_id'=>$la->id,'product_id'=>$productA,'quantity_delta'=>'2.1250','note'=>'Opening stock'],$headers)->assertOk();expect((string)DB::table('inventory_stocks')->where('business_id',$a->id)->where('product_id',$productA)->value('quantity_on_hand'))->toBe('2.1250');expect(DB::table('inventory_movements')->where('business_id',$a->id)->where('product_id',$productA)->count())->toBe(1);$this->postJson('/api/v1/inventory/adjustments',['location_id'=>$lb->id,'product_id'=>$productA,'quantity_delta'=>1],$headers)->assertStatus(422);$this->postJson('/api/v1/inventory/adjustments',['location_id'=>$la->id,'product_id'=>$productB,'quantity_delta'=>1],$headers)->assertStatus(422);$this->postJson('/api/v1/inventory/adjustments',['location_id'=>$la->id,'product_id'=>$nonStock,'quantity_delta'=>1],$headers)->assertStatus(422);});
+test('inventory adjustment is tenant and stock tracking safe',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$la=omtLocation($a,'A1');$lb=omtLocation($b,'B1');$user=omtUser($a);$headers=omtHeaders($user,$a);$productA=omtProduct($a,true);$productB=omtProduct($b,true);$nonStock=omtProduct($a,false);$this->postJson('/api/v1/inventory/adjustments',[
+        'idempotency_key' => (string) Str::uuid(),'location_id'=>$la->id,'product_id'=>$productA,'quantity_delta'=>'2.1250','note'=>'Opening stock'],$headers)->assertOk();expect((string)DB::table('inventory_stocks')->where('business_id',$a->id)->where('product_id',$productA)->value('quantity_on_hand'))->toBe('2.1250');expect(DB::table('inventory_movements')->where('business_id',$a->id)->where('product_id',$productA)->count())->toBe(1);$this->postJson('/api/v1/inventory/adjustments',[
+        'idempotency_key' => (string) Str::uuid(),'location_id'=>$lb->id,'product_id'=>$productA,'quantity_delta'=>1],$headers)->assertStatus(422);$this->postJson('/api/v1/inventory/adjustments',[
+        'idempotency_key' => (string) Str::uuid(),'location_id'=>$la->id,'product_id'=>$productB,'quantity_delta'=>1],$headers)->assertStatus(422);$this->postJson('/api/v1/inventory/adjustments',[
+        'idempotency_key' => (string) Str::uuid(),'location_id'=>$la->id,'product_id'=>$nonStock,'quantity_delta'=>1],$headers)->assertStatus(422);});
 
 test('product management cannot attach a category from another business',function():void{$a=omtBusiness('A');$b=omtBusiness('B');$user=omtUser($a);$headers=omtHeaders($user,$a);$category=(string)Str::ulid();DB::table('product_categories')->insert(['id'=>$category,'business_id'=>$b->id,'name'=>'Foreign','sort_order'=>0,'is_active'=>true,'created_at'=>now(),'updated_at'=>now()]);$this->postJson('/api/v1/management/products',['name'=>'Coffee','category_id'=>$category,'sale_price'=>'3.50','tax_rate'=>'20','tracks_stock'=>false,'is_active'=>true],$headers)->assertStatus(422);expect(DB::table('products')->where('business_id',$a->id)->where('name','Coffee')->exists())->toBeFalse();});
 
@@ -56,15 +60,19 @@ test('finance overview reports open shifts and closed drawer variance',function(
 
 test('expense posting is tenant validated precise and rejects future dates',function():void{
     $a=omtBusiness('Expense A');$b=omtBusiness('Expense B');$la=omtLocation($a,'EA1');$lb=omtLocation($b,'EB1');$user=omtUser($a);$headers=omtHeaders($user,$a);
-    $this->postJson('/api/v1/expenses',['location_id'=>$lb->id,'category'=>'Supplies','description'=>'Foreign location','amount'=>'12.3456','expense_date'=>now()->toDateString()],$headers)->assertStatus(422)->assertJsonValidationErrors('location_id');
-    $this->postJson('/api/v1/expenses',['location_id'=>$la->id,'category'=>'Supplies','description'=>'Future expense','amount'=>'12.3456','expense_date'=>now()->addDay()->toDateString()],$headers)->assertStatus(422)->assertJsonValidationErrors('expense_date');
-    $this->postJson('/api/v1/expenses',['location_id'=>$la->id,'category'=>' Supplies ','description'=>' Coffee beans ','amount'=>'12.3456','expense_date'=>now()->toDateString()],$headers)->assertCreated()->assertJsonPath('data.amount','12.3456')->assertJsonPath('data.currency','EUR');
+    $this->postJson('/api/v1/expenses',[
+        'idempotency_key' => (string) Str::uuid(),'location_id'=>$lb->id,'category'=>'Supplies','description'=>'Foreign location','amount'=>'12.3456','expense_date'=>now()->toDateString()],$headers)->assertStatus(422)->assertJsonValidationErrors('location_id');
+    $this->postJson('/api/v1/expenses',[
+        'idempotency_key' => (string) Str::uuid(),'location_id'=>$la->id,'category'=>'Supplies','description'=>'Future expense','amount'=>'12.3456','expense_date'=>now()->addDay()->toDateString()],$headers)->assertStatus(422)->assertJsonValidationErrors('expense_date');
+    $this->postJson('/api/v1/expenses',[
+        'idempotency_key' => (string) Str::uuid(),'location_id'=>$la->id,'category'=>' Supplies ','description'=>' Coffee beans ','amount'=>'12.3456','expense_date'=>now()->toDateString()],$headers)->assertCreated()->assertJsonPath('data.amount','12.3456')->assertJsonPath('data.currency','EUR');
     expect(DB::table('expenses')->where('business_id',$a->id)->count())->toBe(1)->and(DB::table('expenses')->where('business_id',$a->id)->value('category'))->toBe('Supplies');
 });
 
 test('expense reversal preserves history and neutralizes finance totals exactly once',function():void{
     $business=omtBusiness('Expense reversal');$location=omtLocation($business,'ER1');$user=omtUser($business);$headers=omtHeaders($user,$business);
-    $expense=$this->postJson('/api/v1/expenses',['location_id'=>$location->id,'category'=>'Supplies','description'=>'Coffee beans','amount'=>'25.5000','expense_date'=>now()->toDateString()],$headers)->assertCreated()->json('data.id');
+    $expense=$this->postJson('/api/v1/expenses',[
+        'idempotency_key' => (string) Str::uuid(),'location_id'=>$location->id,'category'=>'Supplies','description'=>'Coffee beans','amount'=>'25.5000','expense_date'=>now()->toDateString()],$headers)->assertCreated()->json('data.id');
     $this->getJson('/api/v1/finance/overview',$headers)->assertOk()->assertJsonPath('data.expenses','25.5000');
     $this->postJson("/api/v1/expenses/{$expense}/reverse",['reason'=>'Duplicate supplier receipt'],$headers)->assertCreated()->assertJsonPath('data.status','reversal')->assertJsonPath('data.reversal_of_expense_id',$expense);
     expect(DB::table('expenses')->where('id',$expense)->value('status'))->toBe('reversed')->and(DB::table('expenses')->where('reversal_of_expense_id',$expense)->count())->toBe(1);
@@ -79,6 +87,7 @@ test('expense creators cannot reverse without approval permission',function():vo
     DB::table('permission_role')->where('role_id',$roleId)->where('permission_id',$approveId)->delete();
 
     $expense=$this->postJson('/api/v1/expenses',[
+        'idempotency_key' => (string) Str::uuid(),
         'location_id'=>$location->id,'category'=>'Supplies','description'=>'Paper goods','amount'=>'8.5000','expense_date'=>now()->toDateString(),
     ],$headers)->assertCreated()->json('data.id');
 
