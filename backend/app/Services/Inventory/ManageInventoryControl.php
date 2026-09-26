@@ -14,6 +14,119 @@ final class ManageInventoryControl
 {
     private const SCALE = 4;
 
+    public function setReorderLevel(
+        Business $business,
+        string $locationId,
+        string $productId,
+        mixed $reorderLevel,
+        int $actorUserId,
+    ): object {
+        return DB::transaction(function () use ($business, $locationId, $productId, $reorderLevel, $actorUserId): object {
+            $this->lockBusiness($business);
+
+            $location = DB::table('locations')
+                ->where('business_id', $business->getKey())
+                ->where('id', $locationId)
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $location) {
+                throw ValidationException::withMessages([
+                    'location_id' => 'Select an active location from this business.',
+                ]);
+            }
+
+            $product = DB::table('products')
+                ->where('business_id', $business->getKey())
+                ->where('id', $productId)
+                ->where('tracks_stock', true)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $product) {
+                throw ValidationException::withMessages([
+                    'product' => 'Select a stock-tracked product from this business.',
+                ]);
+            }
+
+            $normalized = $this->nonNegativeDecimal($reorderLevel, 'reorder_level');
+            $stock = $this->lockedStock($business, $locationId, $productId);
+            $previous = (string) BigDecimal::of((string) ($stock->reorder_level ?? '0'))
+                ->toScale(self::SCALE, RoundingMode::HALF_UP);
+
+            if ($previous === $normalized) {
+                return (object) [
+                    'product_id' => $productId,
+                    'location_id' => $locationId,
+                    'quantity_on_hand' => (string) BigDecimal::of((string) ($stock->quantity_on_hand ?? '0'))
+                        ->toScale(self::SCALE, RoundingMode::HALF_UP),
+                    'reorder_level' => $normalized,
+                ];
+            }
+
+            if ($stock) {
+                DB::table('inventory_stocks')
+                    ->where('business_id', $business->getKey())
+                    ->where('id', $stock->id)
+                    ->update([
+                        'reorder_level' => $normalized,
+                        'updated_at' => now(),
+                    ]);
+
+                $stockId = (string) $stock->id;
+            } else {
+                $stockId = (string) Str::ulid();
+
+                DB::table('inventory_stocks')->insert([
+                    'id' => $stockId,
+                    'business_id' => $business->getKey(),
+                    'location_id' => $locationId,
+                    'product_id' => $productId,
+                    'quantity_on_hand' => '0.0000',
+                    'reorder_level' => $normalized,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            DB::table('business_configuration_audits')->insert([
+                'id' => (string) Str::ulid(),
+                'business_id' => $business->getKey(),
+                'location_id' => $locationId,
+                'performed_by_user_id' => $actorUserId,
+                'entity_type' => 'inventory_stock',
+                'entity_id' => $stockId,
+                'action' => 'reorder_level_changed',
+                'previous_state' => json_encode([
+                    'product_id' => $productId,
+                    'product_name' => $product->name,
+                    'reorder_level' => $previous,
+                ], JSON_THROW_ON_ERROR),
+                'new_state' => json_encode([
+                    'product_id' => $productId,
+                    'product_name' => $product->name,
+                    'reorder_level' => $normalized,
+                ], JSON_THROW_ON_ERROR),
+                'performed_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $updated = DB::table('inventory_stocks')
+                ->where('business_id', $business->getKey())
+                ->where('id', $stockId)
+                ->firstOrFail();
+
+            return (object) [
+                'product_id' => $productId,
+                'location_id' => $locationId,
+                'quantity_on_hand' => (string) $updated->quantity_on_hand,
+                'reorder_level' => (string) $updated->reorder_level,
+            ];
+        }, 3);
+    }
+
     public function transfer(Business $business, array $data, int $actorUserId): object
     {
         return DB::transaction(function () use ($business, $data, $actorUserId): object {
