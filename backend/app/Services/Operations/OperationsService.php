@@ -567,6 +567,17 @@ final class OperationsService
             $timezoneChanged = $record->timezone !== $data['timezone'];
             $taxNumberChanged = (string) ($record->tax_number ?? '') !== (string) ($data['tax_number'] ?? '');
 
+            $productionFiscalization = DB::table('fiscalization_profiles')
+                ->where('business_id', $business->id)
+                ->whereNotNull('production_activated_at')
+                ->exists();
+
+            if (($currencyChanged || $timezoneChanged) && $productionFiscalization) {
+                throw ValidationException::withMessages([
+                    $currencyChanged ? 'currency' : 'timezone' => 'Currency and timezone cannot change after production fiscalization activation without a dedicated migration workflow.',
+                ]);
+            }
+
             if ($currencyChanged || $timezoneChanged) {
                 $transactionalHistory = DB::table('orders')->where('business_id', $business->id)->exists()
                     || DB::table('payments')->where('business_id', $business->id)->exists()
@@ -583,11 +594,6 @@ final class OperationsService
             }
 
             if ($taxNumberChanged) {
-                $productionFiscalization = DB::table('fiscalization_profiles')
-                    ->where('business_id', $business->id)
-                    ->whereNotNull('production_activated_at')
-                    ->exists();
-
                 if ($productionFiscalization) {
                     throw ValidationException::withMessages([
                         'tax_number' => 'Tax number cannot be changed after production fiscalization activation without a dedicated fiscal migration workflow.',
