@@ -80,6 +80,26 @@ final class OperationsService
                 }
             }
 
+            if (! empty($data['preparation_station'])) {
+                $station = DB::table('preparation_stations')
+                    ->where('business_id', $business->id)
+                    ->where('code', $data['preparation_station'])
+                    ->lockForUpdate()
+                    ->first();
+
+                $keepsInactiveStationSafely = $station
+                    && ! (bool) $station->is_active
+                    && $existing
+                    && (string) $existing->preparation_station === (string) $station->code
+                    && ! (bool) $data['is_active'];
+
+                if (! $station || (! (bool) $station->is_active && ! $keepsInactiveStationSafely)) {
+                    throw ValidationException::withMessages([
+                        'preparation_station' => 'Select an active preparation station, or keep this product inactive in its existing inactive station.',
+                    ]);
+                }
+            }
+
             if (! empty($data['category_id'])) {
                 $category = DB::table('product_categories')
                     ->where('business_id', $business->id)
