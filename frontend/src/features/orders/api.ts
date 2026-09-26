@@ -26,7 +26,7 @@ function useOrderMutation<T>(orderId: string | undefined, request: (id: string, 
 }
 
 export function useSendOrder(orderId?: string) { return useOrderMutation<void>(orderId, async id => (await api.post<{ data: Order }>(`/orders/${id}/send`)).data.data); }
-export function useAddOrderItem(orderId?: string) { return useOrderMutation<{ product_id: string; quantity: string; note?: string | null }>(orderId, async (id, p) => (await api.post<{ data: Order }>(`/orders/${id}/items`, p)).data.data); }
+export function useAddOrderItem(orderId?: string) { return useOrderMutation<{ idempotency_key: string; product_id: string; quantity: string; note?: string | null }>(orderId, async (id, p) => (await api.post<{ data: Order }>(`/orders/${id}/items`, p)).data.data); }
 export function useUpdateOrderItem(orderId?: string) { return useOrderMutation<{ item_id: string; quantity?: string; note?: string | null }>(orderId, async (_id, p) => (await api.patch<{ data: Order }>(`/order-items/${p.item_id}`, { quantity: p.quantity, note: p.note })).data.data); }
 export function useRemoveOrderItem(orderId?: string) { return useOrderMutation<{ item_id: string; reason: string }>(orderId, async (_id, p) => (await api.delete<{ data: Order }>(`/order-items/${p.item_id}`, { data: { reason: p.reason } })).data.data); }
 export function useOverrideOrderItemPrice(orderId?: string) { return useOrderMutation<{ item_id: string; unit_price: string; reason: string }>(orderId, async (_id, p) => (await api.put<{ data: Order }>(`/order-items/${p.item_id}/price`, { unit_price: p.unit_price, reason: p.reason })).data.data); }
