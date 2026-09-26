@@ -113,6 +113,16 @@ test('custom role lifecycle is tenant scoped audited and exposes the permission 
         ->and(json_decode($updateAudit->previous_permissions, true))->toBe(['orders.view', 'products.view'])
         ->and(json_decode($updateAudit->new_permissions, true))->toBe(['orders.update', 'orders.view', 'products.view']);
 
+    $history = $this->getJson("/api/v1/roles/{$roleId}/events", $headers)
+        ->assertOk()
+        ->json('data');
+
+    expect($history)->toHaveCount(2)
+        ->and($history[0]['action'])->toBe('updated')
+        ->and($history[0]['previous_name'])->toBe('Floor Lead')
+        ->and($history[0]['new_name'])->toBe('Service Lead')
+        ->and($history[0]['performed_by_name'])->toBe($actor->name);
+
     $auditCount = DB::table('business_role_audits')->where('role_id', $roleId)->count();
     $this->putJson("/api/v1/roles/{$roleId}", [
         'name' => 'Service Lead',
@@ -212,6 +222,10 @@ test('custom roles with live staff invitations cannot be deleted until the invit
         'expires_in_days' => 7,
     ], $headers)->assertCreated();
 
+    $roles = $this->getJson('/api/v1/roles', $headers)->assertOk()->json('data.roles');
+    $roleRow = collect($roles)->firstWhere('id', $roleId);
+    expect($roleRow['pending_invitation_count'])->toBe(1);
+
     $this->deleteJson("/api/v1/roles/{$roleId}", [], $headers)
         ->assertStatus(422)
         ->assertJsonValidationErrors('role');
@@ -297,6 +311,8 @@ test('role mutations cannot cross tenant boundaries', function (): void {
     ], $headersA)->assertNotFound();
 
     $this->deleteJson("/api/v1/roles/{$roleB}", [], $headersA)->assertNotFound();
+
+    $this->getJson("/api/v1/roles/{$roleB}/events", $headersA)->assertNotFound();
 
     expect(Role::query()->whereKey($roleB)->value('name'))->toBe('Tenant B Custom');
 });
