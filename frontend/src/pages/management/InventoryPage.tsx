@@ -8,6 +8,7 @@ import {
   PackagePlus,
   Plus,
   Search,
+  Settings2,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -20,6 +21,15 @@ type Stock = {
   sku: string | null;
   quantity_on_hand: string;
   reorder_level: string;
+};
+
+type ReorderEvent = {
+  id: string;
+  action: string;
+  previous_state: { product_id?: string; product_name?: string; reorder_level?: string } | null;
+  new_state: { product_id?: string; product_name?: string; reorder_level?: string } | null;
+  performed_at: string;
+  performed_by_name: string;
 };
 
 type Movement = {
@@ -185,6 +195,9 @@ export function InventoryPage() {
   const [adjusting, setAdjusting] = useState<Stock | null>(null);
   const [adjustmentDelta, setAdjustmentDelta] = useState('1');
   const [adjustmentNote, setAdjustmentNote] = useState('');
+  const [reorderTarget, setReorderTarget] = useState<Stock | null>(null);
+  const [reorderLevel, setReorderLevelValue] = useState('0');
+  const [reorderHistoryTarget, setReorderHistoryTarget] = useState<Stock | null>(null);
 
   const [transferEditor, setTransferEditor] = useState<TransferDraft | null>(null);
   const [transferDetailId, setTransferDetailId] = useState<string | null>(null);
@@ -199,6 +212,14 @@ export function InventoryPage() {
     enabled: Boolean(activeBusiness && activeLocation),
     queryFn: () => api
       .get<{ data: Stock[] }>('/inventory', { params: { location_id: activeLocation!.id } })
+      .then(response => response.data.data),
+  });
+
+  const reorderHistoryQuery = useQuery({
+    queryKey: ['inventory-reorder-events', activeBusiness?.id, activeLocation?.id, reorderHistoryTarget?.id],
+    enabled: Boolean(activeBusiness && activeLocation && reorderHistoryTarget),
+    queryFn: () => api
+      .get<{ data: ReorderEvent[] }>(`/inventory/products/${reorderHistoryTarget!.id}/reorder-level/events?location_id=${activeLocation!.id}`)
       .then(response => response.data.data),
   });
 
@@ -291,6 +312,21 @@ export function InventoryPage() {
       setAdjustmentDelta('1');
       setAdjustmentNote('');
       await invalidateInventory();
+    },
+  });
+
+  const saveReorderLevel = useMutation({
+    mutationFn: ({ productId, level }: { productId: string; level: string }) =>
+      api.put(`/inventory/products/${productId}/reorder-level`, {
+        location_id: activeLocation!.id,
+        reorder_level: level,
+      }),
+    onSuccess: async (_response, variables) => {
+      setReorderTarget(null);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['inventory', activeBusiness?.id, activeLocation?.id] }),
+        qc.invalidateQueries({ queryKey: ['inventory-reorder-events', activeBusiness?.id, activeLocation?.id, variables.productId] }),
+      ]);
     },
   });
 
@@ -531,7 +567,7 @@ export function InventoryPage() {
           <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Item</th><th>SKU</th><th>On hand</th><th>Reorder</th><th>Health</th><th>Action</th></tr></thead><tbody>{filteredStocks.map(stock => {
             const isLow = Number(stock.quantity_on_hand) <= Number(stock.reorder_level);
             const isOut = Number(stock.quantity_on_hand) <= 0;
-            return <tr key={stock.id}><td><strong>{stock.name}</strong></td><td>{stock.sku ?? '—'}</td><td><strong>{qty(stock.quantity_on_hand)}</strong></td><td>{qty(stock.reorder_level)}</td><td><span className={`status-badge ${isOut ? 'danger' : isLow ? 'warning' : 'success'}`}>{isOut ? 'Out of stock' : isLow ? 'Low stock' : 'Healthy'}</span></td><td>{canAdjust ? <button type="button" className="secondary-button" onClick={() => { adjust.reset(); setAdjusting(stock); setAdjustmentDelta('1'); setAdjustmentNote(''); }}><PackagePlus size={15} /> Adjust stock</button> : <span className="muted">View only</span>}</td></tr>;
+            return <tr key={stock.id}><td><strong>{stock.name}</strong></td><td>{stock.sku ?? '—'}</td><td><strong>{qty(stock.quantity_on_hand)}</strong></td><td>{qty(stock.reorder_level)}</td><td><span className={`status-badge ${isOut ? 'danger' : isLow ? 'warning' : 'success'}`}>{isOut ? 'Out of stock' : isLow ? 'Low stock' : 'Healthy'}</span></td><td><div className="inline-actions inventory-stock-actions">{canAdjust && <button type="button" className="secondary-button" onClick={() => { adjust.reset(); setAdjusting(stock); setAdjustmentDelta('1'); setAdjustmentNote(''); }}><PackagePlus size={15} /> Adjust</button>}{canAdjust && <button type="button" className="secondary-button" onClick={() => { saveReorderLevel.reset(); setReorderTarget(stock); setReorderLevelValue(stock.reorder_level); }}><Settings2 size={15} /> Reorder level</button>}<button type="button" className="secondary-button" onClick={() => setReorderHistoryTarget(stock)}><History size={15} /> History</button></div></td></tr>;
           })}</tbody></table></div>
         )}
       </section>
@@ -616,6 +652,37 @@ export function InventoryPage() {
           {adjust.isError && <p className="error-state">{apiMessage(adjust.error)}</p>}
           <footer className="modal-actions"><button type="button" className="secondary-button" disabled={adjust.isPending} onClick={() => setAdjusting(null)}>Cancel</button><button className="primary-button" disabled={!adjustmentValid || projected < 0 || adjust.isPending}>{adjust.isPending ? 'Applying…' : 'Apply adjustment'}</button></footer>
         </form>
+      </div>
+    )}
+
+    {reorderTarget && (
+      <div className="modal-backdrop" role="presentation" onMouseDown={event => {
+        if (event.target === event.currentTarget && !saveReorderLevel.isPending) setReorderTarget(null);
+      }}>
+        <form className="modal-card compact-confirmation inventory-reorder-modal" role="dialog" aria-modal="true" aria-label={`Set reorder level for ${reorderTarget.name}`} onSubmit={event => {
+          event.preventDefault();
+          if (Number.isFinite(Number(reorderLevel)) && Number(reorderLevel) >= 0) {
+            saveReorderLevel.mutate({ productId: reorderTarget.id, level: reorderLevel });
+          }
+        }}>
+          <header><div><span className="eyebrow">LOW-STOCK THRESHOLD</span><h2>{reorderTarget.name}</h2><p>This changes alert configuration only. It never changes quantity on hand or creates an inventory movement.</p></div><button type="button" className="icon-button" aria-label="Close reorder level editor" disabled={saveReorderLevel.isPending} onClick={() => setReorderTarget(null)}><X size={18} /></button></header>
+          <div className="reconciliation-summary"><span>On hand <strong>{qty(reorderTarget.quantity_on_hand)}</strong></span><span>Current threshold <strong>{qty(reorderTarget.reorder_level)}</strong></span></div>
+          <label className="inventory-reason-field"><span>Reorder level</span><input autoFocus required type="number" min="0" step="0.0001" inputMode="decimal" value={reorderLevel} onChange={event => setReorderLevelValue(event.target.value)} /></label>
+          {saveReorderLevel.isError && <p className="error-state">{apiMessage(saveReorderLevel.error)}</p>}
+          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={saveReorderLevel.isPending} onClick={() => setReorderTarget(null)}>Cancel</button><button className="primary-button" disabled={saveReorderLevel.isPending || reorderLevel === '' || !Number.isFinite(Number(reorderLevel)) || Number(reorderLevel) < 0}>{saveReorderLevel.isPending ? 'Saving…' : 'Save reorder level'}</button></footer>
+        </form>
+      </div>
+    )}
+
+    {reorderHistoryTarget && (
+      <div className="modal-backdrop" role="presentation" onMouseDown={event => {
+        if (event.target === event.currentTarget) setReorderHistoryTarget(null);
+      }}>
+        <div className="modal-card management-modal invitation-history-modal inventory-reorder-history-modal" role="dialog" aria-modal="true" aria-label="Reorder level history">
+          <header><div><span className="eyebrow">INVENTORY CONFIGURATION AUDIT</span><h2>{reorderHistoryTarget.name}</h2><p>Immutable reorder-threshold changes for {activeLocation.name}. Quantity movements are recorded separately in the inventory ledger.</p></div><button type="button" className="icon-button" aria-label="Close reorder level history" onClick={() => setReorderHistoryTarget(null)}><X size={18} /></button></header>
+          {reorderHistoryQuery.isLoading ? <div className="management-state">Loading threshold history…</div> : reorderHistoryQuery.isError ? <div className="management-state error"><AlertTriangle size={18} /><div><strong>Threshold history unavailable</strong><span>{apiMessage(reorderHistoryQuery.error)}</span></div><button type="button" className="secondary-button" onClick={() => reorderHistoryQuery.refetch()}>Try again</button></div> : (reorderHistoryQuery.data ?? []).length === 0 ? <Empty>No reorder-level changes have been recorded yet.</Empty> : <div className="invitation-timeline">{(reorderHistoryQuery.data ?? []).map(event => <article key={event.id} className="invitation-timeline-event"><span className="timeline-dot" aria-hidden="true" /><div><header><strong>{event.action.replaceAll('_', ' ')}</strong><time>{new Date(event.performed_at).toLocaleString()}</time></header><p>{qty(event.previous_state?.reorder_level ?? '0')} → {qty(event.new_state?.reorder_level ?? '0')} · {event.performed_by_name}</p></div></article>)}</div>}
+          <footer className="modal-actions"><button type="button" className="primary-button" onClick={() => setReorderHistoryTarget(null)}>Done</button></footer>
+        </div>
       </div>
     )}
 
