@@ -281,3 +281,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .inventory-reorder-modal .inventory-reason-field input:focus{border-color:#789640;box-shadow:0 0 0 3px rgba(118,150,61,.11)}
 .inventory-reorder-history-modal{width:min(680px,100%)}
 @media(max-width:680px){.inventory-stock-actions{min-width:0}.inventory-stock-actions .secondary-button{flex:1}}
+
+
+/* Reports workspace */
+.reports-page{display:grid;gap:16px}.reports-page>.management-tabs{margin-bottom:0}.report-filter-panel{padding:14px 16px}.report-filter-row{display:flex;align-items:end;gap:12px;flex-wrap:wrap}.report-date-fields{display:flex;align-items:end;gap:9px}.report-date-fields label{display:grid;gap:5px;color:#596860;font-size:9px;font-weight:850}.report-date-fields input{min-height:40px;border:1px solid #dce4df;border-radius:9px;padding:7px 9px;background:#fff;color:#2f4137}.report-date-fields input:focus{border-color:#789640;outline:3px solid rgba(118,150,61,.11)}
+.report-presets{display:flex;align-items:center;gap:6px}.report-range-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding-top:10px;border-top:1px solid #edf1ef}.report-range-meta>span{color:#405047;font-size:10px;font-weight:800}.report-range-meta>small{color:#86928b;font-size:8.5px}
+.report-primary-metrics,.report-secondary-metrics{margin:0}.report-secondary-metrics .metric-card{min-height:105px}
+.reports-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.reports-grid>.panel{min-width:0}
+.report-stat-list{display:grid;gap:7px}.report-stat-list>div{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 12px;border:1px solid #e3e9e5;border-radius:10px;background:#fafcfb}.report-stat-list span{color:#65756c;font-size:10px}.report-stat-list strong{color:#2f4137;font-size:10.5px;text-align:right}
+.report-definition-panel{display:grid;gap:7px;padding:13px 15px;border:1px solid #dfe6e2;border-radius:12px;background:#f8faf9}.report-definition-panel p{margin:0;color:#6e7c74;font-size:9.5px;line-height:1.55}.report-definition-panel p:before{content:"i";display:inline-grid;place-items:center;width:16px;height:16px;margin-right:7px;border:1px solid #cfd9d3;border-radius:50%;color:#64766b;font-size:8px;font-weight:900;vertical-align:middle}
+@media(max-width:900px){.reports-grid{grid-template-columns:1fr}.report-filter-row{align-items:stretch}.report-date-fields{flex:1}.report-date-fields label{flex:1}.report-filter-row>.primary-button{align-self:end}}
+@media(max-width:680px){.report-filter-row,.report-date-fields,.report-presets,.report-range-meta{align-items:stretch;flex-direction:column}.report-presets{display:grid;grid-template-columns:repeat(3,1fr)}.report-filter-row>.primary-button{width:100%;align-self:auto}.report-range-meta{gap:4px}.reports-tabs{width:100%;display:grid;grid-template-columns:1fr 1fr}.reports-tabs button{justify-content:center}}
