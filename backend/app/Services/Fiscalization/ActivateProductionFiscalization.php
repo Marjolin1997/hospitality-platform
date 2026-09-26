@@ -25,6 +25,12 @@ final class ActivateProductionFiscalization
                 ->first();
             abort_unless($profile, 404);
 
+            if ($profile->production_activated_at !== null) {
+                throw ValidationException::withMessages([
+                    'fiscalization' => 'Production fiscalization is already activated for this business.',
+                ]);
+            }
+
             if ($profile->environment !== 'production') {
                 throw ValidationException::withMessages([
                     'environment' => 'Switch the fiscalization profile to production before activation.',
