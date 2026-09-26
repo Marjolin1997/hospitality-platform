@@ -261,6 +261,7 @@ test('purchase order placement snapshots cost and partial receipts update invent
     $milkLine = collect($detail['items'])->firstWhere('product_id', $milk);
 
     $receipt1 = $this->postJson("/api/v1/purchase-orders/{$po}/receipts", [
+        'idempotency_key' => (string) Str::uuid(),
         'note' => 'First delivery',
         'items' => [
             ['purchase_order_item_id' => $coffeeLine['id'], 'quantity_received' => '4'],
@@ -276,6 +277,7 @@ test('purchase order placement snapshots cost and partial receipts update invent
         ->and(DB::table('inventory_movements')->where('reference_type', 'goods_receipt')->where('reference_id', $receipt1Id)->count())->toBe(2);
 
     $this->postJson("/api/v1/purchase-orders/{$po}/receipts", [
+        'idempotency_key' => (string) Str::uuid(),
         'note' => 'Final delivery',
         'items' => [
             ['purchase_order_item_id' => $coffeeLine['id'], 'quantity_received' => '6'],
@@ -314,6 +316,7 @@ test('over receipt rolls back receipt stock line progress and inventory movement
     $line = DB::table('purchase_order_items')->where('purchase_order_id', $po)->firstOrFail();
 
     $this->postJson("/api/v1/purchase-orders/{$po}/receipts", [
+        'idempotency_key' => (string) Str::uuid(),
         'items' => [[
             'purchase_order_item_id' => $line->id,
             'quantity_received' => '6',
@@ -325,6 +328,59 @@ test('over receipt rolls back receipt stock line progress and inventory movement
         ->and(DB::table('inventory_movements')->where('reference_type', 'goods_receipt')->count())->toBe(0)
         ->and(DB::table('inventory_stocks')->where('product_id', $product)->count())->toBe(0)
         ->and((string) DB::table('purchase_order_items')->where('id', $line->id)->value('quantity_received'))->toBe('0.0000');
+});
+
+test('goods receipt idempotency replays safely and rejects key reuse for another payload', function (): void {
+    $business = pcmBusiness('PO Receipt Idempotency');
+    $location = pcmLocation($business);
+    $manager = pcmUser($business, ['purchasing.view', 'purchasing.manage', 'inventory.receive']);
+    $headers = pcmHeaders($manager, $business);
+    $supplier = pcmSupplier($this, $headers);
+    $product = pcmProduct($business, 'Idempotent Beans');
+
+    $po = pcmOrder($this, $headers, $location->id, $supplier, [[
+        'product_id' => $product,
+        'quantity_ordered' => '10',
+        'unit_cost' => '2',
+    ]]);
+
+    $this->postJson("/api/v1/purchase-orders/{$po}/place", [], $headers)->assertOk();
+    $line = DB::table('purchase_order_items')->where('purchase_order_id', $po)->firstOrFail();
+    $key = (string) Str::uuid();
+
+    $payload = [
+        'idempotency_key' => $key,
+        'note' => 'Network-safe receive',
+        'items' => [[
+            'purchase_order_item_id' => $line->id,
+            'quantity_received' => '4',
+        ]],
+    ];
+
+    $first = $this->postJson("/api/v1/purchase-orders/{$po}/receipts", $payload, $headers)
+        ->assertCreated();
+
+    $second = $this->postJson("/api/v1/purchase-orders/{$po}/receipts", $payload, $headers)
+        ->assertCreated();
+
+    expect($second->json('data.id'))->toBe($first->json('data.id'))
+        ->and(DB::table('goods_receipts')->where('purchase_order_id', $po)->count())->toBe(1)
+        ->and(DB::table('inventory_movements')->where('reference_type', 'goods_receipt')->count())->toBe(1)
+        ->and((string) DB::table('inventory_stocks')->where('location_id', $location->id)->where('product_id', $product)->value('quantity_on_hand'))->toBe('4.0000')
+        ->and((string) DB::table('purchase_order_items')->where('id', $line->id)->value('quantity_received'))->toBe('4.0000');
+
+    $this->postJson("/api/v1/purchase-orders/{$po}/receipts", [
+        'idempotency_key' => $key,
+        'note' => 'Different payload',
+        'items' => [[
+            'purchase_order_item_id' => $line->id,
+            'quantity_received' => '1',
+        ]],
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('idempotency_key');
+
+    expect(DB::table('goods_receipts')->where('purchase_order_id', $po)->count())->toBe(1)
+        ->and((string) DB::table('inventory_stocks')->where('location_id', $location->id)->where('product_id', $product)->value('quantity_on_hand'))->toBe('4.0000');
 });
 
 test('purchase order cancellation is blocked after any goods receipt', function (): void {
@@ -345,6 +401,7 @@ test('purchase order cancellation is blocked after any goods receipt', function 
     $line = DB::table('purchase_order_items')->where('purchase_order_id', $po)->firstOrFail();
 
     $this->postJson("/api/v1/purchase-orders/{$po}/receipts", [
+        'idempotency_key' => (string) Str::uuid(),
         'items' => [[
             'purchase_order_item_id' => $line->id,
             'quantity_received' => '1',
@@ -381,11 +438,13 @@ test('purchasing permissions separate order management receiving and view access
     $line = DB::table('purchase_order_items')->where('purchase_order_id', $po)->firstOrFail();
 
     $this->postJson("/api/v1/purchase-orders/{$po}/receipts", [
+        'idempotency_key' => (string) Str::uuid(),
         'items' => [['purchase_order_item_id' => $line->id, 'quantity_received' => '1']],
     ], $managerHeaders)->assertForbidden();
 
     $receiverHeaders = pcmHeaders($receiver, $business);
     $this->postJson("/api/v1/purchase-orders/{$po}/receipts", [
+        'idempotency_key' => (string) Str::uuid(),
         'items' => [['purchase_order_item_id' => $line->id, 'quantity_received' => '1']],
     ], $receiverHeaders)->assertCreated();
 
