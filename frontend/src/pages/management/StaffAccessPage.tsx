@@ -229,8 +229,13 @@ function invitationStatusClass(status: StaffInvitation['status']) {
 export function StaffAccessPage() {
   const { activeBusiness, can, refreshUser } = useAuth();
   const qc = useQueryClient();
+  const canViewStaff = can('users.view');
+  const canManageStaff = canManageStaff;
+  const canManageRoles = canManageRoles;
 
-  const [section, setSection] = useState<'team' | 'invitations' | 'roles'>('team');
+  const [section, setSection] = useState<'team' | 'invitations' | 'roles'>(
+    canViewStaff ? 'team' : canManageRoles ? 'roles' : 'invitations',
+  );
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -259,19 +264,28 @@ export function StaffAccessPage() {
   const [historyInvitation, setHistoryInvitation] = useState<StaffInvitation | null>(null);
 
   useEffect(() => {
-    if (section === 'invitations' && !can('users.manage')) setSection('team');
-    if (section === 'roles' && !can('roles.manage')) setSection('team');
-  }, [can, section]);
+    if (section === 'team' && !canViewStaff) {
+      setSection(canManageRoles ? 'roles' : 'invitations');
+      return;
+    }
+    if (section === 'invitations' && !canManageStaff) {
+      setSection(canViewStaff ? 'team' : 'roles');
+      return;
+    }
+    if (section === 'roles' && !canManageRoles) {
+      setSection(canViewStaff ? 'team' : 'invitations');
+    }
+  }, [canManageRoles, canManageStaff, canViewStaff, section]);
 
   const staffQuery = useQuery({
     queryKey: ['staff', activeBusiness?.id],
-    enabled: Boolean(activeBusiness),
+    enabled: Boolean(activeBusiness) && canViewStaff,
     queryFn: () => api.get<{ data: StaffResponse }>('/staff').then(response => response.data.data),
   });
 
   const staffHistoryQuery = useQuery({
     queryKey: ['staff-events', activeBusiness?.id, historyMember?.id],
-    enabled: Boolean(activeBusiness) && Boolean(historyMember),
+    enabled: Boolean(activeBusiness) && canViewStaff && Boolean(historyMember),
     queryFn: () => api
       .get<{ data: StaffHistoryResponse }>(`/staff/${historyMember!.id}/events`)
       .then(response => response.data.data),
@@ -279,7 +293,7 @@ export function StaffAccessPage() {
 
   const roleHistoryQuery = useQuery({
     queryKey: ['role-events', activeBusiness?.id, roleHistoryTarget?.id],
-    enabled: Boolean(activeBusiness && roleHistoryTarget && can('roles.manage')),
+    enabled: Boolean(activeBusiness && roleHistoryTarget && canManageRoles),
     queryFn: () => api
       .get<{ data: RoleAuditEvent[] }>(`/roles/${roleHistoryTarget!.id}/events`)
       .then(response => response.data.data),
@@ -287,19 +301,19 @@ export function StaffAccessPage() {
 
   const rolesQuery = useQuery({
     queryKey: ['roles', activeBusiness?.id],
-    enabled: Boolean(activeBusiness) && can('roles.manage'),
+    enabled: Boolean(activeBusiness) && canManageRoles,
     queryFn: () => api.get<{ data: RoleManagementResponse }>('/roles').then(response => response.data.data),
   });
 
   const invitationsQuery = useQuery({
     queryKey: ['staff-invitations', activeBusiness?.id],
-    enabled: Boolean(activeBusiness) && can('users.manage'),
+    enabled: Boolean(activeBusiness) && canManageStaff,
     queryFn: () => api.get<{ data: StaffInvitation[] }>('/staff-invitations').then(response => response.data.data),
   });
 
   const invitationHistoryQuery = useQuery({
     queryKey: ['staff-invitation-events', activeBusiness?.id, historyInvitation?.id],
-    enabled: Boolean(activeBusiness) && can('users.manage') && Boolean(historyInvitation),
+    enabled: Boolean(activeBusiness) && canManageStaff && Boolean(historyInvitation),
     queryFn: () => api
       .get<{ data: InvitationEvent[] }>(`/staff-invitations/${historyInvitation!.id}/events`)
       .then(response => response.data.data),
@@ -409,10 +423,14 @@ export function StaffAccessPage() {
     },
   });
 
-  if (staffQuery.isLoading) return <Loading />;
-  if (staffQuery.isError) return <ErrorState />;
+  if (canViewStaff && staffQuery.isLoading) return <Loading />;
+  if (canViewStaff && staffQuery.isError) return <ErrorState />;
 
-  const data = staffQuery.data;
+  const data: StaffResponse = staffQuery.data ?? {
+    staff: [],
+    roles: [],
+    assignable_role_ids: [],
+  };
   const staff = data.staff;
   const assignableRoleIds = new Set(data.assignable_role_ids);
   const assignableRoles = data.roles.filter(role => assignableRoleIds.has(role.id));
@@ -540,7 +558,7 @@ export function StaffAccessPage() {
           <h1>Staff & Roles</h1>
           <p>Tenant-scoped membership, secure onboarding, owner continuity and least-privilege role design.</p>
         </div>
-        {can('users.manage') && (
+        {canManageStaff && (
           <button
             type="button"
             className="primary-button"
@@ -557,42 +575,47 @@ export function StaffAccessPage() {
       <div className="metric-grid management-metrics staff-metrics">
         <div className="metric-card">
           <span>Team members</span>
-          <strong>{staff.length}</strong>
-          <small>People linked to this business</small>
+          <strong>{canViewStaff ? staff.length : '—'}</strong>
+          <small>{canViewStaff ? 'People linked to this business' : 'Requires staff view access'}</small>
         </div>
         <div className="metric-card">
           <span>Active access</span>
-          <strong>{activeMembers}</strong>
-          <small>{staff.length - activeMembers} inactive membership{staff.length - activeMembers === 1 ? '' : 's'}</small>
+          <strong>{canViewStaff ? activeMembers : '—'}</strong>
+          <small>{canViewStaff
+            ? `${staff.length - activeMembers} inactive membership${staff.length - activeMembers === 1 ? '' : 's'}`
+            : 'Requires staff view access'}
+          </small>
         </div>
         <div className="metric-card">
           <span>Pending invites</span>
-          <strong>{can('users.manage') ? pendingInvitations.length : '—'}</strong>
-          <small>{can('users.manage') ? 'Awaiting secure acceptance' : 'Requires staff management access'}</small>
+          <strong>{canManageStaff ? pendingInvitations.length : '—'}</strong>
+          <small>{canManageStaff ? 'Awaiting secure acceptance' : 'Requires staff management access'}</small>
         </div>
         <div className="metric-card">
           <span>Available roles</span>
           <strong>{rolesQuery.data?.roles.length ?? data.roles.length}</strong>
-          <small>{can('roles.manage')
+          <small>{canManageRoles
             ? `${customRoles.length} custom · ${activeOwners} active owner`
             : `${activeOwners} active owner${activeOwners === 1 ? '' : 's'}`}
           </small>
         </div>
       </div>
 
-      {(can('users.manage') || can('roles.manage')) && (
+      {(canManageStaff || canManageRoles) && (
         <div className="management-tabs" role="tablist" aria-label="Staff access views">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={section === 'team'}
-            className={section === 'team' ? 'active' : ''}
-            onClick={() => setSection('team')}
-          >
-            <Users size={15} />
-            Team access
-          </button>
-          {can('users.manage') && (
+          {canViewStaff && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={section === 'team'}
+              className={section === 'team' ? 'active' : ''}
+              onClick={() => setSection('team')}
+            >
+              <Users size={15} />
+              Team access
+            </button>
+          )}
+          {canManageStaff && (
             <button
               type="button"
               role="tab"
@@ -605,7 +628,7 @@ export function StaffAccessPage() {
               {pendingInvitations.length > 0 && <span className="tab-count">{pendingInvitations.length}</span>}
             </button>
           )}
-          {can('roles.manage') && (
+          {canManageRoles && (
             <button
               type="button"
               role="tab"
@@ -626,7 +649,7 @@ export function StaffAccessPage() {
             <div>
               <h2>Access matrix</h2>
               <p>
-                {can('users.manage')
+                {canManageStaff
                   ? 'Role and status changes are applied immediately and recorded in the membership audit trail.'
                   : 'You have read-only access to staff roles and membership status.'}
               </p>
@@ -673,7 +696,7 @@ export function StaffAccessPage() {
             </div>
           </div>
 
-          {can('users.manage') && (
+          {canManageStaff && (
             <div className="owner-continuity-note">
               <strong>Owner continuity & delegation guard</strong>
               <span>
@@ -717,7 +740,7 @@ export function StaffAccessPage() {
                         </td>
                         <td>{member.email}</td>
                         <td>
-                          {can('users.manage') && manageable ? (
+                          {canManageStaff && manageable ? (
                             <select
                               aria-label={`Role for ${member.name}`}
                               className="table-select"
@@ -741,14 +764,14 @@ export function StaffAccessPage() {
                           ) : (
                             <div className="restricted-access-cell">
                               <span>{member.role_name ?? 'No role'}</span>
-                              {can('users.manage') && !manageable && (
+                              {canManageStaff && !manageable && (
                                 <small>Above your delegation level</small>
                               )}
                             </div>
                           )}
                         </td>
                         <td>
-                          {can('users.manage') && manageable && member.role_id ? (
+                          {canManageStaff && manageable && member.role_id ? (
                             <select
                               aria-label={`Access status for ${member.name}`}
                               className="table-select status-select"
@@ -793,7 +816,7 @@ export function StaffAccessPage() {
         </div>
       )}
 
-      {section === 'invitations' && can('users.manage') && (
+      {section === 'invitations' && canManageStaff && (
         <div className="panel management-panel invitation-management-panel">
           <div className="panel-heading catalog-toolbar">
             <div>
@@ -958,7 +981,7 @@ export function StaffAccessPage() {
         </div>
       )}
 
-      {section === 'roles' && can('roles.manage') && (
+      {section === 'roles' && canManageRoles && (
         <div className="panel management-panel role-management-panel">
           <div className="panel-heading">
             <div>
