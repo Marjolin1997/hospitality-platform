@@ -83,6 +83,44 @@ final class BusinessLocationController extends Controller
         return response()->json(['data' => $rows]);
     }
 
+    public function events(string $location): JsonResponse
+    {
+        $business = app(Business::class);
+
+        abort_unless(
+            DB::table('locations')
+                ->where('business_id', $business->getKey())
+                ->where('id', $location)
+                ->exists(),
+            404,
+        );
+
+        $rows = DB::table('business_location_audits as bla')
+            ->join('users as actor', 'actor.id', '=', 'bla.performed_by_user_id')
+            ->where('bla.business_id', $business->getKey())
+            ->where('bla.location_id', $location)
+            ->orderByDesc('bla.performed_at')
+            ->orderByDesc('bla.id')
+            ->get([
+                'bla.id',
+                'bla.action',
+                'bla.previous_state',
+                'bla.new_state',
+                'bla.performed_at',
+                'actor.name as performed_by_name',
+            ])
+            ->map(fn (object $event): array => [
+                'id' => $event->id,
+                'action' => $event->action,
+                'previous_state' => $event->previous_state ? json_decode($event->previous_state, true, 512, JSON_THROW_ON_ERROR) : null,
+                'new_state' => $event->new_state ? json_decode($event->new_state, true, 512, JSON_THROW_ON_ERROR) : null,
+                'performed_at' => $event->performed_at,
+                'performed_by_name' => $event->performed_by_name,
+            ]);
+
+        return response()->json(['data' => $rows]);
+    }
+
     public function store(SaveBusinessLocationRequest $request): JsonResponse
     {
         $business = app(Business::class);
