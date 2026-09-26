@@ -121,6 +121,7 @@ type PurchaseLineDraft = {
 type PurchaseDraft = {
   id?: string;
   number?: string;
+  idempotency_key?: string;
   supplier_id: string;
   notes: string;
   items: PurchaseLineDraft[];
@@ -173,6 +174,7 @@ const blankSupplier: SupplierDraft = {
 };
 
 const blankPurchase = (): PurchaseDraft => ({
+  idempotency_key: crypto.randomUUID(),
   supplier_id: '',
   notes: '',
   items: [{ product_id: '', quantity_ordered: '1', unit_cost: '' }],
@@ -317,7 +319,10 @@ export function PurchasingPage() {
 
       return draft.id
         ? api.put(`/purchase-orders/${draft.id}`, payload)
-        : api.post('/purchase-orders', payload);
+        : api.post('/purchase-orders', {
+            ...payload,
+            idempotency_key: draft.idempotency_key ?? crypto.randomUUID(),
+          });
     },
     onSuccess: async (_response, draft) => {
       setPurchaseEditor(null);
