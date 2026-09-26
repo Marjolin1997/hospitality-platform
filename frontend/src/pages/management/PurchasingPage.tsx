@@ -110,6 +110,8 @@ type PurchaseLineDraft = {
 };
 
 type PurchaseDraft = {
+  id?: string;
+  number?: string;
   supplier_id: string;
   notes: string;
   items: PurchaseLineDraft[];
@@ -281,20 +283,52 @@ export function PurchasingPage() {
     },
   });
 
-  const createPurchase = useMutation({
-    mutationFn: (draft: PurchaseDraft) => api.post('/purchase-orders', {
-      location_id: activeLocation!.id,
-      supplier_id: draft.supplier_id,
-      notes: draft.notes.trim() || null,
-      items: draft.items.map(item => ({
-        product_id: item.product_id,
-        quantity_ordered: item.quantity_ordered,
-        unit_cost: item.unit_cost,
-      })),
-    }),
-    onSuccess: async () => {
+  const savePurchase = useMutation({
+    mutationFn: (draft: PurchaseDraft) => {
+      const payload = {
+        location_id: activeLocation!.id,
+        supplier_id: draft.supplier_id,
+        notes: draft.notes.trim() || null,
+        items: draft.items.map(item => ({
+          product_id: item.product_id,
+          quantity_ordered: item.quantity_ordered,
+          unit_cost: item.unit_cost,
+        })),
+      };
+
+      return draft.id
+        ? api.put(`/purchase-orders/${draft.id}`, payload)
+        : api.post('/purchase-orders', payload);
+    },
+    onSuccess: async (_response, draft) => {
       setPurchaseEditor(null);
       await refreshPurchasing();
+      if (draft.id) {
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: ['purchase-order-detail', activeBusiness?.id, draft.id] }),
+          qc.invalidateQueries({ queryKey: ['purchase-order-events', activeBusiness?.id, draft.id] }),
+        ]);
+      }
+    },
+  });
+
+  const editDraftPurchase = useMutation({
+    mutationFn: (order: PurchaseOrderSummary) => api
+      .get<{ data: PurchaseOrderDetail }>(`/purchase-orders/${order.id}`)
+      .then(response => response.data.data),
+    onSuccess: detail => {
+      savePurchase.reset();
+      setPurchaseEditor({
+        id: detail.order.id,
+        number: detail.order.number,
+        supplier_id: detail.order.supplier_id,
+        notes: detail.order.notes ?? '',
+        items: detail.items.map(item => ({
+          product_id: item.product_id,
+          quantity_ordered: item.quantity_ordered,
+          unit_cost: item.unit_cost,
+        })),
+      });
     },
   });
 
@@ -415,7 +449,7 @@ export function PurchasingPage() {
           className="primary-button"
           disabled={!options || options.suppliers.length === 0 || options.products.length === 0}
           onClick={() => {
-            createPurchase.reset();
+            savePurchase.reset();
             setPurchaseEditor(blankPurchase());
           }}
         >
@@ -516,7 +550,8 @@ export function PurchasingPage() {
                     <td><span className={`status-badge ${statusClass(order.status)}`}>{order.status.replaceAll('_', ' ')}</span></td>
                     <td><div className="inline-actions purchasing-actions">
                       <button type="button" className="secondary-button" onClick={() => setDetailOrderId(order.id)}>View</button>
-                      {canManage && order.status === 'draft' && <button type="button" className="secondary-button" disabled={placePurchase.isPending} onClick={() => placePurchase.mutate(order)}><CheckCircle2 size={14} /> Place</button>}
+                      {canManage && order.status === 'draft' && <button type="button" className="secondary-button" disabled={editDraftPurchase.isPending} onClick={() => editDraftPurchase.mutate(order)}><Pencil size={14} /> Edit</button>}
+                      {canManage && order.status === 'draft' && <button type="button" className="secondary-button" disabled={placePurchase.isPending || editDraftPurchase.isPending} onClick={() => placePurchase.mutate(order)}><CheckCircle2 size={14} /> Place</button>}
                       {canReceive && ['ordered', 'partially_received'].includes(order.status) && <button type="button" className="primary-button compact-action" onClick={() => { receivePurchase.reset(); setReceiveOrderId(order.id); }}><PackageCheck size={14} /> Receive</button>}
                       <button type="button" className="secondary-button" onClick={() => setHistoryTarget(order)}><History size={14} /> History</button>
                       {canManage && ['draft', 'ordered'].includes(order.status) && <button type="button" className="secondary-button subtle-danger" onClick={() => { cancelPurchase.reset(); setCancelReason(''); setCancelTarget(order); }}>Cancel</button>}
@@ -619,13 +654,13 @@ export function PurchasingPage() {
 
     {purchaseEditor && (
       <div className="modal-backdrop" role="presentation" onMouseDown={event => {
-        if (event.target === event.currentTarget && !createPurchase.isPending) setPurchaseEditor(null);
+        if (event.target === event.currentTarget && !savePurchase.isPending) setPurchaseEditor(null);
       }}>
         <form className="modal-card management-modal purchase-order-editor" role="dialog" aria-modal="true" aria-label="Create purchase order" onSubmit={event => {
           event.preventDefault();
-          if (purchaseValid) createPurchase.mutate(purchaseEditor);
+          if (purchaseValid) savePurchase.mutate(purchaseEditor);
         }}>
-          <header><div><span className="eyebrow">PURCHASE ORDER DRAFT</span><h2>New purchase order</h2><p>Unit costs and quantities are authoritative procurement values. After placement the document becomes immutable.</p></div><button type="button" className="icon-button" aria-label="Close purchase order form" disabled={createPurchase.isPending} onClick={() => setPurchaseEditor(null)}><X size={18} /></button></header>
+          <header><div><span className="eyebrow">PURCHASE ORDER DRAFT</span><h2>{purchaseEditor.id ? `Edit ${purchaseEditor.number ?? 'purchase order'}` : 'New purchase order'}</h2><p>Unit costs and quantities are authoritative procurement values. After placement the document becomes immutable.</p></div><button type="button" className="icon-button" aria-label="Close purchase order form" disabled={savePurchase.isPending} onClick={() => setPurchaseEditor(null)}><X size={18} /></button></header>
           <div className="form-grid">
             <label className="span-2"><span>Supplier</span><select required value={purchaseEditor.supplier_id} onChange={event => setPurchaseEditor({ ...purchaseEditor, supplier_id: event.target.value })}><option value="">Select supplier</option>{options?.suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
             <label className="span-2"><span>Internal notes</span><textarea maxLength={2000} value={purchaseEditor.notes} onChange={event => setPurchaseEditor({ ...purchaseEditor, notes: event.target.value })} placeholder="Optional procurement notes" /></label>
@@ -645,8 +680,8 @@ export function PurchasingPage() {
             })}
           </div>
           <div className="purchase-total-summary"><span>Draft total</span><strong>{money(purchaseEditor.items.reduce((sum, line) => sum + (Number(line.quantity_ordered) || 0) * (Number(line.unit_cost) || 0), 0), currency)}</strong></div>
-          {createPurchase.isError && <p className="error-state">{apiMessage(createPurchase.error)}</p>}
-          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={createPurchase.isPending} onClick={() => setPurchaseEditor(null)}>Cancel</button><button className="primary-button" disabled={createPurchase.isPending || !purchaseValid}>{createPurchase.isPending ? 'Creating draft…' : 'Create draft'}</button></footer>
+          {savePurchase.isError && <p className="error-state">{apiMessage(savePurchase.error)}</p>}
+          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={savePurchase.isPending} onClick={() => setPurchaseEditor(null)}>Cancel</button><button className="primary-button" disabled={savePurchase.isPending || !purchaseValid}>{savePurchase.isPending ? 'Saving draft…' : purchaseEditor.id ? 'Save draft' : 'Create draft'}</button></footer>
         </form>
       </div>
     )}
