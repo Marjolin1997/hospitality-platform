@@ -32,6 +32,8 @@ return new class extends Migration {
             $table->string('supplier_name_snapshot', 160);
             $table->string('supplier_tax_number_snapshot', 80)->nullable();
             $table->string('number', 48);
+            $table->string('idempotency_key', 64);
+            $table->json('request_snapshot');
             $table->string('status', 32)->default('draft');
             $table->char('currency', 3);
             $table->decimal('total_cost', 18, 4)->default(0);
@@ -42,6 +44,7 @@ return new class extends Migration {
             $table->timestamps();
 
             $table->unique(['business_id', 'number'], 'purchase_order_business_number_uq');
+            $table->unique(['business_id', 'idempotency_key'], 'purchase_order_business_idempotency_uq');
             $table->index(['business_id', 'location_id', 'status', 'created_at'], 'purchase_order_lookup_idx');
             $table->index(['business_id', 'supplier_id', 'status'], 'purchase_order_supplier_status_idx');
         });
