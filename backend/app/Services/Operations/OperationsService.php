@@ -402,6 +402,42 @@ final class OperationsService
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            $delta = BigDecimal::of((string) $data['quantity_delta'])->toScale(self::SCALE, RoundingMode::HALF_UP);
+            if ($delta->isZero()) {
+                throw ValidationException::withMessages([
+                    'quantity_delta' => 'Quantity adjustment cannot be zero.',
+                ]);
+            }
+
+            $snapshot = [
+                'location_id' => $locationId,
+                'product_id' => (string) $data['product_id'],
+                'quantity_delta' => (string) $delta,
+                'note' => isset($data['note']) && trim((string) $data['note']) !== ''
+                    ? trim((string) $data['note'])
+                    : null,
+            ];
+
+            $existingMovement = DB::table('inventory_movements')
+                ->where('business_id', $business->id)
+                ->where('idempotency_key', $data['idempotency_key'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($existingMovement) {
+                $stored = $existingMovement->request_snapshot
+                    ? json_decode($existingMovement->request_snapshot, true, 512, JSON_THROW_ON_ERROR)
+                    : null;
+
+                if ($existingMovement->type !== 'adjustment' || $stored !== $snapshot) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => 'This idempotency key was already used for a different inventory adjustment request.',
+                    ]);
+                }
+
+                return;
+            }
+
             $product = DB::table('products')
                 ->where('business_id', $business->id)
                 ->where('id', $data['product_id'])
@@ -415,13 +451,16 @@ final class OperationsService
             }
 
             $stock = DB::table('inventory_stocks')
-                ->where(['business_id' => $business->id, 'location_id' => $locationId, 'product_id' => $data['product_id']])
+                ->where([
+                    'business_id' => $business->id,
+                    'location_id' => $locationId,
+                    'product_id' => $data['product_id'],
+                ])
                 ->lockForUpdate()
                 ->first();
 
-            $current = BigDecimal::of((string) ($stock->quantity_on_hand ?? '0'))->toScale(self::SCALE, RoundingMode::HALF_UP);
-            $delta = BigDecimal::of((string) $data['quantity_delta'])->toScale(self::SCALE, RoundingMode::HALF_UP);
-            abort_if($delta->isZero(), 422, 'Quantity adjustment cannot be zero.');
+            $current = BigDecimal::of((string) ($stock->quantity_on_hand ?? '0'))
+                ->toScale(self::SCALE, RoundingMode::HALF_UP);
             $next = $current->plus($delta)->toScale(self::SCALE, RoundingMode::HALF_UP);
 
             if ($next->isNegative()) {
@@ -431,46 +470,103 @@ final class OperationsService
             }
 
             if ($stock) {
-                DB::table('inventory_stocks')->where('id', $stock->id)->update(['quantity_on_hand' => (string) $next, 'updated_at' => now()]);
+                DB::table('inventory_stocks')
+                    ->where('id', $stock->id)
+                    ->update([
+                        'quantity_on_hand' => (string) $next,
+                        'updated_at' => now(),
+                    ]);
             } else {
                 DB::table('inventory_stocks')->insert([
-                    'id' => (string) Str::ulid(), 'business_id' => $business->id, 'location_id' => $locationId,
-                    'product_id' => $data['product_id'], 'quantity_on_hand' => (string) $next, 'reorder_level' => '0.0000',
-                    'created_at' => now(), 'updated_at' => now(),
+                    'id' => (string) Str::ulid(),
+                    'business_id' => $business->id,
+                    'location_id' => $locationId,
+                    'product_id' => $data['product_id'],
+                    'quantity_on_hand' => (string) $next,
+                    'reorder_level' => '0.0000',
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
             }
 
             DB::table('inventory_movements')->insert([
-                'id' => (string) Str::ulid(), 'business_id' => $business->id, 'location_id' => $locationId,
-                'product_id' => $data['product_id'], 'created_by_user_id' => $userId, 'type' => 'adjustment',
-                'quantity_delta' => (string) $delta, 'note' => $data['note'] ?? null, 'occurred_at' => now(),
-                'created_at' => now(), 'updated_at' => now(),
+                'id' => (string) Str::ulid(),
+                'business_id' => $business->id,
+                'location_id' => $locationId,
+                'product_id' => $data['product_id'],
+                'created_by_user_id' => $userId,
+                'type' => 'adjustment',
+                'quantity_delta' => (string) $delta,
+                'idempotency_key' => $data['idempotency_key'],
+                'request_snapshot' => json_encode($snapshot, JSON_THROW_ON_ERROR),
+                'note' => $snapshot['note'],
+                'occurred_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
-        });
+        }, attempts: 3);
     }
 
     public function createExpense(Business $business, array $data, int $userId): object
     {
         return DB::transaction(function () use ($business, $data, $userId): object {
-            $id = (string) Str::ulid();
+            DB::table('businesses')
+                ->where('id', $business->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
             $amount = BigDecimal::of((string) $data['amount'])->toScale(self::SCALE, RoundingMode::HALF_UP);
+            $snapshot = [
+                'location_id' => $data['location_id'] ?? null,
+                'category' => trim((string) $data['category']),
+                'description' => trim((string) $data['description']),
+                'amount' => (string) $amount,
+                'expense_date' => (string) $data['expense_date'],
+            ];
+
+            $existing = DB::table('expenses')
+                ->where('business_id', $business->id)
+                ->where('idempotency_key', $data['idempotency_key'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing) {
+                $stored = $existing->request_snapshot
+                    ? json_decode($existing->request_snapshot, true, 512, JSON_THROW_ON_ERROR)
+                    : null;
+
+                if ($existing->reversal_of_expense_id !== null || $stored !== $snapshot) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => 'This idempotency key was already used for a different expense request.',
+                    ]);
+                }
+
+                return $existing;
+            }
+
+            $id = (string) Str::ulid();
 
             DB::table('expenses')->insert([
                 'id' => $id,
                 'business_id' => $business->id,
-                'location_id' => $data['location_id'] ?? null,
+                'location_id' => $snapshot['location_id'],
                 'created_by_user_id' => $userId,
-                'category' => trim($data['category']),
-                'description' => trim($data['description']),
+                'category' => $snapshot['category'],
+                'description' => $snapshot['description'],
                 'amount' => (string) $amount,
                 'currency' => $business->currency,
-                'expense_date' => $data['expense_date'],
+                'expense_date' => $snapshot['expense_date'],
                 'status' => 'posted',
+                'idempotency_key' => $data['idempotency_key'],
+                'request_snapshot' => json_encode($snapshot, JSON_THROW_ON_ERROR),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
 
-            return DB::table('expenses')->where('business_id', $business->id)->where('id', $id)->first();
+            return DB::table('expenses')
+                ->where('business_id', $business->id)
+                ->where('id', $id)
+                ->firstOrFail();
         }, attempts: 3);
     }
 
