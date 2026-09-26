@@ -14,6 +14,7 @@ final class CreatePurchaseOrderRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'idempotency_key' => [$this->route('purchaseOrder') ? 'nullable' : 'required', 'string', 'min:16', 'max:64'],
             'location_id' => ['required', 'string'],
             'supplier_id' => ['required', 'string'],
             'notes' => ['nullable', 'string', 'max:2000'],
