@@ -495,3 +495,43 @@ test('location disable and stock tracking changes respect open purchasing depend
 
     expect($secondLocation->is_active)->toBeTrue();
 });
+
+test('supplier create update status and history are audited without cross tenant leakage', function (): void {
+    $business = pcmBusiness('Supplier Audit');
+    $user = pcmUser($business, ['purchasing.view', 'purchasing.manage']);
+    $headers = pcmHeaders($user, $business);
+
+    $supplier = pcmSupplier($this, $headers, 'Audit Supplier');
+
+    $this->postJson('/api/v1/purchasing/suppliers', [
+        'id' => $supplier,
+        'name' => 'Audit Supplier Updated',
+        'tax_number' => 'TAX-AUDIT',
+        'contact_name' => 'Updated Contact',
+        'email' => 'updated@example.test',
+        'phone' => '+49 999',
+        'address' => 'Updated Address',
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.name', 'Audit Supplier Updated');
+
+    $this->patchJson("/api/v1/purchasing/suppliers/{$supplier}/status", [
+        'is_active' => false,
+    ], $headers)->assertOk();
+
+    $events = $this->getJson("/api/v1/purchasing/suppliers/{$supplier}/events", $headers)
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($events)->pluck('action')->all())
+        ->toContain('created', 'updated', 'status_changed')
+        ->and($events[0]['performed_by_name'])->toBe($user->name);
+
+    $other = pcmBusiness('Supplier Audit Other');
+    $otherUser = pcmUser($other, ['purchasing.view']);
+
+    $this->getJson(
+        "/api/v1/purchasing/suppliers/{$supplier}/events",
+        pcmHeaders($otherUser, $other),
+    )->assertNotFound();
+});
+
