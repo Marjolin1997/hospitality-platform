@@ -547,9 +547,21 @@ final class OperationsService
         ];
     }
 
-    public function updateSettings(Business $business, array $data): void
+    public function updateSettings(Business $business, array $data, ?int $actorUserId = null): void
     {
-        DB::transaction(function () use ($business, $data): void {
+        DB::transaction(function () use ($business, $data, $actorUserId): void {
+            DB::table('businesses')->where('id', $business->id)->lockForUpdate()->firstOrFail();
+
+            $before = [];
+            foreach (array_keys($data) as $key) {
+                $stored = DB::table('business_settings')
+                    ->where('business_id', $business->id)
+                    ->where('key', $key)
+                    ->lockForUpdate()
+                    ->first();
+                $before[$key] = $stored ? json_decode($stored->value, true) : null;
+            }
+
             foreach ($data as $key => $value) {
                 $existing = DB::table('business_settings')->where('business_id', $business->id)->where('key', $key)->first();
                 if ($existing) {
@@ -561,7 +573,19 @@ final class OperationsService
                     ]);
                 }
             }
-        });
+
+            if ($actorUserId !== null && $before !== $data) {
+                $this->configurationAudit(
+                    $business,
+                    $actorUserId,
+                    'business_settings',
+                    (string) $business->id,
+                    'updated',
+                    $before,
+                    $data,
+                );
+            }
+        }, attempts: 3);
     }
 
     private function decimal(string|int|BigDecimal $value): string
