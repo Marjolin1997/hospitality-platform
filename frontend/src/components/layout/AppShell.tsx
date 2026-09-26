@@ -16,7 +16,7 @@ const navigation=[
   {label:'Invoices',to:'/invoices',icon:FileText,permissions:['invoices.view','invoices.issue'],section:'Management'},
   {label:'Venue Setup',to:'/venue-setup',icon:LayoutGrid,permissions:['venue.manage','cash_registers.manage'],section:'Management'},
   {label:'Staff',to:'/staff',icon:Users,permissions:['users.view','users.manage','roles.manage'],section:'Administration'},
-  {label:'Settings',to:'/settings',icon:Settings,permissions:['business.settings.manage'],section:'Administration'},
+  {label:'Settings',to:'/settings',icon:Settings,permissions:['business.settings.manage','fiscalization.view','fiscalization.manage','fiscalization.activate_production'],section:'Administration'},
 ] as const;
 
 export function AppShell(){
