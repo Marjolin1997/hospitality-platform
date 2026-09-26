@@ -114,6 +114,7 @@ function pcmOrder(
     array $items,
 ): string {
     return $case->postJson('/api/v1/purchase-orders', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $locationId,
         'supplier_id' => $supplierId,
         'notes' => 'Weekly replenishment',
@@ -228,6 +229,44 @@ test('draft purchase orders can be edited atomically and become immutable after 
 
     expect(DB::table('purchase_order_items')->where('purchase_order_id', $po)->count())->toBe(2)
         ->and((string) DB::table('purchase_orders')->where('id', $po)->value('total_cost'))->toBe('22.0000');
+});
+
+test('purchase order creation retries are exactly once and key reuse is payload-bound', function (): void {
+    $business = pcmBusiness('PO Create Idempotency');
+    $location = pcmLocation($business);
+    $manager = pcmUser($business, ['purchasing.view', 'purchasing.manage']);
+    $headers = pcmHeaders($manager, $business);
+    $supplier = pcmSupplier($this, $headers);
+    $product = pcmProduct($business, 'Idempotent PO Product');
+    $key = (string) Str::uuid();
+
+    $payload = [
+        'idempotency_key' => $key,
+        'location_id' => $location->id,
+        'supplier_id' => $supplier,
+        'notes' => 'Retry-safe purchase order',
+        'items' => [[
+            'product_id' => $product,
+            'quantity_ordered' => '5',
+            'unit_cost' => '2.2500',
+        ]],
+    ];
+
+    $first = $this->postJson('/api/v1/purchase-orders', $payload, $headers)->assertCreated();
+    $second = $this->postJson('/api/v1/purchase-orders', $payload, $headers)->assertCreated();
+
+    expect($second->json('data.id'))->toBe($first->json('data.id'))
+        ->and(DB::table('purchase_orders')->where('business_id', $business->id)->where('idempotency_key', $key)->count())->toBe(1)
+        ->and(DB::table('purchase_order_items')->where('purchase_order_id', $first->json('data.id'))->count())->toBe(1)
+        ->and(DB::table('purchase_order_events')->where('purchase_order_id', $first->json('data.id'))->where('event', 'created')->count())->toBe(1);
+
+    $this->postJson('/api/v1/purchase-orders', [
+        ...$payload,
+        'notes' => 'Different payload',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('idempotency_key');
+
+    expect(DB::table('purchase_orders')->where('business_id', $business->id)->where('idempotency_key', $key)->count())->toBe(1);
 });
 
 test('purchase order placement snapshots cost and partial receipts update inventory exactly once', function (): void {
