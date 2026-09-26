@@ -50,6 +50,34 @@ final class OperationsService
                         'tracks_stock' => 'Complete or cancel outstanding purchase orders before disabling stock tracking for this product.',
                     ]);
                 }
+
+                $hasDraftCount = DB::table('inventory_count_items as ici')
+                    ->join('inventory_counts as ic', function ($join) use ($business): void {
+                        $join->on('ic.id', '=', 'ici.inventory_count_id')
+                            ->where('ic.business_id', $business->id);
+                    })
+                    ->where('ici.business_id', $business->id)
+                    ->where('ici.product_id', $existing->id)
+                    ->where('ic.status', 'draft')
+                    ->exists();
+
+                if ($hasDraftCount) {
+                    throw ValidationException::withMessages([
+                        'tracks_stock' => 'Post or cancel open stock counts before disabling stock tracking for this product.',
+                    ]);
+                }
+
+                $hasPhysicalStock = DB::table('inventory_stocks')
+                    ->where('business_id', $business->id)
+                    ->where('product_id', $existing->id)
+                    ->where('quantity_on_hand', '!=', 0)
+                    ->exists();
+
+                if ($hasPhysicalStock) {
+                    throw ValidationException::withMessages([
+                        'tracks_stock' => 'Bring stock to zero with an audited adjustment or stock count before disabling stock tracking.',
+                    ]);
+                }
             }
 
             if (! empty($data['category_id'])) {
