@@ -14,7 +14,7 @@ class OrderItem extends Model
     protected $fillable = [
         'business_id', 'order_id', 'product_id', 'product_name_snapshot', 'sku_snapshot',
         'quantity', 'unit_price', 'original_unit_price', 'tax_rate', 'line_subtotal', 'line_tax', 'line_total',
-        'preparation_station', 'preparation_status', 'note', 'sent_at', 'preparing_at',
+        'preparation_station', 'preparation_status', 'note', 'idempotency_key', 'request_snapshot', 'sent_at', 'preparing_at',
         'prepared_at', 'served_at', 'void_reason', 'voided_by_user_id', 'voided_at',
         'price_override_reason', 'price_overridden_by_user_id', 'price_overridden_at',
     ];
@@ -22,6 +22,7 @@ class OrderItem extends Model
     protected function casts(): array
     {
         return [
+            'request_snapshot' => 'array',
             'quantity' => 'decimal:4', 'unit_price' => 'decimal:4', 'original_unit_price' => 'decimal:4',
             'tax_rate' => 'decimal:4', 'line_subtotal' => 'decimal:4', 'line_tax' => 'decimal:4', 'line_total' => 'decimal:4',
             'sent_at' => 'datetime', 'preparing_at' => 'datetime', 'prepared_at' => 'datetime',
