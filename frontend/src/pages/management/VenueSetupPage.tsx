@@ -502,7 +502,11 @@ export function VenueSetupPage() {
                         disabled={toggleArea.isPending}
                         onClick={() => {
                           toggleArea.reset();
-                          area.is_active ? setAreaDisableTarget(area) : toggleArea.mutate(area);
+                          if (area.is_active) {
+                            setAreaDisableTarget(area);
+                          } else {
+                            toggleArea.mutate(area);
+                          }
                         }}
                       >
                         {area.is_active ? 'Disable' : 'Enable'}
@@ -631,7 +635,11 @@ export function VenueSetupPage() {
                               disabled={toggleTable.isPending}
                               onClick={() => {
                                 toggleTable.reset();
-                                table.is_active ? setTableDisableTarget(table) : toggleTable.mutate(table);
+                                if (table.is_active) {
+                                  setTableDisableTarget(table);
+                                } else {
+                                  toggleTable.mutate(table);
+                                }
                               }}
                             >
                               {table.is_active ? 'Disable' : 'Enable'}
@@ -778,9 +786,11 @@ export function VenueSetupPage() {
                             disabled={toggleRegister.isPending}
                             onClick={() => {
                               toggleRegister.reset();
-                              register.is_active
-                                ? setRegisterDisableTarget(register)
-                                : toggleRegister.mutate(register);
+                              if (register.is_active) {
+                                setRegisterDisableTarget(register);
+                              } else {
+                                toggleRegister.mutate(register);
+                              }
                             }}
                           >
                             {register.is_active ? 'Disable' : 'Enable'}
