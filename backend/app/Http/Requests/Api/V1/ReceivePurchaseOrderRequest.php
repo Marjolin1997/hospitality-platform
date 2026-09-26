@@ -14,6 +14,7 @@ final class ReceivePurchaseOrderRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'idempotency_key' => ['required', 'string', 'min:16', 'max:64'],
             'note' => ['nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1', 'max:100'],
             'items.*.purchase_order_item_id' => ['required', 'string', 'distinct'],
