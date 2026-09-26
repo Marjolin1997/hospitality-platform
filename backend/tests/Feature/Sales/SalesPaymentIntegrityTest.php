@@ -453,3 +453,65 @@ test('cash session opening is location-bound and opening and closing cash use ex
 
     expect(DB::table('cash_sessions')->where('id',$session)->value('status'))->toBe('open');
 });
+
+test('manual cash movement retries are exactly once and idempotency keys are payload-bound', function (): void {
+    $business = spiBusiness();
+    $location = spiLocation($business);
+    spiUser($business);
+    $headers = spiHeaders($business);
+
+    $registerId = (string) Str::ulid();
+    DB::table('cash_registers')->insert([
+        'id' => $registerId,
+        'business_id' => $business->id,
+        'location_id' => $location->id,
+        'name' => 'Retry Drawer',
+        'code' => 'RETRY-DRAWER',
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $session = $this->postJson('/api/v1/cash-sessions', [
+        'location_id' => $location->id,
+        'cash_register_id' => $registerId,
+        'opening_cash' => '20.0000',
+    ], $headers)->assertCreated()->json('data.id');
+
+    $key = (string) Str::uuid();
+    $payload = [
+        'idempotency_key' => $key,
+        'location_id' => $location->id,
+        'type' => 'cash_in',
+        'amount' => '5.0000',
+        'currency' => 'EUR',
+        'reason' => 'Retry-safe extra float',
+    ];
+
+    $first = $this->postJson("/api/v1/cash-sessions/{$session}/movements", $payload, $headers)
+        ->assertCreated();
+    $second = $this->postJson("/api/v1/cash-sessions/{$session}/movements", $payload, $headers)
+        ->assertCreated();
+
+    expect($second->json('data.id'))->toBe($first->json('data.id'))
+        ->and(DB::table('cash_movements')
+            ->where('business_id', $business->id)
+            ->where('idempotency_key', $key)
+            ->count())->toBe(1)
+        ->and((string) DB::table('cash_movements')
+            ->where('business_id', $business->id)
+            ->where('idempotency_key', $key)
+            ->sum('amount_base'))->toBe('5.0000');
+
+    $this->postJson("/api/v1/cash-sessions/{$session}/movements", [
+        ...$payload,
+        'amount' => '6.0000',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('idempotency_key');
+
+    expect(DB::table('cash_movements')
+        ->where('business_id', $business->id)
+        ->where('idempotency_key', $key)
+        ->count())->toBe(1);
+});
+
