@@ -198,6 +198,7 @@ export function PurchasingPage() {
   const [receiveOrderId, setReceiveOrderId] = useState<string | null>(null);
   const [receiveQuantities, setReceiveQuantities] = useState<Record<string, string>>({});
   const [receiveNote, setReceiveNote] = useState('');
+  const [receiveIdempotencyKey, setReceiveIdempotencyKey] = useState('');
   const [cancelTarget, setCancelTarget] = useState<PurchaseOrderSummary | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [historyTarget, setHistoryTarget] = useState<PurchaseOrderSummary | null>(null);
@@ -372,11 +373,13 @@ export function PurchasingPage() {
   });
 
   const receivePurchase = useMutation({
-    mutationFn: ({ orderId, items, note }: {
+    mutationFn: ({ orderId, items, note, idempotencyKey }: {
       orderId: string;
       items: Array<{ purchase_order_item_id: string; quantity_received: string }>;
       note: string;
+      idempotencyKey: string;
     }) => api.post(`/purchase-orders/${orderId}/receipts`, {
+      idempotency_key: idempotencyKey,
       note: note.trim() || null,
       items,
     }),
@@ -384,6 +387,7 @@ export function PurchasingPage() {
       setReceiveOrderId(null);
       setReceiveQuantities({});
       setReceiveNote('');
+      setReceiveIdempotencyKey('');
       await refreshPurchasing();
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['purchase-order-detail', activeBusiness?.id, variables.orderId] }),
@@ -570,7 +574,11 @@ export function PurchasingPage() {
                       <button type="button" className="secondary-button" onClick={() => setDetailOrderId(order.id)}>View</button>
                       {canManage && order.status === 'draft' && <button type="button" className="secondary-button" disabled={editDraftPurchase.isPending} onClick={() => editDraftPurchase.mutate(order)}><Pencil size={14} /> Edit</button>}
                       {canManage && order.status === 'draft' && <button type="button" className="secondary-button" disabled={placePurchase.isPending || editDraftPurchase.isPending} onClick={() => placePurchase.mutate(order)}><CheckCircle2 size={14} /> Place</button>}
-                      {canReceive && ['ordered', 'partially_received'].includes(order.status) && <button type="button" className="primary-button compact-action" onClick={() => { receivePurchase.reset(); setReceiveOrderId(order.id); }}><PackageCheck size={14} /> Receive</button>}
+                      {canReceive && ['ordered', 'partially_received'].includes(order.status) && <button type="button" className="primary-button compact-action" onClick={() => {
+                        receivePurchase.reset();
+                        setReceiveIdempotencyKey(crypto.randomUUID());
+                        setReceiveOrderId(order.id);
+                      }}><PackageCheck size={14} /> Receive</button>}
                       <button type="button" className="secondary-button" onClick={() => setHistoryTarget(order)}><History size={14} /> History</button>
                       {canManage && ['draft', 'ordered'].includes(order.status) && <button type="button" className="secondary-button subtle-danger" onClick={() => { cancelPurchase.reset(); setCancelReason(''); setCancelTarget(order); }}>Cancel</button>}
                     </div></td>
@@ -747,7 +755,12 @@ export function PurchasingPage() {
             <label className="receipt-note-field"><span>Receipt note</span><textarea maxLength={1000} value={receiveNote} onChange={event => setReceiveNote(event.target.value)} placeholder="Optional delivery note / condition" /></label>
           </>}
           {receivePurchase.isError && <p className="error-state">{apiMessage(receivePurchase.error)}</p>}
-          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={receivePurchase.isPending} onClick={() => setReceiveOrderId(null)}>Cancel</button><button type="button" className="primary-button" disabled={receivePurchase.isPending || receiveItems.length === 0} onClick={() => receiveOrderId && receivePurchase.mutate({ orderId: receiveOrderId, items: receiveItems, note: receiveNote })}>{receivePurchase.isPending ? 'Posting receipt…' : 'Post goods receipt'}</button></footer>
+          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={receivePurchase.isPending} onClick={() => setReceiveOrderId(null)}>Cancel</button><button type="button" className="primary-button" disabled={receivePurchase.isPending || receiveItems.length === 0} onClick={() => receiveOrderId && receivePurchase.mutate({
+                orderId: receiveOrderId,
+                items: receiveItems,
+                note: receiveNote,
+                idempotencyKey: receiveIdempotencyKey || crypto.randomUUID(),
+              })}>{receivePurchase.isPending ? 'Posting receipt…' : 'Post goods receipt'}</button></footer>
         </div>
       </div>
     )}
