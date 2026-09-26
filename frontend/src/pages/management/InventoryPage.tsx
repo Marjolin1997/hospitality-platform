@@ -129,6 +129,7 @@ type CountEvent = {
 };
 
 type TransferDraft = {
+  idempotency_key: string;
   destination_location_id: string;
   note: string;
   items: Array<{ product_id: string; quantity: string }>;
@@ -172,6 +173,7 @@ function Empty({ children }: { children: string }) {
 }
 
 const newTransfer = (): TransferDraft => ({
+  idempotency_key: crypto.randomUUID(),
   destination_location_id: '',
   note: '',
   items: [{ product_id: '', quantity: '1' }],
@@ -332,6 +334,7 @@ export function InventoryPage() {
 
   const createTransfer = useMutation({
     mutationFn: (draft: TransferDraft) => api.post('/inventory/transfers', {
+      idempotency_key: draft.idempotency_key,
       source_location_id: activeLocation!.id,
       destination_location_id: draft.destination_location_id,
       note: draft.note.trim(),
