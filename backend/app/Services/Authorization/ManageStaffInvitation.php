@@ -203,6 +203,10 @@ final class ManageStaffInvitation
 
             abort_unless($invitation, 404);
 
+            if ($invitation->status === 'revoked') {
+                return;
+            }
+
             if ($invitation->status !== 'pending') {
                 throw ValidationException::withMessages([
                     'invitation' => 'Only pending invitations can be revoked.',
