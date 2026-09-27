@@ -570,38 +570,111 @@ final class OperationsService
         }, attempts: 3);
     }
 
-    public function reverseExpense(Business $business, string $expenseId, string $reason, int $userId): object
-    {
-        return DB::transaction(function () use ($business, $expenseId, $reason, $userId): object {
-            $expense = DB::table('expenses')->where('business_id', $business->id)->where('id', $expenseId)->lockForUpdate()->first();
+    public function reverseExpense(
+        Business $business,
+        string $expenseId,
+        string $reason,
+        string $idempotencyKey,
+        int $userId,
+    ): object {
+        return DB::transaction(function () use ($business, $expenseId, $reason, $idempotencyKey, $userId): object {
+            DB::table('businesses')
+                ->where('id', $business->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $expense = DB::table('expenses')
+                ->where('business_id', $business->id)
+                ->where('id', $expenseId)
+                ->lockForUpdate()
+                ->first();
+
             abort_unless($expense, 404);
 
-            if ($expense->status !== 'posted' || $expense->reversal_of_expense_id !== null) {
-                throw \Illuminate\Validation\ValidationException::withMessages(['expense' => 'Only an original posted expense can be reversed.']);
+            $reason = trim($reason);
+            $snapshot = [
+                'expense_id' => $expenseId,
+                'reason' => $reason,
+            ];
+
+            $byKey = DB::table('expenses')
+                ->where('business_id', $business->id)
+                ->where('idempotency_key', $idempotencyKey)
+                ->lockForUpdate()
+                ->first();
+
+            if ($byKey) {
+                $stored = $byKey->request_snapshot
+                    ? json_decode($byKey->request_snapshot, true, 512, JSON_THROW_ON_ERROR)
+                    : null;
+
+                if ((string) ($byKey->reversal_of_expense_id ?? '') !== $expenseId
+                    || $byKey->status !== 'reversal'
+                    || $stored !== $snapshot) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => 'This idempotency key was already used for a different expense request.',
+                    ]);
+                }
+
+                return $byKey;
             }
 
-            $existing = DB::table('expenses')->where('business_id', $business->id)->where('reversal_of_expense_id', $expenseId)->lockForUpdate()->first();
-            if ($existing) {
-                throw \Illuminate\Validation\ValidationException::withMessages(['expense' => 'This expense has already been reversed.']);
+            $existingReversal = DB::table('expenses')
+                ->where('business_id', $business->id)
+                ->where('reversal_of_expense_id', $expenseId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($existingReversal) {
+                throw ValidationException::withMessages([
+                    'expense' => 'This expense has already been reversed.',
+                ]);
+            }
+
+            if ($expense->status !== 'posted' || $expense->reversal_of_expense_id !== null) {
+                throw ValidationException::withMessages([
+                    'expense' => 'Only an original posted expense can be reversed.',
+                ]);
             }
 
             $reversalId = (string) Str::ulid();
+
             DB::table('expenses')->insert([
-                'id' => $reversalId, 'business_id' => $business->id, 'location_id' => $expense->location_id,
-                'created_by_user_id' => $userId, 'category' => $expense->category,
+                'id' => $reversalId,
+                'business_id' => $business->id,
+                'location_id' => $expense->location_id,
+                'created_by_user_id' => $userId,
+                'category' => $expense->category,
                 'description' => 'Reversal: '.$expense->description,
-                'amount' => $expense->amount, 'currency' => $expense->currency,
-                'expense_date' => now($business->timezone)->toDateString(), 'status' => 'reversal',
-                'reversal_of_expense_id' => $expenseId, 'reversed_by_user_id' => $userId,
-                'reversal_reason' => trim($reason), 'reversed_at' => now(),
-                'created_at' => now(), 'updated_at' => now(),
-            ]);
-            DB::table('expenses')->where('business_id', $business->id)->where('id', $expenseId)->update([
-                'status' => 'reversed', 'reversed_by_user_id' => $userId,
-                'reversal_reason' => trim($reason), 'reversed_at' => now(), 'updated_at' => now(),
+                'amount' => $expense->amount,
+                'currency' => $expense->currency,
+                'expense_date' => now($business->timezone)->toDateString(),
+                'status' => 'reversal',
+                'idempotency_key' => $idempotencyKey,
+                'request_snapshot' => json_encode($snapshot, JSON_THROW_ON_ERROR),
+                'reversal_of_expense_id' => $expenseId,
+                'reversed_by_user_id' => $userId,
+                'reversal_reason' => $reason,
+                'reversed_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
 
-            return DB::table('expenses')->where('business_id', $business->id)->where('id', $reversalId)->first();
+            DB::table('expenses')
+                ->where('business_id', $business->id)
+                ->where('id', $expenseId)
+                ->update([
+                    'status' => 'reversed',
+                    'reversed_by_user_id' => $userId,
+                    'reversal_reason' => $reason,
+                    'reversed_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            return DB::table('expenses')
+                ->where('business_id', $business->id)
+                ->where('id', $reversalId)
+                ->firstOrFail();
         }, attempts: 3);
     }
 
