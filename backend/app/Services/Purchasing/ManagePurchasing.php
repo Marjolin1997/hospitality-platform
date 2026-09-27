@@ -423,6 +423,10 @@ final class ManagePurchasing
             $this->lockBusiness($business);
             $order = $this->lockedPurchaseOrder($business, $purchaseOrderId);
 
+            if ($order->status === 'ordered') {
+                return $this->purchaseOrder($business, $purchaseOrderId);
+            }
+
             if ($order->status !== 'draft') {
                 throw ValidationException::withMessages([
                     'purchase_order' => 'Only a draft purchase order can be placed.',
@@ -494,6 +498,10 @@ final class ManagePurchasing
         return DB::transaction(function () use ($business, $purchaseOrderId, $reason, $actorUserId): object {
             $this->lockBusiness($business);
             $order = $this->lockedPurchaseOrder($business, $purchaseOrderId);
+
+            if ($order->status === 'cancelled') {
+                return $this->purchaseOrder($business, $purchaseOrderId);
+            }
 
             if (! in_array($order->status, ['draft', 'ordered'], true)) {
                 throw ValidationException::withMessages([
