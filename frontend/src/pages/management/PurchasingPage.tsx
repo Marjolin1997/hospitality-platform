@@ -594,6 +594,7 @@ export function PurchasingPage() {
           </div>
         )}
 
+        {editDraftPurchase.isError && <p className="error-state">Could not open the draft for editing. {apiMessage(editDraftPurchase.error)}</p>}
         {placePurchase.isError && <p className="error-state">{apiMessage(placePurchase.error)}</p>}
       </section>
     )}
