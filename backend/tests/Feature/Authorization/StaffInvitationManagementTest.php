@@ -315,6 +315,15 @@ test('expired and revoked invitations cannot be accepted and expired email can b
         ->assertOk()
         ->assertJsonPath('message', 'Staff invitation revoked.');
 
+    $this->postJson('/api/v1/staff-invitations/'.$revoked->json('data.id').'/revoke', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('message', 'Staff invitation revoked.');
+
+    expect(DB::table('staff_invitation_events')
+        ->where('staff_invitation_id', $revoked->json('data.id'))
+        ->where('event', 'revoked')
+        ->count())->toBe(1);
+
     $this->getJson('/api/v1/invitations/'.$revokedToken)
         ->assertOk()
         ->assertJsonPath('data.status', 'revoked');
