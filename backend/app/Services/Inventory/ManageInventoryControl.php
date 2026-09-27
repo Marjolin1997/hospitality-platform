@@ -496,6 +496,13 @@ final class ManageInventoryControl
             $this->lockBusiness($business);
             $count = $this->lockedCount($business, $countId);
 
+            if ($count->status === 'posted') {
+                return DB::table('inventory_counts')
+                    ->where('business_id', $business->getKey())
+                    ->where('id', $countId)
+                    ->firstOrFail();
+            }
+
             if ($count->status !== 'draft') {
                 throw ValidationException::withMessages([
                     'count' => 'Only a draft stock count can be posted.',
@@ -640,6 +647,13 @@ final class ManageInventoryControl
         return DB::transaction(function () use ($business, $countId, $reason, $actorUserId): object {
             $this->lockBusiness($business);
             $count = $this->lockedCount($business, $countId);
+
+            if ($count->status === 'cancelled') {
+                return DB::table('inventory_counts')
+                    ->where('business_id', $business->getKey())
+                    ->where('id', $countId)
+                    ->firstOrFail();
+            }
 
             if ($count->status !== 'draft') {
                 throw ValidationException::withMessages([
