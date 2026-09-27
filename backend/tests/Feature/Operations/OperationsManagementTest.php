@@ -69,15 +69,34 @@ test('expense posting is tenant validated precise and rejects future dates',func
     expect(DB::table('expenses')->where('business_id',$a->id)->count())->toBe(1)->and(DB::table('expenses')->where('business_id',$a->id)->value('category'))->toBe('Supplies');
 });
 
-test('expense reversal preserves history and neutralizes finance totals exactly once',function():void{
+test('expense reversal preserves history neutralizes finance totals and replays safely',function():void{
     $business=omtBusiness('Expense reversal');$location=omtLocation($business,'ER1');$user=omtUser($business);$headers=omtHeaders($user,$business);
     $expense=$this->postJson('/api/v1/expenses',[
         'idempotency_key' => (string) Str::uuid(),'location_id'=>$location->id,'category'=>'Supplies','description'=>'Coffee beans','amount'=>'25.5000','expense_date'=>now()->toDateString()],$headers)->assertCreated()->json('data.id');
     $this->getJson('/api/v1/finance/overview',$headers)->assertOk()->assertJsonPath('data.expenses','25.5000');
-    $this->postJson("/api/v1/expenses/{$expense}/reverse",['reason'=>'Duplicate supplier receipt'],$headers)->assertCreated()->assertJsonPath('data.status','reversal')->assertJsonPath('data.reversal_of_expense_id',$expense);
-    expect(DB::table('expenses')->where('id',$expense)->value('status'))->toBe('reversed')->and(DB::table('expenses')->where('reversal_of_expense_id',$expense)->count())->toBe(1);
+
+    $reversalKey=(string)Str::uuid();
+    $first=$this->postJson("/api/v1/expenses/{$expense}/reverse",[
+        'idempotency_key'=>$reversalKey,'reason'=>'Duplicate supplier receipt'
+    ],$headers)->assertCreated()->assertJsonPath('data.status','reversal')->assertJsonPath('data.reversal_of_expense_id',$expense);
+
+    $replay=$this->postJson("/api/v1/expenses/{$expense}/reverse",[
+        'idempotency_key'=>$reversalKey,'reason'=>'Duplicate supplier receipt'
+    ],$headers)->assertCreated()->assertJsonPath('data.status','reversal');
+
+    expect($replay->json('data.id'))->toBe($first->json('data.id'))
+        ->and(DB::table('expenses')->where('id',$expense)->value('status'))->toBe('reversed')
+        ->and(DB::table('expenses')->where('reversal_of_expense_id',$expense)->count())->toBe(1);
+
     $this->getJson('/api/v1/finance/overview',$headers)->assertOk()->assertJsonPath('data.expenses','0.0000');
-    $this->postJson("/api/v1/expenses/{$expense}/reverse",['reason'=>'Second reversal attempt'],$headers)->assertStatus(422)->assertJsonValidationErrors('expense');
+
+    $this->postJson("/api/v1/expenses/{$expense}/reverse",[
+        'idempotency_key'=>(string)Str::uuid(),'reason'=>'Second reversal attempt'
+    ],$headers)->assertStatus(422)->assertJsonValidationErrors('expense');
+
+    $this->postJson("/api/v1/expenses/{$expense}/reverse",[
+        'idempotency_key'=>$reversalKey,'reason'=>'Different reason'
+    ],$headers)->assertStatus(422)->assertJsonValidationErrors('idempotency_key');
 });
 
 test('expense creators cannot reverse without approval permission',function():void{
@@ -91,7 +110,7 @@ test('expense creators cannot reverse without approval permission',function():vo
         'location_id'=>$location->id,'category'=>'Supplies','description'=>'Paper goods','amount'=>'8.5000','expense_date'=>now()->toDateString(),
     ],$headers)->assertCreated()->json('data.id');
 
-    $this->postJson("/api/v1/expenses/{$expense}/reverse",['reason'=>'Unauthorized correction'],$headers)->assertForbidden();
+    $this->postJson("/api/v1/expenses/{$expense}/reverse",['idempotency_key'=>(string)Str::uuid(),'reason'=>'Unauthorized correction'],$headers)->assertForbidden();
     expect(DB::table('expenses')->where('id',$expense)->value('status'))->toBe('posted')
         ->and(DB::table('expenses')->where('reversal_of_expense_id',$expense)->count())->toBe(0);
 });
