@@ -8,6 +8,7 @@ use App\Models\User;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 final class CloseCashSession
@@ -28,6 +29,8 @@ final class CloseCashSession
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            $idempotencyKey = (string) ($payload['idempotency_key'] ?? Str::uuid());
+
             $counted = BigDecimal::of((string) $payload['counted_cash'])
                 ->toScale(4, RoundingMode::HALF_UP);
             $closingNote = trim((string) ($payload['closing_note'] ?? ''));
@@ -40,7 +43,7 @@ final class CloseCashSession
 
             $existing = CashSession::query()
                 ->forBusiness($business)
-                ->where('close_idempotency_key', $payload['idempotency_key'])
+                ->where('close_idempotency_key', $idempotencyKey)
                 ->lockForUpdate()
                 ->first();
 
@@ -79,7 +82,7 @@ final class CloseCashSession
                 'status' => 'closed',
                 'closed_at' => now(),
                 'closing_note' => $snapshot['closing_note'],
-                'close_idempotency_key' => $payload['idempotency_key'],
+                'close_idempotency_key' => $idempotencyKey,
                 'close_request_snapshot' => $snapshot,
             ])->save();
 
