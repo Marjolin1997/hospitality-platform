@@ -231,6 +231,55 @@ test('draft purchase orders can be edited atomically and become immutable after 
         ->and((string) DB::table('purchase_orders')->where('id', $po)->value('total_cost'))->toBe('22.0000');
 });
 
+test('place and cancel transitions are retry safe without duplicate lifecycle events', function (): void {
+    $business = pcmBusiness('PO Transition Retry');
+    $location = pcmLocation($business);
+    $manager = pcmUser($business, ['purchasing.view', 'purchasing.manage']);
+    $headers = pcmHeaders($manager, $business);
+    $supplier = pcmSupplier($this, $headers);
+    $product = pcmProduct($business, 'Retry Transition Product');
+
+    $placedPo = pcmOrder($this, $headers, $location->id, $supplier, [[
+        'product_id' => $product,
+        'quantity_ordered' => '3',
+        'unit_cost' => '2',
+    ]]);
+
+    $this->postJson("/api/v1/purchase-orders/{$placedPo}/place", [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.status', 'ordered');
+
+    $this->postJson("/api/v1/purchase-orders/{$placedPo}/place", [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.status', 'ordered');
+
+    expect(DB::table('purchase_order_events')
+        ->where('purchase_order_id', $placedPo)
+        ->where('event', 'placed')
+        ->count())->toBe(1);
+
+    $cancelledPo = pcmOrder($this, $headers, $location->id, $supplier, [[
+        'product_id' => $product,
+        'quantity_ordered' => '2',
+        'unit_cost' => '1.5',
+    ]]);
+
+    $this->postJson("/api/v1/purchase-orders/{$cancelledPo}/cancel", [
+        'reason' => 'No longer required',
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.status', 'cancelled');
+
+    $this->postJson("/api/v1/purchase-orders/{$cancelledPo}/cancel", [
+        'reason' => 'No longer required',
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.status', 'cancelled');
+
+    expect(DB::table('purchase_order_events')
+        ->where('purchase_order_id', $cancelledPo)
+        ->where('event', 'cancelled')
+        ->count())->toBe(1);
+});
+
 test('purchase order creation retries are exactly once and key reuse is payload-bound', function (): void {
     $business = pcmBusiness('PO Create Idempotency');
     $location = pcmLocation($business);
