@@ -143,7 +143,13 @@ final class OperationsController extends Controller
 
     public function reverseExpense(ReverseExpenseRequest $request, string $expense): JsonResponse
     {
-        $reversal = $this->operations->reverseExpense(app(Business::class), $expense, $request->validated('reason'), $request->user()->id);
+        $reversal = $this->operations->reverseExpense(
+            app(Business::class),
+            $expense,
+            $request->validated('reason'),
+            $request->validated('idempotency_key'),
+            (int) $request->user()->id,
+        );
         return response()->json(['data' => $reversal], 201);
     }
 
