@@ -402,11 +402,21 @@ test('stock count draft can be saved and posted into exact audited variances', f
         ->and((string) DB::table('inventory_count_items')->where('id', $milkLine['id'])->value('variance_quantity'))->toBe('2.0000')
         ->and(DB::table('inventory_movements')->where('reference_type', 'inventory_count')->where('reference_id', $countId)->where('type', 'stock_count')->count())->toBe(2);
 
+    $this->postJson("/api/v1/inventory/counts/{$countId}/post", [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.status', 'posted');
+
     $events = $this->getJson("/api/v1/inventory/counts/{$countId}/events", $headers)
         ->assertOk()
         ->json('data');
 
-    expect(collect($events)->pluck('event')->all())->toContain('created', 'draft_updated', 'posted');
+    expect(collect($events)->pluck('event')->all())->toContain('created', 'draft_updated', 'posted')
+        ->and(collect($events)->where('event', 'posted'))->toHaveCount(1)
+        ->and(DB::table('inventory_movements')
+            ->where('reference_type', 'inventory_count')
+            ->where('reference_id', $countId)
+            ->where('type', 'stock_count')
+            ->count())->toBe(2);
 
     $this->putJson("/api/v1/inventory/counts/{$countId}", [
         'items' => [['inventory_count_item_id' => $coffeeLine['id'], 'counted_quantity' => '8']],
@@ -471,6 +481,16 @@ test('draft count can be cancelled and blocks location disable until closed', fu
         'reason' => 'Count restarted',
     ], $headers)->assertOk()
         ->assertJsonPath('data.status', 'cancelled');
+
+    $this->postJson("/api/v1/inventory/counts/{$countId}/cancel", [
+        'reason' => 'Count restarted',
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.status', 'cancelled');
+
+    expect(DB::table('inventory_count_events')
+        ->where('inventory_count_id', $countId)
+        ->where('event', 'cancelled')
+        ->count())->toBe(1);
 
     $this->patchJson("/api/v1/management/locations/{$location->id}/status", [
         'is_active' => false,
