@@ -7,18 +7,48 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::table('purchase_orders', function (Blueprint $table): void {
-            $table->string('idempotency_key', 64)->nullable()->after('number');
-            $table->json('request_snapshot')->nullable()->after('idempotency_key');
-            $table->unique(['business_id', 'idempotency_key'], 'purchase_order_business_idempotency_uq');
+        $needsIdempotencyKey = ! Schema::hasColumn('purchase_orders', 'idempotency_key');
+        $needsRequestSnapshot = ! Schema::hasColumn('purchase_orders', 'request_snapshot');
+
+        if (! $needsIdempotencyKey && ! $needsRequestSnapshot) {
+            return;
+        }
+
+        Schema::table('purchase_orders', function (Blueprint $table) use ($needsIdempotencyKey, $needsRequestSnapshot): void {
+            if ($needsIdempotencyKey) {
+                $table->string('idempotency_key', 64)->nullable()->after('number');
+            }
+
+            if ($needsRequestSnapshot) {
+                $table->json('request_snapshot')->nullable()->after('idempotency_key');
+            }
         });
+
+        if ($needsIdempotencyKey) {
+            Schema::table('purchase_orders', function (Blueprint $table): void {
+                $table->unique(['business_id', 'idempotency_key'], 'purchase_order_business_idempotency_uq');
+            });
+        }
     }
 
     public function down(): void
     {
+        if (! Schema::hasColumn('purchase_orders', 'idempotency_key')) {
+            return;
+        }
+
         Schema::table('purchase_orders', function (Blueprint $table): void {
             $table->dropUnique('purchase_order_business_idempotency_uq');
-            $table->dropColumn(['idempotency_key', 'request_snapshot']);
+        });
+
+        Schema::table('purchase_orders', function (Blueprint $table): void {
+            $columns = ['idempotency_key'];
+
+            if (Schema::hasColumn('purchase_orders', 'request_snapshot')) {
+                $columns[] = 'request_snapshot';
+            }
+
+            $table->dropColumn($columns);
         });
     }
 };
