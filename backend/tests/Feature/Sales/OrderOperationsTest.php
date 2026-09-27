@@ -69,6 +69,58 @@ test('sending pending preparation items is retry safe', function(){
     expect(DB::table('order_items')->where('id',$i)->value('sent_at'))->toBe($sentAt);
 });
 
+test('commercial mutations replay safely when the desired state is already applied', function(){
+    [$b,$l,$u,$h]=ooContext();
+    $p=ooProduct($b);
+    $from=ooTable($b,$l,'Replay T1');
+    $to=ooTable($b,$l,'Replay T2');
+    [$o,$i]=ooOrder($b,$l,$u,$p,'open',$from);
+    $p2=ooProduct($b,'Replay Tea','5.0000');
+
+    $this->postJson("/api/v1/orders/$o/items",[
+        'idempotency_key'=>(string)Str::uuid(),'product_id'=>$p2,'quantity'=>'1'
+    ],$h)->assertOk();
+
+    $added=DB::table('order_items')->where('order_id',$o)->where('product_id',$p2)->value('id');
+
+    $this->patchJson("/api/v1/order-items/$added",['quantity'=>'2','note'=>'No sugar'],$h)->assertOk();
+    $updatedAt=DB::table('order_items')->where('id',$added)->value('updated_at');
+    $this->patchJson("/api/v1/order-items/$added",['quantity'=>'2','note'=>'No sugar'],$h)->assertOk();
+    expect(DB::table('order_items')->where('id',$added)->value('updated_at'))->toBe($updatedAt);
+
+    $this->putJson("/api/v1/order-items/$i/price",[
+        'unit_price'=>'8.5000','reason'=>'Approved replay price'
+    ],$h)->assertOk();
+    $overrideAt=DB::table('order_items')->where('id',$i)->value('price_overridden_at');
+    $this->putJson("/api/v1/order-items/$i/price",[
+        'unit_price'=>'8.5000','reason'=>'Approved replay price'
+    ],$h)->assertOk();
+    expect(DB::table('order_items')->where('id',$i)->value('price_overridden_at'))->toBe($overrideAt);
+
+    $this->putJson("/api/v1/orders/$o/discount",[
+        'amount'=>'1.2500','reason'=>'Replay loyalty discount'
+    ],$h)->assertOk();
+    $discountAt=DB::table('orders')->where('id',$o)->value('discount_applied_at');
+    $this->putJson("/api/v1/orders/$o/discount",[
+        'amount'=>'1.2500','reason'=>'Replay loyalty discount'
+    ],$h)->assertOk();
+    expect(DB::table('orders')->where('id',$o)->value('discount_applied_at'))->toBe($discountAt);
+
+    $this->postJson("/api/v1/orders/$o/move-table",[
+        'venue_table_id'=>$to,'reason'=>'Replay move'
+    ],$h)->assertOk();
+    $movedAt=DB::table('orders')->where('id',$o)->value('table_moved_at');
+    $this->postJson("/api/v1/orders/$o/move-table",[
+        'venue_table_id'=>$to,'reason'=>'Replay move'
+    ],$h)->assertOk();
+    expect(DB::table('orders')->where('id',$o)->value('table_moved_at'))->toBe($movedAt);
+
+    $this->deleteJson("/api/v1/order-items/$added",['reason'=>'Replay removal'],$h)->assertOk();
+    $voidedAt=DB::table('order_items')->where('id',$added)->value('voided_at');
+    $this->deleteJson("/api/v1/order-items/$added",['reason'=>'Replay removal'],$h)->assertOk();
+    expect(DB::table('order_items')->where('id',$added)->value('voided_at'))->toBe($voidedAt);
+});
+
 test('sent items cannot be silently edited or removed', function(){ [$b,$l,$u,$h]=ooContext();$p=ooProduct($b);[$o,$i]=ooOrder($b,$l,$u,$p); DB::table('order_items')->where('id',$i)->update(['preparation_status'=>'sent','sent_at'=>now()]); $this->patchJson("/api/v1/order-items/$i",['quantity'=>'2'],$h)->assertStatus(422); $this->deleteJson("/api/v1/order-items/$i",['reason'=>'Changed after send'],$h)->assertStatus(422); });
 
 test('price override and order discount are permission separated audited and exact', function(){ [$b,$l,$u,$h]=ooContext();$p=ooProduct($b);[$o,$i]=ooOrder($b,$l,$u,$p); $this->putJson("/api/v1/order-items/$i/price",['unit_price'=>'8.5000','reason'=>'Manager approved happy hour'],$h)->assertOk()->assertJsonPath('data.grand_total','8.5000'); $this->putJson("/api/v1/orders/$o/discount",['amount'=>'1.2500','reason'=>'Loyal customer'],$h)->assertOk()->assertJsonPath('data.discount_total','1.2500')->assertJsonPath('data.grand_total','7.2500'); $row=DB::table('order_items')->where('id',$i)->first(); expect($row->original_unit_price)->toBe('10.0000')->and((int)$row->price_overridden_by_user_id)->toBe((int)$u->id); expect((int)DB::table('orders')->where('id',$o)->value('discount_applied_by_user_id'))->toBe((int)$u->id); });
