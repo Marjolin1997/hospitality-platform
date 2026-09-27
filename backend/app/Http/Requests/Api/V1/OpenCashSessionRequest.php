@@ -11,7 +11,7 @@ class OpenCashSessionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'idempotency_key' => ['required', 'string', 'min:16', 'max:64'],
+            'idempotency_key' => ['nullable', 'string', 'min:16', 'max:64'],
             'cash_register_id' => ['required', 'string'],
             'opening_cash' => ['required', 'decimal:0,4', 'min:0', 'max:99999999999999.9999'],
         ];
