@@ -99,7 +99,9 @@ final class OrderOperationsService
             $this->assertPaymentNotStarted($order, 'Items cannot be edited after payment has started.');
             if ($item->preparation_status !== 'pending') throw ValidationException::withMessages(['item' => 'Only unsent items can be edited.']);
             $quantity = array_key_exists('quantity', $payload) ? $this->positiveDecimal($payload['quantity'], 'quantity') : (string) $item->quantity;
-            $item->forceFill(['quantity' => $quantity, 'note' => array_key_exists('note', $payload) ? $payload['note'] : $item->note, ...$this->lineAmounts($quantity, (string) $item->unit_price, (string) $item->tax_rate)])->save();
+            $note = array_key_exists('note', $payload) ? $payload['note'] : $item->note;
+            if ((string) $item->quantity === $quantity && $item->note === $note) return $order->fresh(['items', 'payments.refunds']);
+            $item->forceFill(['quantity' => $quantity, 'note' => $note, ...$this->lineAmounts($quantity, (string) $item->unit_price, (string) $item->tax_rate)])->save();
             return $this->recalculate($order);
         }, attempts: 3);
     }
@@ -108,6 +110,10 @@ final class OrderOperationsService
     {
         return DB::transaction(function () use ($business, $user, $item, $reason): Order {
             $item = $this->lockEditableItem($business, $item); $order = $this->lockEditableOrder($business, $item->order);
+            if ($item->preparation_status === 'voided') {
+                if (trim((string) $item->void_reason) === trim($reason)) return $order->fresh(['items', 'payments.refunds']);
+                throw ValidationException::withMessages(['item' => 'This item is already removed with a different recorded reason.']);
+            }
             $this->assertPaymentNotStarted($order, 'Items cannot be removed after payment has started.');
             if ($item->preparation_status !== 'pending') throw ValidationException::withMessages(['item' => 'Sent items must use the operational void flow instead of removal.']);
             if ($order->items()->where('preparation_status', '!=', 'voided')->count() <= 1) throw ValidationException::withMessages(['item' => 'The last active item cannot be removed; cancel the order instead.']);
@@ -122,8 +128,10 @@ final class OrderOperationsService
             $item = $this->lockEditableItem($business, $item); $order = $this->lockEditableOrder($business, $item->order);
             $this->assertPaymentNotStarted($order, 'Prices cannot be overridden after payment has started.');
             if ($item->preparation_status !== 'pending') throw ValidationException::withMessages(['item' => 'Only unsent items can have their price overridden.']);
-            $price = $this->nonNegativeDecimal($unitPrice, 'unit_price'); $original = $item->original_unit_price ?? $item->unit_price;
-            $item->forceFill(['original_unit_price' => $original, 'unit_price' => $price, 'price_override_reason' => trim($reason), 'price_overridden_by_user_id' => $user->getKey(), 'price_overridden_at' => now(), ...$this->lineAmounts((string) $item->quantity, $price, (string) $item->tax_rate)])->save();
+            $price = $this->nonNegativeDecimal($unitPrice, 'unit_price'); $reason = trim($reason);
+            if ((string) $item->unit_price === $price && trim((string) $item->price_override_reason) === $reason) return $order->fresh(['items', 'payments.refunds']);
+            $original = $item->original_unit_price ?? $item->unit_price;
+            $item->forceFill(['original_unit_price' => $original, 'unit_price' => $price, 'price_override_reason' => $reason, 'price_overridden_by_user_id' => $user->getKey(), 'price_overridden_at' => now(), ...$this->lineAmounts((string) $item->quantity, $price, (string) $item->tax_rate)])->save();
             return $this->recalculate($order);
         }, attempts: 3);
     }
@@ -132,9 +140,11 @@ final class OrderOperationsService
     {
         return DB::transaction(function () use ($business, $user, $order, $amount, $reason): Order {
             $order = $this->lockEditableOrder($business, $order); $this->assertPaymentNotStarted($order, 'Discounts cannot be changed after payment has started.');
-            $discount = BigDecimal::of($this->nonNegativeDecimal($amount, 'amount')); $base = $this->activeItemsTotal($order);
+            $discount = BigDecimal::of($this->nonNegativeDecimal($amount, 'amount')); $normalizedDiscount = (string) $discount->toScale(4, RoundingMode::HALF_UP); $reason = trim($reason);
+            if ((string) $order->discount_total === $normalizedDiscount && trim((string) $order->discount_reason) === $reason) return $order->fresh(['items', 'payments.refunds']);
+            $base = $this->activeItemsTotal($order);
             if ($discount->isGreaterThan($base)) throw ValidationException::withMessages(['amount' => 'Discount cannot exceed the active order total.']);
-            $order->forceFill(['discount_total' => (string) $discount->toScale(4, RoundingMode::HALF_UP), 'discount_reason' => trim($reason), 'discount_applied_by_user_id' => $user->getKey(), 'discount_applied_at' => now()])->save();
+            $order->forceFill(['discount_total' => $normalizedDiscount, 'discount_reason' => $reason, 'discount_applied_by_user_id' => $user->getKey(), 'discount_applied_at' => now()])->save();
             return $this->recalculate($order);
         }, attempts: 3);
     }
@@ -142,13 +152,19 @@ final class OrderOperationsService
     public function moveTable(Business $business, User $user, Order $order, string $tableId, string $reason): Order
     {
         return DB::transaction(function () use ($business, $user, $order, $tableId, $reason): Order {
-            $order = $this->lockEditableOrder($business, $order); $this->assertPaymentNotStarted($order, 'A table cannot be moved after payment has started.');
+            $order = $this->lockEditableOrder($business, $order);
             if ($order->type !== 'table') throw ValidationException::withMessages(['order' => 'Only table orders can be moved between tables.']);
+            $reason = trim($reason);
+            if ((string) $order->venue_table_id === (string) $tableId) {
+                if (trim((string) $order->table_move_reason) === $reason) return $order->fresh(['items', 'payments.refunds']);
+                throw ValidationException::withMessages(['venue_table_id' => 'The order is already assigned to this table.']);
+            }
+            $this->assertPaymentNotStarted($order, 'A table cannot be moved after payment has started.');
             $table = VenueTable::query()->forBusiness($business)->whereKey($tableId)->where('location_id', $order->location_id)->where('is_active', true)->whereHas('area', fn ($query) => $query->where('is_active', true))->lockForUpdate()->firstOrFail();
-            if ((string) $order->venue_table_id === (string) $table->getKey()) throw ValidationException::withMessages(['venue_table_id' => 'The order is already assigned to this table.']);
+
             $occupied = Order::query()->forBusiness($business)->where('location_id', $order->location_id)->where('venue_table_id', $table->getKey())->whereIn('status', self::EDITABLE_ORDER_STATES)->whereKeyNot($order->getKey())->lockForUpdate()->exists();
             if ($occupied) throw ValidationException::withMessages(['venue_table_id' => 'The destination table already has an active order; use merge instead.']);
-            $order->forceFill(['previous_venue_table_id' => $order->venue_table_id, 'venue_table_id' => $table->getKey(), 'table_move_reason' => trim($reason), 'table_moved_by_user_id' => $user->getKey(), 'table_moved_at' => now()])->save();
+            $order->forceFill(['previous_venue_table_id' => $order->venue_table_id, 'venue_table_id' => $table->getKey(), 'table_move_reason' => $reason, 'table_moved_by_user_id' => $user->getKey(), 'table_moved_at' => now()])->save();
             return $order->fresh(['items', 'payments.refunds']);
         }, attempts: 3);
     }
