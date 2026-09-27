@@ -23,7 +23,7 @@ final class SendOrderToStation
 
             $pending = $order->items->where('preparation_status', 'pending');
             if ($pending->isEmpty()) {
-                throw ValidationException::withMessages(['items' => 'There are no new items to send.']);
+                return $order->fresh(['items', 'payments.refunds']);
             }
 
             foreach ($pending as $item) {
