@@ -15,6 +15,12 @@ final class ManageVenueConfiguration
             $this->lockBusiness($business);
             $location = $this->location($business, (string) $data['location_id']);
 
+            if (! (bool) $location->is_active) {
+                throw ValidationException::withMessages([
+                    'location_id' => 'Reactivate this location before configuring active venue resources.',
+                ]);
+            }
+
             $area = null;
             if (! empty($data['id'])) {
                 $area = DB::table('venue_areas')
@@ -92,6 +98,20 @@ final class ManageVenueConfiguration
                 return $this->normalizeArea($area);
             }
 
+            if ($isActive) {
+                $locationActive = DB::table('locations')
+                    ->where('business_id', $business->getKey())
+                    ->where('id', $area->location_id)
+                    ->where('is_active', true)
+                    ->exists();
+
+                if (! $locationActive) {
+                    throw ValidationException::withMessages([
+                        'area' => 'Reactivate the area location before enabling this area.',
+                    ]);
+                }
+            }
+
             if (! $isActive) {
                 $hasActiveTables = DB::table('venue_tables')
                     ->where('business_id', $business->getKey())
@@ -128,6 +148,12 @@ final class ManageVenueConfiguration
         return DB::transaction(function () use ($business, $data, $actorUserId): object {
             $this->lockBusiness($business);
             $location = $this->location($business, (string) $data['location_id']);
+
+            if (! (bool) $location->is_active) {
+                throw ValidationException::withMessages([
+                    'location_id' => 'Reactivate this location before configuring active venue resources.',
+                ]);
+            }
 
             $table = null;
             if (! empty($data['id'])) {
@@ -244,6 +270,18 @@ final class ManageVenueConfiguration
             }
 
             if ($isActive) {
+                $locationActive = DB::table('locations')
+                    ->where('business_id', $business->getKey())
+                    ->where('id', $table->location_id)
+                    ->where('is_active', true)
+                    ->exists();
+
+                if (! $locationActive) {
+                    throw ValidationException::withMessages([
+                        'table' => 'Reactivate the table location before enabling this table.',
+                    ]);
+                }
+
                 $area = DB::table('venue_areas')
                     ->where('business_id', $business->getKey())
                     ->where('location_id', $table->location_id)
@@ -292,6 +330,12 @@ final class ManageVenueConfiguration
         return DB::transaction(function () use ($business, $data, $actorUserId): object {
             $this->lockBusiness($business);
             $location = $this->location($business, (string) $data['location_id']);
+
+            if (! (bool) $location->is_active) {
+                throw ValidationException::withMessages([
+                    'location_id' => 'Reactivate this location before configuring active venue resources.',
+                ]);
+            }
 
             $register = null;
             if (! empty($data['id'])) {
@@ -382,6 +426,20 @@ final class ManageVenueConfiguration
 
             if ((bool) $register->is_active === $isActive) {
                 return $this->normalizeRegister($register);
+            }
+
+            if ($isActive) {
+                $locationActive = DB::table('locations')
+                    ->where('business_id', $business->getKey())
+                    ->where('id', $register->location_id)
+                    ->where('is_active', true)
+                    ->exists();
+
+                if (! $locationActive) {
+                    throw ValidationException::withMessages([
+                        'register' => 'Reactivate the register location before enabling this cash register.',
+                    ]);
+                }
             }
 
             if (! $isActive) {
