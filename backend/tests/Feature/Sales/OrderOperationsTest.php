@@ -51,6 +51,24 @@ test('add item retries are exactly once and idempotency keys are payload-bound',
     expect(DB::table('order_items')->where('order_id',$o)->count())->toBe(2);
 });
 
+test('sending pending preparation items is retry safe', function(){
+    [$b,$l,$u,$h]=ooContext();
+    $p=ooProduct($b);
+    [$o,$i]=ooOrder($b,$l,$u,$p);
+
+    $this->postJson("/api/v1/orders/$o/send",[],$h)
+        ->assertOk()
+        ->assertJsonPath('data.items.0.preparation_status','sent');
+
+    $sentAt=DB::table('order_items')->where('id',$i)->value('sent_at');
+
+    $this->postJson("/api/v1/orders/$o/send",[],$h)
+        ->assertOk()
+        ->assertJsonPath('data.items.0.preparation_status','sent');
+
+    expect(DB::table('order_items')->where('id',$i)->value('sent_at'))->toBe($sentAt);
+});
+
 test('sent items cannot be silently edited or removed', function(){ [$b,$l,$u,$h]=ooContext();$p=ooProduct($b);[$o,$i]=ooOrder($b,$l,$u,$p); DB::table('order_items')->where('id',$i)->update(['preparation_status'=>'sent','sent_at'=>now()]); $this->patchJson("/api/v1/order-items/$i",['quantity'=>'2'],$h)->assertStatus(422); $this->deleteJson("/api/v1/order-items/$i",['reason'=>'Changed after send'],$h)->assertStatus(422); });
 
 test('price override and order discount are permission separated audited and exact', function(){ [$b,$l,$u,$h]=ooContext();$p=ooProduct($b);[$o,$i]=ooOrder($b,$l,$u,$p); $this->putJson("/api/v1/order-items/$i/price",['unit_price'=>'8.5000','reason'=>'Manager approved happy hour'],$h)->assertOk()->assertJsonPath('data.grand_total','8.5000'); $this->putJson("/api/v1/orders/$o/discount",['amount'=>'1.2500','reason'=>'Loyal customer'],$h)->assertOk()->assertJsonPath('data.discount_total','1.2500')->assertJsonPath('data.grand_total','7.2500'); $row=DB::table('order_items')->where('id',$i)->first(); expect($row->original_unit_price)->toBe('10.0000')->and((int)$row->price_overridden_by_user_id)->toBe((int)$u->id); expect((int)DB::table('orders')->where('id',$o)->value('discount_applied_by_user_id'))->toBe((int)$u->id); });
