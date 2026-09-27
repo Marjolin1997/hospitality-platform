@@ -300,6 +300,66 @@ test('table configuration cannot cross tenant or location boundaries', function 
     ], $headersB)->assertNotFound();
 });
 
+test('inactive locations cannot receive or reactivate active venue children', function (): void {
+    $business = vcmBusiness('Inactive Venue Parent');
+    $activeLocation = vcmLocation($business, 'Active Parent');
+    $inactiveLocation = vcmLocation($business, 'Inactive Parent', false);
+    $user = vcmUser($business, ['venue.manage', 'cash_registers.manage']);
+    $headers = vcmHeaders($user, $business);
+
+    $this->postJson('/api/v1/management/venue/areas', [
+        'location_id' => $inactiveLocation->id,
+        'name' => 'Blocked Area',
+        'sort_order' => 1,
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('location_id');
+
+    $this->postJson('/api/v1/management/cash-registers', [
+        'location_id' => $inactiveLocation->id,
+        'name' => 'Blocked Till',
+        'code' => 'BLOCKED',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('location_id');
+
+    $area = vcmArea($this, $headers, $activeLocation->id, 'Lifecycle Area');
+    $table = vcmTable($this, $headers, $activeLocation->id, $area, 'Lifecycle Table');
+
+    $register = $this->postJson('/api/v1/management/cash-registers', [
+        'location_id' => $activeLocation->id,
+        'name' => 'Lifecycle Till',
+        'code' => 'LIFECYCLE',
+    ], $headers)->assertCreated()->json('data.id');
+
+    $this->patchJson("/api/v1/management/venue/tables/{$table}/status", [
+        'is_active' => false,
+    ], $headers)->assertOk();
+
+    $this->patchJson("/api/v1/management/venue/areas/{$area}/status", [
+        'is_active' => false,
+    ], $headers)->assertOk();
+
+    $this->patchJson("/api/v1/management/cash-registers/{$register}/status", [
+        'is_active' => false,
+    ], $headers)->assertOk();
+
+    $activeLocation->update(['is_active' => false]);
+
+    $this->patchJson("/api/v1/management/venue/areas/{$area}/status", [
+        'is_active' => true,
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('area');
+
+    $this->patchJson("/api/v1/management/venue/tables/{$table}/status", [
+        'is_active' => true,
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('table');
+
+    $this->patchJson("/api/v1/management/cash-registers/{$register}/status", [
+        'is_active' => true,
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('register');
+});
+
 test('cash register lifecycle is audited guarded and invalidates fiscal preflight topology', function (): void {
     $business = vcmBusiness('Register Lifecycle');
     $location = vcmLocation($business, 'Register');
