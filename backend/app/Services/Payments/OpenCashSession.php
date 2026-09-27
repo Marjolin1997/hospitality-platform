@@ -9,6 +9,7 @@ use App\Models\User;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 final class OpenCashSession
@@ -21,6 +22,8 @@ final class OpenCashSession
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            $idempotencyKey = (string) ($payload['idempotency_key'] ?? Str::uuid());
+
             $snapshot = [
                 'location_id' => (string) $payload['location_id'],
                 'cash_register_id' => (string) $payload['cash_register_id'],
@@ -30,7 +33,7 @@ final class OpenCashSession
 
             $existing = CashSession::query()
                 ->forBusiness($business)
-                ->where('open_idempotency_key', $payload['idempotency_key'])
+                ->where('open_idempotency_key', $idempotencyKey)
                 ->lockForUpdate()
                 ->first();
 
@@ -75,7 +78,7 @@ final class OpenCashSession
                 'business_id' => $business->getKey(),
                 'location_id' => $register->location_id,
                 'cash_register_id' => $register->getKey(),
-                'open_idempotency_key' => $payload['idempotency_key'],
+                'open_idempotency_key' => $idempotencyKey,
                 'open_request_snapshot' => $snapshot,
                 'opened_by_user_id' => $user->getKey(),
                 'base_currency' => $business->currency,
