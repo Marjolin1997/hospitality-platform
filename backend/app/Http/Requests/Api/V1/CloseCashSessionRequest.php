@@ -11,6 +11,7 @@ class CloseCashSessionRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'idempotency_key' => ['required', 'string', 'min:16', 'max:64'],
             'counted_cash' => ['required', 'decimal:0,4', 'min:0', 'max:99999999999999.9999'],
             'closing_note' => ['nullable', 'string', 'max:1000'],
         ];
