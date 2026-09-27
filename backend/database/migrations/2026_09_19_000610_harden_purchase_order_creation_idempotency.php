@@ -33,22 +33,8 @@ return new class extends Migration {
 
     public function down(): void
     {
-        if (! Schema::hasColumn('purchase_orders', 'idempotency_key')) {
-            return;
-        }
-
-        Schema::table('purchase_orders', function (Blueprint $table): void {
-            $table->dropUnique('purchase_order_business_idempotency_uq');
-        });
-
-        Schema::table('purchase_orders', function (Blueprint $table): void {
-            $columns = ['idempotency_key'];
-
-            if (Schema::hasColumn('purchase_orders', 'request_snapshot')) {
-                $columns[] = 'request_snapshot';
-            }
-
-            $table->dropColumn($columns);
-        });
+        // Compatibility bridge only. The canonical 000300 purchasing migration now
+        // owns these columns and indexes, so rolling this bridge back must not
+        // remove schema that a fresh installation legitimately requires.
     }
 };
