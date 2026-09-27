@@ -548,6 +548,79 @@ test('cash session opening is location-bound and opening and closing cash use ex
     expect(DB::table('cash_sessions')->where('id',$session)->value('status'))->toBe('open');
 });
 
+test('cash shift open and close lifecycle retries are exactly once and payload bound', function (): void {
+    $business = spiBusiness();
+    $location = spiLocation($business);
+    spiUser($business);
+    $headers = spiHeaders($business);
+
+    $registerId = (string) Str::ulid();
+    DB::table('cash_registers')->insert([
+        'id' => $registerId,
+        'business_id' => $business->id,
+        'location_id' => $location->id,
+        'name' => 'Lifecycle Drawer',
+        'code' => 'LIFECYCLE-DRAWER',
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $openKey = (string) Str::uuid();
+    $openPayload = [
+        'idempotency_key' => $openKey,
+        'location_id' => $location->id,
+        'cash_register_id' => $registerId,
+        'opening_cash' => '40.0000',
+    ];
+
+    $firstOpen = $this->postJson('/api/v1/cash-sessions', $openPayload, $headers)
+        ->assertCreated();
+    $secondOpen = $this->postJson('/api/v1/cash-sessions', $openPayload, $headers)
+        ->assertCreated();
+
+    $sessionId = $firstOpen->json('data.id');
+
+    expect($secondOpen->json('data.id'))->toBe($sessionId)
+        ->and(DB::table('cash_sessions')
+            ->where('business_id', $business->id)
+            ->where('open_idempotency_key', $openKey)
+            ->count())->toBe(1);
+
+    $this->postJson('/api/v1/cash-sessions', [
+        ...$openPayload,
+        'opening_cash' => '41.0000',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('idempotency_key');
+
+    $closeKey = (string) Str::uuid();
+    $closePayload = [
+        'idempotency_key' => $closeKey,
+        'location_id' => $location->id,
+        'counted_cash' => '40.0000',
+    ];
+
+    $firstClose = $this->postJson("/api/v1/cash-sessions/{$sessionId}/close", $closePayload, $headers)
+        ->assertOk()
+        ->assertJsonPath('data.status', 'closed');
+    $secondClose = $this->postJson("/api/v1/cash-sessions/{$sessionId}/close", $closePayload, $headers)
+        ->assertOk()
+        ->assertJsonPath('data.status', 'closed');
+
+    expect($secondClose->json('data.id'))->toBe($firstClose->json('data.id'))
+        ->and(DB::table('cash_sessions')
+            ->where('business_id', $business->id)
+            ->where('close_idempotency_key', $closeKey)
+            ->count())->toBe(1);
+
+    $this->postJson("/api/v1/cash-sessions/{$sessionId}/close", [
+        ...$closePayload,
+        'counted_cash' => '39.0000',
+        'closing_note' => 'Different close payload',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('idempotency_key');
+});
+
 test('manual cash movement retries are exactly once and idempotency keys are payload-bound', function (): void {
     $business = spiBusiness();
     $location = spiLocation($business);
