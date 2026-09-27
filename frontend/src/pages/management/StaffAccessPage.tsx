@@ -509,14 +509,14 @@ export function StaffAccessPage() {
     });
   };
 
-  const toggleGroup = (permissions: PermissionItem[]) => {
+  const toggleGroup = (groupPermissions: PermissionItem[]) => {
     setRoleEditor(current => {
       if (!current) return current;
 
-      const keys = permissions.map(permission => permission.key);
+      const keys = groupPermissions.map(permission => permission.key);
       const selected = keys.every(key => current.permissions.includes(key));
 
-      const permissions = selected
+      const nextPermissions = selected
         ? keys.reduce(
             (result, key) => removePermissionWithDependents(result, key),
             current.permissions,
@@ -525,7 +525,7 @@ export function StaffAccessPage() {
 
       return {
         ...current,
-        permissions,
+        permissions: nextPermissions,
       };
     });
   };
