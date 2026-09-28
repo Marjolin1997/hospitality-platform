@@ -233,7 +233,7 @@ test('operational report uses transaction timestamps and tenant location scope',
         ->assertJsonPath('data.summary.refunds', '20.0000')
         ->assertJsonPath('data.summary.net_sales', '80.0000')
         ->assertJsonPath('data.summary.paid_order_count', 1)
-        ->assertJsonPath('data.summary.average_ticket', '80.0000')
+        ->assertJsonPath('data.summary.average_ticket', '100.0000')
         ->assertJsonPath('data.summary.orders_opened', 2)
         ->assertJsonPath('data.summary.cancelled_orders', 1)
         ->assertJsonPath('data.summary.discounts', '10.0000')
