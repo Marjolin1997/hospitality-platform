@@ -135,6 +135,13 @@ type TransferDraft = {
   items: Array<{ product_id: string; quantity: string }>;
 };
 
+type CountCreateDraft = {
+  idempotency_key: string;
+  scope: 'all' | 'selected';
+  note: string;
+  product_ids: string[];
+};
+
 function apiMessage(error: unknown): string {
   const response = (error as {
     response?: { data?: { errors?: Record<string, string[]>; message?: string } };
@@ -179,6 +186,13 @@ const newTransfer = (): TransferDraft => ({
   items: [{ product_id: '', quantity: '1' }],
 });
 
+const newCount = (): CountCreateDraft => ({
+  idempotency_key: crypto.randomUUID(),
+  scope: 'all',
+  note: '',
+  product_ids: [],
+});
+
 export function InventoryPage() {
   const { activeBusiness, activeLocation, can } = useAuth();
   const qc = useQueryClient();
@@ -205,6 +219,8 @@ export function InventoryPage() {
   const [transferEditor, setTransferEditor] = useState<TransferDraft | null>(null);
   const [transferDetailId, setTransferDetailId] = useState<string | null>(null);
 
+  const [countCreator, setCountCreator] = useState<CountCreateDraft | null>(null);
+  const [countProductSearch, setCountProductSearch] = useState('');
   const [countDetailId, setCountDetailId] = useState<string | null>(null);
   const [countValues, setCountValues] = useState<Record<string, string>>({});
   const [cancelCountTarget, setCancelCountTarget] = useState<CountSummary | null>(null);
