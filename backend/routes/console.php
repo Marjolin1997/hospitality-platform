@@ -80,6 +80,10 @@ Artisan::command('demo:prepare', function (): int {
 
     $this->call('optimize:clear');
 
+    if (! is_link(public_path('storage')) && ! file_exists(public_path('storage'))) {
+        $this->call('storage:link');
+    }
+
     $this->newLine();
     return $this->call('demo:check');
 })->purpose('Migrate, seed and verify the complete local hospitality demo workspace');
@@ -214,7 +218,7 @@ Artisan::command('demo:check', function (): int {
         'Invoices' => [
             'routes' => ['api/v1/invoices'],
             'data' => fn () => DB::table('invoices')->where('business_id', $business->id)->count(),
-            'minimum' => 1,
+            'minimum' => 3,
         ],
         'Venue Setup' => [
             'routes' => ['api/v1/management/venue', 'api/v1/management/cash-registers'],
@@ -227,7 +231,7 @@ Artisan::command('demo:check', function (): int {
             'minimum' => 2,
         ],
         'Settings' => [
-            'routes' => ['api/v1/settings', 'api/v1/management/locations'],
+            'routes' => ['api/v1/settings', 'api/v1/management/locations', 'api/v1/fiscalization/setup'],
             'data' => fn () => DB::table('locations')->where('business_id', $business->id)->count(),
             'minimum' => 1,
         ],
@@ -264,6 +268,90 @@ Artisan::command('demo:check', function (): int {
     }
 
     $this->table(['Menu', 'API routes', 'Demo rows', 'Status'], $rows);
+
+    $invoiceStates = DB::table('invoices')
+        ->where('business_id', $business->id)
+        ->pluck('fiscalization_status')
+        ->all();
+    $qrInvoices = DB::table('invoices')
+        ->where('business_id', $business->id)
+        ->whereNotNull('qr_payload')
+        ->count();
+    $creditNotes = DB::table('invoice_credit_notes')
+        ->where('business_id', $business->id)
+        ->count();
+    $pendingInvites = DB::table('staff_invitations')
+        ->where('business_id', $business->id)
+        ->where('status', 'pending')
+        ->count();
+    $fiscalProfile = DB::table('fiscalization_profiles')
+        ->where('business_id', $business->id)
+        ->first();
+    $fiscalLocations = DB::table('locations')
+        ->where('business_id', $business->id)
+        ->where('is_active', true)
+        ->whereNotNull('fiscal_business_unit_code')
+        ->count();
+    $fiscalRegisters = DB::table('cash_registers')
+        ->where('business_id', $business->id)
+        ->where('is_active', true)
+        ->whereNotNull('fiscal_tcr_code')
+        ->count();
+    $fiscalOperators = DB::table('business_user')
+        ->where('business_id', $business->id)
+        ->where('status', 'active')
+        ->whereNotNull('fiscal_operator_code')
+        ->count();
+
+    $expectedStates = ['fiscalized', 'not_fiscalized', 'failed'];
+    $stateCoverage = collect($expectedStates)->every(fn (string $state): bool => in_array($state, $invoiceStates, true));
+    $invoiceDemoOk = $stateCoverage && $qrInvoices >= 1 && $creditNotes >= 1;
+    $staffDemoOk = DB::table('business_user')->where('business_id', $business->id)->count() >= 7 && $pendingInvites >= 1;
+    $fiscalDemoOk = $fiscalProfile !== null && $fiscalLocations >= 2 && $fiscalRegisters >= 2 && $fiscalOperators >= 3;
+
+    $this->newLine();
+    $this->table(
+        ['Demo scenario', 'Status', 'Details'],
+        [
+            [
+                'Invoice filters + QR + correction',
+                $invoiceDemoOk ? 'OK' : 'CHECK',
+                'states='.implode(',', array_values(array_unique($invoiceStates))).'; qr='.$qrInvoices.'; credit_notes='.$creditNotes,
+            ],
+            [
+                'Staff lifecycle',
+                $staffDemoOk ? 'OK' : 'CHECK',
+                'members='.DB::table('business_user')->where('business_id', $business->id)->count().'; pending_invites='.$pendingInvites,
+            ],
+            [
+                'Fiscal identity',
+                $fiscalDemoOk ? 'OK' : 'CHECK',
+                'locations='.$fiscalLocations.'; TCR='.$fiscalRegisters.'; operators='.$fiscalOperators.'; profile='.($fiscalProfile?->status ?? 'missing'),
+            ],
+        ],
+    );
+
+    $allOk = $allOk && $invoiceDemoOk && $staffDemoOk && $fiscalDemoOk;
+
+    $this->newLine();
+    $this->line('Open these pages after login:');
+    foreach ([
+        '/dashboard',
+        '/pos',
+        '/cash-register',
+        '/bar',
+        '/products',
+        '/inventory',
+        '/purchasing',
+        '/finance',
+        '/reports',
+        '/invoices',
+        '/venue-setup',
+        '/staff',
+        '/settings#fiscal-identity',
+    ] as $path) {
+        $this->line('  http://localhost:8080'.$path);
+    }
 
     $this->newLine();
     if ($allOk) {
