@@ -764,6 +764,8 @@ test('report permissions date limits and tenant location boundaries are enforced
         $operationalHeaders,
     )->assertOk();
 
+    $this->getJson('/api/v1/reports/locations', $operationalHeaders)->assertOk();
+
     $this->getJson(
         "/api/v1/reports/financial?location_id={$location->id}&from={$date}&to={$date}",
         $operationalHeaders,
@@ -776,6 +778,8 @@ test('report permissions date limits and tenant location boundaries are enforced
         "/api/v1/reports/financial?location_id={$location->id}&from={$date}&to={$date}",
         $financialHeaders,
     )->assertOk();
+
+    $this->getJson('/api/v1/reports/locations', $financialHeaders)->assertOk();
 
     $this->getJson(
         "/api/v1/reports/operational?location_id={$location->id}&from={$date}&to={$date}",
@@ -796,4 +800,8 @@ test('report permissions date limits and tenant location boundaries are enforced
         "/api/v1/reports/financial?location_id={$location->id}&from=2026-10-01&to=2026-09-01",
         $financialHeaders,
     )->assertStatus(422)->assertJsonValidationErrors('to');
+
+    $noReportUser = rpmUser($business, ['orders.view']);
+    $this->getJson('/api/v1/reports/locations', rpmHeaders($noReportUser, $business))
+        ->assertForbidden();
 });
