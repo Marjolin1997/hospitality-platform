@@ -690,6 +690,7 @@ test('financial report nets reversals and keeps unallocated expenses separate', 
         ->assertJsonPath('data.summary.invoice_total', '100.0000')
         ->assertJsonPath('data.summary.credit_note_count', 1)
         ->assertJsonPath('data.summary.credit_note_total', '20.0000')
+        ->assertJsonPath('data.summary.net_invoiced_total', '80.0000')
         ->assertJsonPath('data.summary.goods_receipt_count', 1)
         ->assertJsonPath('data.summary.goods_received_cost', '40.0000')
         ->assertJsonPath('data.cash_reconciliation.closed_sessions', 2)
@@ -701,6 +702,79 @@ test('financial report nets reversals and keeps unallocated expenses separate', 
 
     expect($categories['Utilities']['net_amount'])->toBe('30.0000')
         ->and($categories['Supplies']['net_amount'])->toBe('0.0000');
+});
+
+test('financial document reporting includes only issued invoice lifecycle and nets credit notes', function (): void {
+    $business = rpmBusiness('Financial Document Status');
+    $location = rpmLocation($business, 'Main');
+    $user = rpmUser($business, ['reports.financial.view']);
+    $headers = rpmHeaders($user, $business);
+    $date = now($business->timezone)->toDateString();
+
+    DB::table('invoices')->insert([
+        'id' => (string) Str::ulid(),
+        'business_id' => $business->id,
+        'location_id' => $location->id,
+        'order_id' => null,
+        'created_by_user_id' => $user->id,
+        'number' => 'INV-DRAFT-RPT',
+        'status' => 'draft',
+        'currency' => 'EUR',
+        'subtotal' => '999.0000',
+        'tax_total' => '0.0000',
+        'grand_total' => '999.0000',
+        'issued_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $issuedInvoice = (string) Str::ulid();
+    DB::table('invoices')->insert([
+        'id' => $issuedInvoice,
+        'business_id' => $business->id,
+        'location_id' => $location->id,
+        'order_id' => null,
+        'created_by_user_id' => $user->id,
+        'number' => 'INV-ISSUED-RPT',
+        'status' => 'issued',
+        'currency' => 'EUR',
+        'subtotal' => '120.0000',
+        'tax_total' => '0.0000',
+        'grand_total' => '120.0000',
+        'issued_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    DB::table('invoice_credit_notes')->insert([
+        'id' => (string) Str::ulid(),
+        'business_id' => $business->id,
+        'invoice_id' => $issuedInvoice,
+        'created_by_user_id' => $user->id,
+        'number' => 'CN-REFUNDED-RPT',
+        'invoice_number_snapshot' => 'INV-ISSUED-RPT',
+        'status' => 'refunded',
+        'currency' => 'EUR',
+        'subtotal' => '20.0000',
+        'discount_total' => '0.0000',
+        'tax_total' => '0.0000',
+        'grand_total' => '20.0000',
+        'reason' => 'Historical correction',
+        'idempotency_key' => 'report-refunded-cn',
+        'issued_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->getJson(
+        "/api/v1/reports/financial?location_id={$location->id}&from={$date}&to={$date}",
+        $headers,
+    )->assertOk()
+        ->assertJsonPath('data.summary.invoice_count', 1)
+        ->assertJsonPath('data.summary.invoice_total', '120.0000')
+        ->assertJsonPath('data.summary.credit_note_count', 1)
+        ->assertJsonPath('data.summary.credit_note_total', '20.0000')
+        ->assertJsonPath('data.summary.net_invoiced_total', '100.0000');
 });
 
 test('inactive locations remain available for historical reporting without becoming operational locations', function (): void {
