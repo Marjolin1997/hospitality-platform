@@ -727,6 +727,253 @@ final class DemoWorkspaceSeeder extends Seeder
                 'external_reference' => 'DEMO-PAYMENT',
             ]);
         }
+
+        $this->upsertUlid('invoice_fiscalization_attempts', [
+            'invoice_id' => $invoice->id,
+            'attempt_no' => 1,
+        ], [
+            'business_id' => $this->business->getKey(),
+            'provider' => 'direct_dpt',
+            'environment' => 'test',
+            'status' => 'succeeded',
+            'retryable' => false,
+            'http_status' => 200,
+            'request_id' => 'DEMO-REQ-INV-001',
+            'payload_hash' => hash('sha256', 'demo-invoice-001'),
+            'nslf' => 'DEMO-NSLF-2026-000001-LOCAL-ONLY',
+            'nivf' => 'DEMO-NIVF-2026-000001-LOCAL-ONLY',
+            'metadata' => json_encode(['demo' => true, 'local_only' => true], JSON_THROW_ON_ERROR),
+            'started_at' => now()->subDay()->setTime(19, 6),
+            'completed_at' => now()->subDay()->setTime(19, 6)->addSeconds(1),
+        ]);
+
+        $pendingInvoice = $this->upsertUlid('invoices', [
+            'business_id' => $this->business->getKey(),
+            'number' => 'DEMO-INV-002',
+        ], [
+            'location_id' => $this->locations['main']->id,
+            'order_id' => null,
+            'created_by_user_id' => $this->users['finance']->id,
+            'order_number_snapshot' => 'DEMO-MANUAL-002',
+            'business_name_snapshot' => $this->business->name,
+            'business_legal_name_snapshot' => $this->business->legal_name,
+            'business_tax_number_snapshot' => $this->business->tax_number,
+            'location_name_snapshot' => $this->locations['main']->name,
+            'location_address_snapshot' => $this->locations['main']->address,
+            'status' => 'issued',
+            'fiscalization_status' => 'not_fiscalized',
+            'fiscal_invoice_type' => 'NONCASH',
+            'fiscal_operator_code_snapshot' => 'dm107op007',
+            'fiscal_business_unit_code_snapshot' => 'dm001bu001',
+            'fiscal_tcr_code_snapshot' => null,
+            'currency' => $this->business->currency,
+            'subtotal' => '40.0000',
+            'discount_total' => '0.0000',
+            'tax_total' => '8.0000',
+            'grand_total' => '48.0000',
+            'customer_name' => 'Demo Corporate Customer',
+            'customer_tax_number' => 'DEMO-CUST-200',
+            'issued_at' => now()->subHours(7),
+        ]);
+
+        $this->upsertUlid('invoice_lines', [
+            'invoice_id' => $pendingInvoice->id,
+            'position' => 1,
+        ], [
+            'business_id' => $this->business->getKey(),
+            'product_name_snapshot' => 'Corporate Catering Demo',
+            'sku_snapshot' => 'DEMO-CATERING',
+            'unit_code_snapshot' => 'C62',
+            'unit_label_snapshot' => 'service',
+            'quantity' => '1.0000',
+            'unit_price' => '48.0000',
+            'discount_percent' => '0.0000',
+            'tax_rate' => '20.0000',
+            'line_subtotal' => '40.0000',
+            'line_tax' => '8.0000',
+            'line_total' => '48.0000',
+        ]);
+
+        $this->upsertUlid('invoice_payment_snapshots', [
+            'invoice_id' => $pendingInvoice->id,
+            'position' => 1,
+        ], [
+            'business_id' => $this->business->getKey(),
+            'method' => 'bank_transfer',
+            'method_label' => 'Bank transfer',
+            'amount' => '48.0000',
+            'currency' => $this->business->currency,
+            'amount_base' => '48.0000',
+            'base_currency' => $this->business->currency,
+            'exchange_rate' => '1.0000000000',
+            'external_reference' => 'DEMO-BANK-002',
+        ]);
+
+        $failedInvoice = $this->upsertUlid('invoices', [
+            'business_id' => $this->business->getKey(),
+            'number' => 'DEMO-INV-003',
+        ], [
+            'location_id' => $this->locations['main']->id,
+            'order_id' => null,
+            'created_by_user_id' => $this->users['finance']->id,
+            'order_number_snapshot' => 'DEMO-MANUAL-003',
+            'business_name_snapshot' => $this->business->name,
+            'business_legal_name_snapshot' => $this->business->legal_name,
+            'business_tax_number_snapshot' => $this->business->tax_number,
+            'location_name_snapshot' => $this->locations['main']->name,
+            'location_address_snapshot' => $this->locations['main']->address,
+            'status' => 'issued',
+            'fiscalization_status' => 'failed',
+            'fiscal_invoice_type' => 'CASH',
+            'fiscal_operator_code_snapshot' => 'dm107op007',
+            'fiscal_business_unit_code_snapshot' => 'dm001bu001',
+            'fiscal_tcr_code_snapshot' => 'dm011tc001',
+            'currency' => $this->business->currency,
+            'subtotal' => '12.5000',
+            'discount_total' => '0.0000',
+            'tax_total' => '2.5000',
+            'grand_total' => '15.0000',
+            'customer_name' => 'Walk-in Demo Guest',
+            'customer_tax_number' => null,
+            'fiscalization_attempts' => 1,
+            'fiscalization_error' => 'DEMO timeout while contacting the TEST fiscal endpoint. Local-only diagnostic data.',
+            'issued_at' => now()->subHours(3),
+        ]);
+
+        $this->upsertUlid('invoice_lines', [
+            'invoice_id' => $failedInvoice->id,
+            'position' => 1,
+        ], [
+            'business_id' => $this->business->getKey(),
+            'product_name_snapshot' => 'Demo Event Package',
+            'sku_snapshot' => 'DEMO-EVENT',
+            'unit_code_snapshot' => 'C62',
+            'unit_label_snapshot' => 'service',
+            'quantity' => '1.0000',
+            'unit_price' => '15.0000',
+            'discount_percent' => '0.0000',
+            'tax_rate' => '20.0000',
+            'line_subtotal' => '12.5000',
+            'line_tax' => '2.5000',
+            'line_total' => '15.0000',
+        ]);
+
+        $this->upsertUlid('invoice_payment_snapshots', [
+            'invoice_id' => $failedInvoice->id,
+            'position' => 1,
+        ], [
+            'business_id' => $this->business->getKey(),
+            'method' => 'cash',
+            'method_label' => 'Cash',
+            'amount' => '15.0000',
+            'currency' => $this->business->currency,
+            'amount_base' => '15.0000',
+            'base_currency' => $this->business->currency,
+            'exchange_rate' => '1.0000000000',
+            'external_reference' => 'DEMO-CASH-003',
+        ]);
+
+        $this->upsertUlid('invoice_fiscalization_attempts', [
+            'invoice_id' => $failedInvoice->id,
+            'attempt_no' => 1,
+        ], [
+            'business_id' => $this->business->getKey(),
+            'provider' => 'direct_dpt',
+            'environment' => 'test',
+            'status' => 'failed',
+            'retryable' => true,
+            'next_retry_at' => now()->addMinutes(30),
+            'http_status' => 504,
+            'request_id' => 'DEMO-REQ-INV-003',
+            'payload_hash' => hash('sha256', 'demo-invoice-003'),
+            'error_code' => 'DEMO_TIMEOUT',
+            'error_message' => 'Local demo timeout; no request was sent to DPT.',
+            'metadata' => json_encode(['demo' => true, 'local_only' => true], JSON_THROW_ON_ERROR),
+            'started_at' => now()->subHours(3),
+            'completed_at' => now()->subHours(3)->addSeconds(4),
+        ]);
+
+        $credit = $this->upsertUlid('invoice_credit_notes', [
+            'business_id' => $this->business->getKey(),
+            'number' => 'DEMO-CN-001',
+        ], [
+            'invoice_id' => $invoice->id,
+            'created_by_user_id' => $this->users['finance']->id,
+            'invoice_number_snapshot' => $invoice->number,
+            'status' => 'issued',
+            'currency' => $this->business->currency,
+            'subtotal' => '16.6667',
+            'discount_total' => '1.9000',
+            'tax_total' => '3.3333',
+            'grand_total' => '20.0000',
+            'customer_name_snapshot' => 'Demo Guest GmbH',
+            'customer_tax_number_snapshot' => 'DEMO-CUST-100',
+            'reason' => 'Demo full correction for UI testing',
+            'idempotency_key' => 'demo-credit-note-001',
+            'fiscalization_status' => 'fiscalized',
+            'fiscal_invoice_type' => 'CASH',
+            'fiscal_invoice_number' => 'DM-CN-2026-000001',
+            'fiscal_ordinal_number' => 1,
+            'original_invoice_nslf_snapshot' => 'DEMO-NSLF-2026-000001-LOCAL-ONLY',
+            'fiscal_operator_code_snapshot' => 'dm107op007',
+            'fiscal_business_unit_code_snapshot' => 'dm001bu001',
+            'fiscal_tcr_code_snapshot' => 'dm011tc001',
+            'original_invoice_issued_at_snapshot' => $invoice->issued_at,
+            'nslf' => 'DEMO-NSLF-CN-2026-000001-LOCAL-ONLY',
+            'nivf' => 'DEMO-NIVF-CN-2026-000001-LOCAL-ONLY',
+            'verification_url' => null,
+            'qr_payload' => 'DEMO|LOCAL_ONLY|CREDIT_NOTE=DM-CN-2026-000001|ORIGINAL=DM-2026-000001|NIPT='.self::BUSINESS_TAX_NUMBER.'|TOTAL=20.00|CURRENCY=EUR',
+            'fiscalized_at' => now()->subHours(20),
+            'fiscalization_attempts' => 1,
+            'fiscalization_error' => null,
+            'issued_at' => now()->subHours(20),
+        ]);
+
+        $invoiceLines = DB::table('invoice_lines')
+            ->where('business_id', $this->business->getKey())
+            ->where('invoice_id', $invoice->id)
+            ->orderBy('position')
+            ->get();
+
+        foreach ($invoiceLines as $line) {
+            $this->upsertUlid('invoice_credit_note_lines', [
+                'invoice_credit_note_id' => $credit->id,
+                'position' => $line->position,
+            ], [
+                'business_id' => $this->business->getKey(),
+                'invoice_line_id' => $line->id,
+                'product_name_snapshot' => $line->product_name_snapshot,
+                'sku_snapshot' => $line->sku_snapshot,
+                'unit_code_snapshot' => $line->unit_code_snapshot,
+                'unit_label_snapshot' => $line->unit_label_snapshot,
+                'quantity' => $line->quantity,
+                'unit_price' => $line->unit_price,
+                'discount_percent' => $line->discount_percent,
+                'tax_rate' => $line->tax_rate,
+                'line_subtotal' => $line->line_subtotal,
+                'line_tax' => $line->line_tax,
+                'line_total' => $line->line_total,
+            ]);
+        }
+
+        $this->upsertUlid('credit_note_fiscalization_attempts', [
+            'invoice_credit_note_id' => $credit->id,
+            'attempt_no' => 1,
+        ], [
+            'business_id' => $this->business->getKey(),
+            'provider' => 'direct_dpt',
+            'environment' => 'test',
+            'status' => 'succeeded',
+            'retryable' => false,
+            'http_status' => 200,
+            'request_id' => 'DEMO-REQ-CN-001',
+            'payload_hash' => hash('sha256', 'demo-credit-note-001'),
+            'nslf' => 'DEMO-NSLF-CN-2026-000001-LOCAL-ONLY',
+            'nivf' => 'DEMO-NIVF-CN-2026-000001-LOCAL-ONLY',
+            'metadata' => json_encode(['demo' => true, 'local_only' => true], JSON_THROW_ON_ERROR),
+            'started_at' => now()->subHours(20),
+            'completed_at' => now()->subHours(20)->addSecond(),
+        ]);
     }
 
     private function seedPurchasing(): void
