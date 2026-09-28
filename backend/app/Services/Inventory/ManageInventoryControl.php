@@ -321,6 +321,27 @@ final class ManageInventoryControl
         return DB::transaction(function () use ($business, $data, $actorUserId): object {
             $this->lockBusiness($business);
 
+            $requestSnapshot = $this->countCreateSnapshot($data);
+            $existingCount = DB::table('inventory_counts')
+                ->where('business_id', $business->getKey())
+                ->where('idempotency_key', $data['idempotency_key'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($existingCount) {
+                $storedSnapshot = $existingCount->request_snapshot
+                    ? json_decode($existingCount->request_snapshot, true, 512, JSON_THROW_ON_ERROR)
+                    : null;
+
+                if ($storedSnapshot !== $requestSnapshot) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => 'This idempotency key was already used for a different stock count request.',
+                    ]);
+                }
+
+                return $existingCount;
+            }
+
             $location = DB::table('locations')
                 ->where('business_id', $business->getKey())
                 ->where('id', $data['location_id'])
@@ -379,6 +400,8 @@ final class ManageInventoryControl
                 'location_id' => $location->id,
                 'created_by_user_id' => $actorUserId,
                 'number' => $number,
+                'idempotency_key' => $data['idempotency_key'],
+                'request_snapshot' => json_encode($requestSnapshot, JSON_THROW_ON_ERROR),
                 'status' => 'draft',
                 'note' => isset($data['note']) && trim((string) $data['note']) !== ''
                     ? trim((string) $data['note'])
@@ -779,6 +802,21 @@ final class ManageInventoryControl
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    private function countCreateSnapshot(array $data): array
+    {
+        return [
+            'location_id' => (string) $data['location_id'],
+            'note' => isset($data['note']) && trim((string) $data['note']) !== ''
+                ? trim((string) $data['note'])
+                : null,
+            'product_ids' => collect($data['product_ids'] ?? [])
+                ->map(fn ($id): string => (string) $id)
+                ->sort()
+                ->values()
+                ->all(),
+        ];
     }
 
     private function transferSnapshot(array $data): array
