@@ -259,7 +259,7 @@ Artisan::command('demo:check', function (): int {
         'Invoices' => [
             'routes' => ['api/v1/invoices'],
             'data' => fn () => DB::table('invoices')->where('business_id', $business->id)->count(),
-            'minimum' => 3,
+            'minimum' => 4,
         ],
         'Venue Setup' => [
             'routes' => ['api/v1/management/venue', 'api/v1/management/cash-registers'],
@@ -346,7 +346,19 @@ Artisan::command('demo:check', function (): int {
 
     $expectedStates = ['fiscalized', 'not_fiscalized', 'failed'];
     $stateCoverage = collect($expectedStates)->every(fn (string $state): bool => in_array($state, $invoiceStates, true));
-    $invoiceDemoOk = $stateCoverage && $qrInvoices >= 1 && $creditNotes >= 1;
+    $requestedInvoice = DB::table('invoices')
+        ->where('business_id', $business->id)
+        ->where('number', 'INV-20260928-0001')
+        ->first();
+
+    $requestedInvoiceOk = $requestedInvoice !== null
+        && $requestedInvoice->status === 'issued'
+        && $requestedInvoice->fiscalization_status === 'fiscalized'
+        && (string) $requestedInvoice->grand_total === '25.0000'
+        && is_string($requestedInvoice->qr_payload)
+        && str_starts_with($requestedInvoice->qr_payload, 'DEMO|LOCAL_ONLY');
+
+    $invoiceDemoOk = $stateCoverage && $qrInvoices >= 2 && $creditNotes >= 1 && $requestedInvoiceOk;
     $staffDemoOk = DB::table('business_user')->where('business_id', $business->id)->count() >= 7 && $pendingInvites >= 1;
     $fiscalDemoOk = $fiscalProfile !== null && $fiscalLocations >= 2 && $fiscalRegisters >= 2 && $fiscalOperators >= 3;
 
@@ -357,7 +369,7 @@ Artisan::command('demo:check', function (): int {
             [
                 'Invoice filters + QR + correction',
                 $invoiceDemoOk ? 'OK' : 'CHECK',
-                'states='.implode(',', array_values(array_unique($invoiceStates))).'; qr='.$qrInvoices.'; credit_notes='.$creditNotes,
+                'states='.implode(',', array_values(array_unique($invoiceStates))).'; qr='.$qrInvoices.'; credit_notes='.$creditNotes.'; requested_invoice='.($requestedInvoiceOk ? 'OK' : 'CHECK'),
             ],
             [
                 'Staff lifecycle',
@@ -379,6 +391,11 @@ Artisan::command('demo:check', function (): int {
         ->where('business_id', $business->id)
         ->where('number', 'DEMO-INV-001')
         ->first(['id', 'number']);
+
+    $requestedQrInvoice = DB::table('invoices')
+        ->where('business_id', $business->id)
+        ->where('number', 'INV-20260928-0001')
+        ->first(['id', 'number', 'status', 'grand_total', 'fiscalization_status']);
 
     $demoCreditNote = DB::table('invoice_credit_notes')
         ->where('business_id', $business->id)
@@ -404,9 +421,21 @@ Artisan::command('demo:check', function (): int {
         $this->line('  http://localhost:8080'.$path);
     }
 
+    if ($requestedQrInvoice) {
+        $this->newLine();
+        $this->line('Requested fiscal QR invoice:');
+        $this->line('  ID: '.$requestedQrInvoice->id);
+        $this->line('  Number: '.$requestedQrInvoice->number);
+        $this->line('  Status: '.$requestedQrInvoice->status.' / '.$requestedQrInvoice->fiscalization_status);
+        $this->line('  Total: '.$requestedQrInvoice->grand_total);
+        $this->line('  Invoice + QR: http://localhost:8080/invoices/'.$requestedQrInvoice->id.'/print');
+        $this->line('  Receipt 80mm + QR: http://localhost:8080/invoices/'.$requestedQrInvoice->id.'/receipt/80');
+        $this->line('  Receipt 58mm + QR: http://localhost:8080/invoices/'.$requestedQrInvoice->id.'/receipt/58');
+    }
+
     if ($demoInvoice) {
         $this->newLine();
-        $this->line('Demo fiscal document URLs:');
+        $this->line('Other demo fiscal document URLs:');
         $this->line('  Invoice + QR: http://localhost:8080/invoices/'.$demoInvoice->id.'/print');
         $this->line('  Receipt 80mm: http://localhost:8080/invoices/'.$demoInvoice->id.'/receipt/80');
         $this->line('  Receipt 58mm: http://localhost:8080/invoices/'.$demoInvoice->id.'/receipt/58');
