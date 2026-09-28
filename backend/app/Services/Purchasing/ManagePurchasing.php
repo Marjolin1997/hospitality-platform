@@ -337,14 +337,55 @@ final class ManagePurchasing
                 ]);
             }
 
+            $currentItems = DB::table('purchase_order_items')
+                ->where('business_id', $business->getKey())
+                ->where('purchase_order_id', $purchaseOrderId)
+                ->orderBy('product_id')
+                ->lockForUpdate()
+                ->get();
+
+            $desiredSnapshot = [
+                'supplier_id' => (string) $supplier->id,
+                'notes' => isset($data['notes']) && trim((string) $data['notes']) !== ''
+                    ? trim((string) $data['notes'])
+                    : null,
+                'items' => $items
+                    ->map(fn (array $item): array => [
+                        'product_id' => (string) $item['product_id'],
+                        'quantity_ordered' => (string) BigDecimal::of((string) $item['quantity_ordered'])
+                            ->toScale(self::SCALE, RoundingMode::HALF_UP),
+                        'unit_cost' => (string) BigDecimal::of((string) $item['unit_cost'])
+                            ->toScale(self::SCALE, RoundingMode::HALF_UP),
+                    ])
+                    ->sortBy('product_id')
+                    ->values()
+                    ->all(),
+            ];
+
+            $currentSnapshot = [
+                'supplier_id' => (string) $order->supplier_id,
+                'notes' => $order->notes,
+                'items' => $currentItems
+                    ->map(fn (object $item): array => [
+                        'product_id' => (string) $item->product_id,
+                        'quantity_ordered' => (string) BigDecimal::of((string) $item->quantity_ordered)
+                            ->toScale(self::SCALE, RoundingMode::HALF_UP),
+                        'unit_cost' => (string) BigDecimal::of((string) $item->unit_cost)
+                            ->toScale(self::SCALE, RoundingMode::HALF_UP),
+                    ])
+                    ->values()
+                    ->all(),
+            ];
+
+            if ($currentSnapshot === $desiredSnapshot) {
+                return $this->purchaseOrder($business, $purchaseOrderId);
+            }
+
             $before = [
                 'supplier_id' => $order->supplier_id,
                 'supplier_name_snapshot' => $order->supplier_name_snapshot,
                 'total_cost' => (string) $order->total_cost,
-                'line_count' => DB::table('purchase_order_items')
-                    ->where('business_id', $business->getKey())
-                    ->where('purchase_order_id', $purchaseOrderId)
-                    ->count(),
+                'line_count' => $currentItems->count(),
             ];
 
             DB::table('purchase_order_items')
