@@ -217,12 +217,14 @@ export function InventoryPage() {
   const [reorderHistoryTarget, setReorderHistoryTarget] = useState<Stock | null>(null);
 
   const [transferEditor, setTransferEditor] = useState<TransferDraft | null>(null);
+  const [transferConfirming, setTransferConfirming] = useState(false);
   const [transferDetailId, setTransferDetailId] = useState<string | null>(null);
 
   const [countCreator, setCountCreator] = useState<CountCreateDraft | null>(null);
   const [countProductSearch, setCountProductSearch] = useState('');
   const [countDetailId, setCountDetailId] = useState<string | null>(null);
   const [countValues, setCountValues] = useState<Record<string, string>>({});
+  const [countPostConfirming, setCountPostConfirming] = useState(false);
   const [cancelCountTarget, setCancelCountTarget] = useState<CountSummary | null>(null);
   const [cancelCountReason, setCancelCountReason] = useState('');
 
@@ -363,6 +365,7 @@ export function InventoryPage() {
       })),
     }),
     onSuccess: async () => {
+      setTransferConfirming(false);
       setTransferEditor(null);
       await invalidateInventory();
     },
@@ -402,6 +405,7 @@ export function InventoryPage() {
   const postCount = useMutation({
     mutationFn: (countId: string) => api.post(`/inventory/counts/${countId}/post`),
     onSuccess: async (_response, countId) => {
+      setCountPostConfirming(false);
       await invalidateInventory();
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['inventory-count-detail', activeBusiness?.id, countId] }),
@@ -944,7 +948,10 @@ export function InventoryPage() {
       }}>
         <form className="modal-card management-modal inventory-transfer-modal" role="dialog" aria-modal="true" aria-label="Create stock transfer" onSubmit={event => {
           event.preventDefault();
-          if (transferValid) createTransfer.mutate(transferEditor);
+          if (transferValid) {
+            createTransfer.reset();
+            setTransferConfirming(true);
+          }
         }}>
           <header><div><span className="eyebrow">POST STOCK TRANSFER</span><h2>Transfer from {activeLocation.name}</h2><p>Posting is immediate and immutable. Source and destination ledger entries are created in the same transaction.</p></div><button type="button" className="icon-button" aria-label="Close stock transfer" disabled={createTransfer.isPending} onClick={() => setTransferEditor(null)}><X size={18} /></button></header>
           <div className="form-grid"><label><span>Destination</span><select required value={transferEditor.destination_location_id} onChange={event => setTransferEditor({ ...transferEditor, destination_location_id: event.target.value })}><option value="">Select location</option>{transferOptions?.destinations.map(location => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label><label className="span-2"><span>Transfer reason</span><textarea required minLength={3} maxLength={1000} value={transferEditor.note} onChange={event => setTransferEditor({ ...transferEditor, note: event.target.value })} placeholder="Replenish terrace bar, move closing stock…" /></label></div>
@@ -955,8 +962,40 @@ export function InventoryPage() {
             return <div className="transfer-line" key={index}><label><span>Product</span><select required value={line.product_id} onChange={event => setTransferEditor(draft => draft ? { ...draft, items: draft.items.map((item, itemIndex) => itemIndex === index ? { ...item, product_id: event.target.value } : item) } : draft)}><option value="">Select product</option>{transferOptions?.products.map(option => <option key={option.id} value={option.id} disabled={selected.has(option.id) || Number(option.quantity_on_hand) <= 0}>{option.name}{option.sku ? ` · ${option.sku}` : ''} · on hand {qty(option.quantity_on_hand)}</option>)}</select></label><label><span>Quantity</span><input required type="number" min="0.0001" max={product?.quantity_on_hand} step="0.0001" inputMode="decimal" value={line.quantity} onChange={event => setTransferEditor(draft => draft ? { ...draft, items: draft.items.map((item, itemIndex) => itemIndex === index ? { ...item, quantity: event.target.value } : item) } : draft)} />{product && <small>Available {qty(product.quantity_on_hand)} {product.unit_label ?? ''}</small>}</label><button type="button" className="icon-button" aria-label={`Remove transfer line ${index + 1}`} disabled={transferEditor.items.length === 1} onClick={() => setTransferEditor(draft => draft ? { ...draft, items: draft.items.filter((_, itemIndex) => itemIndex !== index) } : draft)}><X size={16} /></button></div>;
           })}</div>
           {createTransfer.isError && <p className="error-state">{apiMessage(createTransfer.error)}</p>}
-          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={createTransfer.isPending} onClick={() => setTransferEditor(null)}>Cancel</button><button className="primary-button" disabled={!transferValid || createTransfer.isPending}>{createTransfer.isPending ? 'Posting transfer…' : 'Post transfer'}</button></footer>
+          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={createTransfer.isPending} onClick={() => setTransferEditor(null)}>Cancel</button><button className="primary-button" disabled={!transferValid || createTransfer.isPending}>{createTransfer.isPending ? 'Posting transfer…' : 'Review transfer'}</button></footer>
         </form>
+      </div>
+    )}
+
+    {transferConfirming && transferEditor && (
+      <div className="modal-backdrop" role="presentation" onMouseDown={event => {
+        if (event.target === event.currentTarget && !createTransfer.isPending) setTransferConfirming(false);
+      }}>
+        <div className="modal-card compact-confirmation" role="dialog" aria-modal="true" aria-label="Confirm stock transfer">
+          <header>
+            <div>
+              <span className="eyebrow">CONFIRM IMMUTABLE TRANSFER</span>
+              <h2>Post stock transfer?</h2>
+              <p>This immediately decreases stock at {activeLocation.name}, increases stock at the destination and writes immutable ledger movements.</p>
+            </div>
+            <button type="button" className="icon-button" aria-label="Close transfer confirmation" disabled={createTransfer.isPending} onClick={() => setTransferConfirming(false)}><X size={18} /></button>
+          </header>
+          <div className="permission-banner warning">
+            <AlertTriangle size={18} />
+            <div>
+              <strong>Review before posting</strong>
+              <span>{transferEditor.items.length} product line{transferEditor.items.length === 1 ? '' : 's'} · {transferEditor.note.trim()}</span>
+            </div>
+          </div>
+          {createTransfer.isError && <p className="error-state">{apiMessage(createTransfer.error)}</p>}
+          <footer className="modal-actions">
+            <button type="button" className="secondary-button" disabled={createTransfer.isPending} onClick={() => setTransferConfirming(false)}>Back to edit</button>
+            <button type="button" className="primary-button" disabled={createTransfer.isPending} onClick={() => createTransfer.mutate(transferEditor)}>
+              <ArrowLeftRight size={15} />
+              {createTransfer.isPending ? 'Posting transfer…' : 'Post transfer'}
+            </button>
+          </footer>
+        </div>
       </div>
     )}
 
@@ -1000,11 +1039,47 @@ export function InventoryPage() {
             <button type="button" className="secondary-button" disabled={saveCount.isPending || postCount.isPending} onClick={() => setCountDetailId(null)}>Close</button>
             {countDetail?.count.status === 'draft' && canAdjust && <button type="button" className="secondary-button" disabled={saveCount.isPending || postCount.isPending} onClick={() => saveCount.mutate({ countId: countDetail.count.id, items: countDraftItems })}>{saveCount.isPending ? 'Saving…' : 'Save count draft'}</button>}
             {countDetail?.count.status === 'draft' && canAdjust && <button type="button" className="primary-button" disabled={!allCounted || saveCount.isPending || postCount.isPending} onClick={() => {
+              saveCount.reset();
+              postCount.reset();
+              setCountPostConfirming(true);
+            }}>{saveCount.isPending ? 'Saving…' : postCount.isPending ? 'Posting…' : 'Review & post count'}</button>}
+          </footer>
+        </div>
+      </div>
+    )}
+
+    {countPostConfirming && countDetail?.count.status === 'draft' && (
+      <div className="modal-backdrop" role="presentation" onMouseDown={event => {
+        if (event.target === event.currentTarget && !saveCount.isPending && !postCount.isPending) setCountPostConfirming(false);
+      }}>
+        <div className="modal-card compact-confirmation" role="dialog" aria-modal="true" aria-label="Confirm stock count posting">
+          <header>
+            <div>
+              <span className="eyebrow">POST STOCK COUNT</span>
+              <h2>Post {countDetail.count.number}?</h2>
+              <p>Posting reconciles inventory to the counted quantities and creates immutable variance movements. The count cannot be edited afterwards.</p>
+            </div>
+            <button type="button" className="icon-button" aria-label="Close stock count posting" disabled={saveCount.isPending || postCount.isPending} onClick={() => setCountPostConfirming(false)}><X size={18} /></button>
+          </header>
+          <div className="permission-banner warning">
+            <AlertTriangle size={18} />
+            <div>
+              <strong>{countDetail.items.length} line{countDetail.items.length === 1 ? '' : 's'} will be reconciled</strong>
+              <span>If stock changed after the snapshot, backend validation will reject posting and no ledger movements will be written.</span>
+            </div>
+          </div>
+          {(saveCount.isError || postCount.isError) && <p className="error-state">{apiMessage(saveCount.error ?? postCount.error)}</p>}
+          <footer className="modal-actions">
+            <button type="button" className="secondary-button" disabled={saveCount.isPending || postCount.isPending} onClick={() => setCountPostConfirming(false)}>Back to count</button>
+            <button type="button" className="primary-button" disabled={saveCount.isPending || postCount.isPending || !allCounted} onClick={() => {
               saveCount.mutate(
                 { countId: countDetail.count.id, items: countDraftItems },
                 { onSuccess: () => postCount.mutate(countDetail.count.id) },
               );
-            }}>{saveCount.isPending ? 'Saving…' : postCount.isPending ? 'Posting…' : 'Save & post count'}</button>}
+            }}>
+              <ClipboardCheck size={15} />
+              {saveCount.isPending ? 'Saving…' : postCount.isPending ? 'Posting…' : 'Post stock count'}
+            </button>
           </footer>
         </div>
       </div>
