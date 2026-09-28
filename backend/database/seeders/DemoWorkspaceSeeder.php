@@ -119,10 +119,13 @@ final class DemoWorkspaceSeeder extends Seeder
         $requiredColumns = [
             'orders' => ['idempotency_key', 'request_snapshot'],
             'order_items' => ['idempotency_key', 'request_snapshot', 'preparing_at', 'served_at', 'voided_at'],
+            'venue_areas' => ['is_active'],
+            'products' => ['unit_code', 'unit_label'],
             'cash_sessions' => ['open_idempotency_key', 'open_request_snapshot', 'close_idempotency_key', 'close_request_snapshot'],
             'cash_movements' => ['idempotency_key', 'request_snapshot'],
             'inventory_movements' => ['idempotency_key', 'request_snapshot'],
-            'expenses' => ['idempotency_key', 'request_snapshot'],
+            'expenses' => ['idempotency_key', 'request_snapshot', 'reversal_of_expense_id', 'reversed_by_user_id', 'reversal_reason', 'reversed_at'],
+            'payment_refunds' => ['invoice_credit_note_id'],
             'purchase_orders' => ['idempotency_key', 'request_snapshot'],
             'goods_receipts' => ['idempotency_key', 'request_snapshot'],
             'inventory_counts' => ['idempotency_key', 'request_snapshot'],
@@ -130,8 +133,13 @@ final class DemoWorkspaceSeeder extends Seeder
             'locations' => ['fiscal_business_unit_code'],
             'cash_registers' => ['fiscal_tcr_code'],
             'business_user' => ['fiscal_operator_code'],
+            'fiscalization_profiles' => ['certificate_password_secret_ref', 'is_issuer_in_vat', 'last_test_verified_at', 'preflight_status'],
             'invoices' => ['fiscalization_status', 'nslf', 'nivf', 'qr_payload'],
-            'invoice_credit_notes' => ['fiscalization_status', 'nslf', 'nivf', 'qr_payload'],
+            'invoice_lines' => ['unit_code_snapshot', 'unit_label_snapshot', 'discount_percent'],
+            'invoice_fiscalization_attempts' => ['retryable', 'next_retry_at', 'http_status', 'payload_hash'],
+            'invoice_credit_notes' => ['fiscalization_status', 'fiscal_invoice_type', 'nslf', 'nivf', 'qr_payload', 'original_invoice_issued_at_snapshot'],
+            'invoice_credit_note_lines' => ['unit_code_snapshot', 'unit_label_snapshot', 'discount_percent'],
+            'credit_note_fiscalization_attempts' => ['retryable', 'next_retry_at', 'http_status', 'payload_hash'],
         ];
 
         $missingColumns = collect($requiredColumns)
