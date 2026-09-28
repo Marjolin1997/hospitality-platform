@@ -58,6 +58,32 @@ Schedule::call(function (): void {
         ));
 })->name('credit-note-fiscalization-retry-dispatch')->everyMinute()->withoutOverlapping();
 
+Artisan::command('demo:prepare', function (): int {
+    if (! app()->environment(['local', 'testing'])) {
+        $this->error('demo:prepare is restricted to local/testing environments.');
+        return 1;
+    }
+
+    $this->info('Preparing complete local demo workspace…');
+
+    $migrateExit = $this->call('migrate', ['--force' => true]);
+    if ($migrateExit !== 0) {
+        $this->error('Migration failed. Demo data was not seeded.');
+        return $migrateExit;
+    }
+
+    $seedExit = $this->call('db:seed', ['--class' => DemoWorkspaceSeeder::class]);
+    if ($seedExit !== 0) {
+        $this->error('Demo seeding failed.');
+        return $seedExit;
+    }
+
+    $this->call('optimize:clear');
+
+    $this->newLine();
+    return $this->call('demo:check');
+})->purpose('Migrate, seed and verify the complete local hospitality demo workspace');
+
 Artisan::command('demo:seed', function (): int {
     if (! app()->environment(['local', 'testing'])) {
         $this->error('demo:seed is restricted to local/testing environments.');
@@ -102,7 +128,7 @@ Artisan::command('demo:check', function (): int {
 
     $user = DB::table('users')->where('email', DemoWorkspaceSeeder::OWNER_EMAIL)->first();
     $business = Schema::hasTable('businesses')
-        ? DB::table('businesses')->where('tax_number', 'DEMO-TAX-2026')->first()
+        ? DB::table('businesses')->where('tax_number', DemoWorkspaceSeeder::BUSINESS_TAX_NUMBER)->first()
         : null;
 
     if (! $user || ! $business) {
