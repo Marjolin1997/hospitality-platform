@@ -168,8 +168,8 @@ Artisan::command('demo:check', function (): int {
     $redisRows = [];
     $redisOk = true;
     $redisConnections = [
-        'Queue' => (string) config('queue.connections.redis.connection', 'default'),
-        'Cache' => (string) config('cache.stores.redis.connection', 'cache'),
+        'Queue' => (string) (config('queue.connections.redis.connection') ?: 'default'),
+        'Cache' => (string) (config('cache.stores.redis.connection') ?: 'cache'),
         'Session' => (string) (config('session.connection') ?: 'default'),
     ];
 
