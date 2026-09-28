@@ -540,6 +540,22 @@ export function PurchasingPage() {
           </div>
         </div>
 
+        {canManage && options && (options.suppliers.length === 0 || options.products.length === 0) && (
+          <div className="permission-banner warning purchasing-readiness-banner">
+            <AlertTriangle size={18} />
+            <div>
+              <strong>Purchase order creation needs setup first</strong>
+              <span>
+                {options.suppliers.length === 0 && options.products.length === 0
+                  ? 'Add an active supplier and keep at least one active stock-tracked product before creating a purchase order.'
+                  : options.suppliers.length === 0
+                    ? 'Add or reactivate a supplier before creating a purchase order.'
+                    : 'At least one active stock-tracked product is required before creating a purchase order.'}
+              </span>
+            </div>
+          </div>
+        )}
+
         {(ordersQuery.isError || optionsQuery.isError) && (
           <div className="management-state error">
             <AlertTriangle size={18} />
@@ -701,7 +717,7 @@ export function PurchasingPage() {
       <div className="modal-backdrop" role="presentation" onMouseDown={event => {
         if (event.target === event.currentTarget && !savePurchase.isPending) setPurchaseEditor(null);
       }}>
-        <form className="modal-card management-modal purchase-order-editor" role="dialog" aria-modal="true" aria-label="Create purchase order" onSubmit={event => {
+        <form className="modal-card management-modal purchase-order-editor" role="dialog" aria-modal="true" aria-label={purchaseEditor.id ? 'Edit purchase order draft' : 'Create purchase order draft'} onSubmit={event => {
           event.preventDefault();
           if (purchaseValid) savePurchase.mutate(purchaseEditor);
         }}>
