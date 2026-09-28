@@ -481,11 +481,21 @@ final class ManageInventoryControl
                 ]);
             }
 
+            $changedLines = 0;
+
             foreach ($lines as $line) {
                 $value = $requested->get($line->id)['counted_quantity'] ?? null;
                 $normalized = $value === null || $value === ''
                     ? null
                     : $this->nonNegativeDecimal($value, 'counted_quantity');
+                $current = $line->counted_quantity === null
+                    ? null
+                    : (string) BigDecimal::of((string) $line->counted_quantity)
+                        ->toScale(self::SCALE, RoundingMode::HALF_UP);
+
+                if ($current === $normalized) {
+                    continue;
+                }
 
                 DB::table('inventory_count_items')
                     ->where('business_id', $business->getKey())
@@ -494,17 +504,21 @@ final class ManageInventoryControl
                         'counted_quantity' => $normalized,
                         'updated_at' => now(),
                     ]);
+
+                $changedLines++;
             }
 
-            $this->countEvent(
-                $business,
-                $countId,
-                $actorUserId,
-                'draft_updated',
-                'draft',
-                'draft',
-                ['updated_line_count' => $lines->count()],
-            );
+            if ($changedLines > 0) {
+                $this->countEvent(
+                    $business,
+                    $countId,
+                    $actorUserId,
+                    'draft_updated',
+                    'draft',
+                    'draft',
+                    ['updated_line_count' => $changedLines],
+                );
+            }
 
             return DB::table('inventory_counts')
                 ->where('business_id', $business->getKey())
