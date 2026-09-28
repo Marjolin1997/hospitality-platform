@@ -7,10 +7,29 @@ use App\Http\Requests\Api\V1\ReportRangeRequest;
 use App\Models\Business;
 use App\Services\Reports\ReportingService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 final class ReportsController extends Controller
 {
     public function __construct(private readonly ReportingService $reports) {}
+
+    public function locations(): JsonResponse
+    {
+        $business = app(Business::class);
+
+        $rows = DB::table('locations')
+            ->where('business_id', $business->getKey())
+            ->orderByDesc('is_active')
+            ->orderBy('name')
+            ->get(['id', 'name', 'code', 'is_active'])
+            ->map(function (object $row): object {
+                $row->is_active = (bool) $row->is_active;
+
+                return $row;
+            });
+
+        return response()->json(['data' => $rows]);
+    }
 
     public function operational(ReportRangeRequest $request): JsonResponse
     {
