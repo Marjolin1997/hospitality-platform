@@ -329,3 +329,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .count-product-picker-toolbar .search-box{max-width:none;width:100%}
   .count-product-picker-toolbar .inline-actions{width:100%}.count-product-picker-toolbar .inline-actions button{flex:1}
 }
+
+
+/* Report location scope */
+.report-location-field{display:grid;gap:5px;min-width:210px;color:#596860;font-size:9px;font-weight:850}
+.report-location-field select{min-height:40px;border:1px solid #dce4df;border-radius:9px;padding:7px 9px;background:#fff;color:#2f4137}
+.report-location-field select:focus{border-color:#789640;outline:3px solid rgba(118,150,61,.11)}
+.report-location-field select:disabled{background:#f3f5f4;color:#8a958f}
+.report-filter-panel>.permission-banner{margin-top:10px}
+
+@media(max-width:680px){.report-location-field{width:100%;min-width:0}}
