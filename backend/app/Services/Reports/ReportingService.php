@@ -48,7 +48,7 @@ final class ReportingService
         $netSales = $grossSales->minus($refundTotal);
         $paidOrderCount = (int) (clone $payments)->distinct()->count('p.order_id');
         $averageTicket = $paidOrderCount > 0
-            ? $netSales->dividedBy($paidOrderCount, self::SCALE, RoundingMode::HALF_UP)
+            ? $grossSales->dividedBy($paidOrderCount, self::SCALE, RoundingMode::HALF_UP)
             : BigDecimal::zero();
 
         $paymentGross = (clone $payments)
@@ -204,7 +204,8 @@ final class ReportingService
             'product_mix' => $productMix,
             'staff_activity' => $staffActivity,
             'definitions' => [
-                'sales' => 'Sales are completed payment amounts in the selected period, less completed refunds by their transaction timestamps.',
+                'sales' => 'Gross sales are completed payment amounts by paid_at. Refunds are reported by refunded_at. Net sales are gross payments less refunds occurring in the selected period.',
+                'average_ticket' => 'Average ticket is gross completed payment value divided by distinct orders with completed payments in the selected period. Refunds are shown separately and do not distort this acquisition-period denominator.',
                 'orders' => 'Order activity is grouped by order opened_at in the selected business timezone.',
                 'product_mix' => 'Product mix includes non-voided lines from paid/refunded/closed orders opened in the selected period and is not reduced by order-level discounts or refunds.',
             ],
