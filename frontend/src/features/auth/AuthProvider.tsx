@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
-import { api, clearWorkspaceContext, getActiveBusinessId, getActiveLocationId, initializeCsrf, setActiveBusinessId, setActiveLocationId } from '../../lib/api';
+import { api, authExpiredEvent, clearWorkspaceContext, getActiveBusinessId, getActiveLocationId, initializeCsrf, setActiveBusinessId, setActiveLocationId } from '../../lib/api';
 
 export type Location = { id: string; name: string };
 export type BusinessRole = { id: string; name: string; slug: string };
@@ -35,6 +35,16 @@ export function AuthProvider({children}:{children:ReactNode}) {
   const [businessId,setBusinessId] = useState(getActiveBusinessId()); const [locationId,setLocationId] = useState(getActiveLocationId());
 
   useEffect(() => { api.get<{data:AuthUser}>('/auth/me').then(r => setUser(r.data.data)).catch(() => setUser(null)).finally(() => setLoading(false)); }, []);
+  useEffect(() => {
+    const handleExpiredSession = () => {
+      setUser(null);
+      setBusinessId(null);
+      setLocationId(null);
+    };
+
+    window.addEventListener(authExpiredEvent, handleExpiredSession);
+    return () => window.removeEventListener(authExpiredEvent, handleExpiredSession);
+  }, []);
   useEffect(() => {
     if (!user) return;
     const validBusiness = user.businesses.find(b => b.id === businessId) ?? user.businesses[0] ?? null;
