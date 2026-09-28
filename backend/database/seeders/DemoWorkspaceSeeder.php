@@ -18,6 +18,7 @@ final class DemoWorkspaceSeeder extends Seeder
     public const OWNER_PASSWORD = 'Demo#Hospitality2026!';
     public const BUSINESS_NAME = 'Hospitality Demo Lab';
     public const BUSINESS_TAX_NUMBER = 'L12345678A';
+    public const INVITATION_TOKEN = 'demo-invitation-token-not-for-login';
 
     private Business $business;
     private User $owner;
@@ -1313,7 +1314,7 @@ final class DemoWorkspaceSeeder extends Seeder
     private function seedInvitationsAndAudits(): void
     {
         $managerRole = $this->roles['manager'];
-        $token = 'demo-invitation-token-not-for-login';
+        $token = self::INVITATION_TOKEN;
 
         $invitation = $this->upsertUlid('staff_invitations', [
             'business_id' => $this->business->getKey(),
