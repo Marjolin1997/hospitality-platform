@@ -339,3 +339,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .report-filter-panel>.permission-banner{margin-top:10px}
 
 @media(max-width:680px){.report-location-field{width:100%;min-width:0}}
+
+
+/* Workspace module recovery */
+.workspace-error-page{min-height:55vh;display:grid;place-items:center}
+.workspace-error-panel{width:min(680px,100%);display:grid;gap:12px;padding:28px}
+.workspace-error-panel h1{margin:0;color:#26372e;font-size:24px;letter-spacing:-.035em}
+.workspace-error-panel p{max-width:60ch;margin:0;color:#68776f;line-height:1.6}
+.workspace-error-panel .inline-actions{margin-top:4px;flex-wrap:wrap}
+.workspace-error-hint{display:block;margin-top:4px;padding:9px 10px;border:1px solid #eadfd7;border-radius:9px;background:#fff9f5;color:#8a5b48;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
