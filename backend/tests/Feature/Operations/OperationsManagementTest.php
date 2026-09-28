@@ -115,6 +115,80 @@ test('expense creators cannot reverse without approval permission',function():vo
         ->and(DB::table('expenses')->where('reversal_of_expense_id',$expense)->count())->toBe(0);
 });
 
+test('finance and expense permissions expose only the context required by each action', function (): void {
+    $business = omtBusiness('Finance Composition');
+    $location = omtLocation($business, 'FC1');
+
+    $createOnly = omtUser($business);
+    $createRole = DB::table('business_user')
+        ->where('business_id', $business->id)
+        ->where('user_id', $createOnly->id)
+        ->value('role_id');
+    DB::table('permission_role')->where('role_id', $createRole)->delete();
+    DB::table('permission_role')->insert([
+        'role_id' => $createRole,
+        'permission_id' => Permission::query()->where('key', 'expenses.create')->value('id'),
+    ]);
+
+    $createHeaders = omtHeaders($createOnly, $business);
+    $this->getJson('/api/v1/finance/overview', $createHeaders)->assertForbidden();
+    $this->getJson('/api/v1/expenses', $createHeaders)->assertForbidden();
+
+    $expense = $this->postJson('/api/v1/expenses', [
+        'idempotency_key' => (string) Str::uuid(),
+        'location_id' => $location->id,
+        'category' => 'Supplies',
+        'description' => 'Create-only expense',
+        'amount' => '9.5000',
+        'expense_date' => now($business->timezone)->toDateString(),
+    ], $createHeaders)->assertCreated()->json('data.id');
+
+    $approveOnly = omtUser($business);
+    $approveRole = DB::table('business_user')
+        ->where('business_id', $business->id)
+        ->where('user_id', $approveOnly->id)
+        ->value('role_id');
+    DB::table('permission_role')->where('role_id', $approveRole)->delete();
+    DB::table('permission_role')->insert([
+        'role_id' => $approveRole,
+        'permission_id' => Permission::query()->where('key', 'expenses.approve')->value('id'),
+    ]);
+
+    $approveHeaders = omtHeaders($approveOnly, $business);
+    $this->getJson('/api/v1/finance/overview', $approveHeaders)->assertForbidden();
+    $this->getJson('/api/v1/expenses', $approveHeaders)
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $expense);
+
+    $this->postJson("/api/v1/expenses/{$expense}/reverse", [
+        'idempotency_key' => (string) Str::uuid(),
+        'reason' => 'Approved correction',
+    ], $approveHeaders)->assertCreated();
+
+    $financeViewer = omtUser($business);
+    $financeRole = DB::table('business_user')
+        ->where('business_id', $business->id)
+        ->where('user_id', $financeViewer->id)
+        ->value('role_id');
+    DB::table('permission_role')->where('role_id', $financeRole)->delete();
+    DB::table('permission_role')->insert([
+        'role_id' => $financeRole,
+        'permission_id' => Permission::query()->where('key', 'finance.view')->value('id'),
+    ]);
+
+    $financeHeaders = omtHeaders($financeViewer, $business);
+    $this->getJson('/api/v1/finance/overview', $financeHeaders)->assertOk();
+    $this->getJson('/api/v1/expenses', $financeHeaders)->assertOk();
+    $this->postJson('/api/v1/expenses', [
+        'idempotency_key' => (string) Str::uuid(),
+        'location_id' => $location->id,
+        'category' => 'Blocked',
+        'description' => 'Finance viewer cannot create',
+        'amount' => '1.0000',
+        'expense_date' => now($business->timezone)->toDateString(),
+    ], $financeHeaders)->assertForbidden();
+});
+
 test('invoice issuance is paid-only sequential immutable and replay safe',function():void{
     $business=omtBusiness('Invoices');$business->update(['legal_name'=>'Invoices GmbH','tax_number'=>'DE-INV-1']);$location=omtLocation($business,'I1');$user=omtUser($business);$headers=omtHeaders($user,$business);
     $order=omtOrder($business,$location,$user,'paid');omtOrderItem($business,$order,'Espresso');omtSettleOrder($business,$order,$user);
