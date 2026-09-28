@@ -4,6 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { api } from '../../lib/api';
 
+type ReportLocation = {
+  id: string;
+  name: string;
+  code: string;
+  is_active: boolean;
+};
+
 type ReportScope = {
   business_id: string;
   location_id: string;
@@ -177,6 +184,7 @@ export function ReportsPage() {
   const initial = defaultRange(timeZone);
 
   const [tab, setTab] = useState<ReportTab>(canOperational ? 'operational' : 'financial');
+  const [reportLocationId, setReportLocationId] = useState(activeLocation?.id ?? '');
   const [fromDraft, setFromDraft] = useState(initial.from);
   const [toDraft, setToDraft] = useState(initial.to);
   const [range, setRange] = useState(initial);
@@ -189,33 +197,41 @@ export function ReportsPage() {
   const days = rangeDays(fromDraft, toDraft);
   const invalidRange = !Number.isFinite(days) || days < 1 || days > 367;
 
+  const reportLocationsQuery = useQuery({
+    queryKey: ['report-locations', activeBusiness?.id],
+    enabled: Boolean(activeBusiness && (canOperational || canFinancial)),
+    queryFn: () => api.get<{ data: ReportLocation[] }>('/reports/locations').then(response => response.data.data),
+  });
+
   const operationalQuery = useQuery({
-    queryKey: ['reports-operational', activeBusiness?.id, activeLocation?.id, range.from, range.to],
-    enabled: Boolean(activeBusiness && activeLocation && canOperational && tab === 'operational'),
+    queryKey: ['reports-operational', activeBusiness?.id, reportLocationId, range.from, range.to],
+    enabled: Boolean(activeBusiness && reportLocationId && canOperational && tab === 'operational'),
     queryFn: () => api
       .get<{ data: OperationalReport }>('/reports/operational', {
-        params: { location_id: activeLocation!.id, from: range.from, to: range.to },
+        params: { location_id: reportLocationId, from: range.from, to: range.to },
       })
       .then(response => response.data.data),
   });
 
   const financialQuery = useQuery({
-    queryKey: ['reports-financial', activeBusiness?.id, activeLocation?.id, range.from, range.to],
-    enabled: Boolean(activeBusiness && activeLocation && canFinancial && tab === 'financial'),
+    queryKey: ['reports-financial', activeBusiness?.id, reportLocationId, range.from, range.to],
+    enabled: Boolean(activeBusiness && reportLocationId && canFinancial && tab === 'financial'),
     queryFn: () => api
       .get<{ data: FinancialReport }>('/reports/financial', {
-        params: { location_id: activeLocation!.id, from: range.from, to: range.to },
+        params: { location_id: reportLocationId, from: range.from, to: range.to },
       })
       .then(response => response.data.data),
   });
 
   const operational = operationalQuery.data;
   const financial = financialQuery.data;
+  const reportLocations = reportLocationsQuery.data ?? [];
+  const selectedReportLocation = reportLocations.find(location => location.id === reportLocationId);
   const currency = operational?.scope.currency ?? financial?.scope.currency ?? activeBusiness?.currency ?? 'EUR';
 
   const reportTitle = useMemo(
-    () => `${activeLocation?.name ?? 'Location'} · ${range.from} to ${range.to}`,
-    [activeLocation?.name, range.from, range.to],
+    () => `${selectedReportLocation?.name ?? activeLocation?.name ?? 'Location'} · ${range.from} to ${range.to}`,
+    [selectedReportLocation?.name, activeLocation?.name, range.from, range.to],
   );
 
   if (!activeLocation) {
@@ -359,6 +375,21 @@ export function ReportsPage() {
 
     <section className="panel management-panel report-filter-panel">
       <div className="report-filter-row">
+        <label className="report-location-field">
+          <span>Report location</span>
+          <select
+            aria-label="Report location"
+            value={reportLocationId}
+            disabled={reportLocationsQuery.isLoading}
+            onChange={event => setReportLocationId(event.target.value)}
+          >
+            {reportLocations.map(location => (
+              <option key={location.id} value={location.id}>
+                {location.name}{location.is_active ? '' : ' · inactive'}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="report-date-fields">
           <label><span>From</span><input type="date" value={fromDraft} onChange={event => setFromDraft(event.target.value)} /></label>
           <label><span>To</span><input type="date" value={toDraft} onChange={event => setToDraft(event.target.value)} /></label>
@@ -383,6 +414,15 @@ export function ReportsPage() {
         <small>Business timezone: {timeZone} · maximum range 367 calendar days</small>
       </div>
       {invalidRange && <p className="field-hint error">Choose a valid date range of no more than 367 calendar days.</p>}
+      {reportLocationsQuery.isError && <p className="error-state">{apiMessage(reportLocationsQuery.error)}</p>}
+      {selectedReportLocation && !selectedReportLocation.is_active && (
+        <div className="permission-banner">
+          <div>
+            <strong>Historical branch</strong>
+            <span>This location is inactive for operations, but its historical report data remains available.</span>
+          </div>
+        </div>
+      )}
     </section>
 
     <div className="management-tabs reports-tabs" role="tablist" aria-label="Report type">
