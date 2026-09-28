@@ -1,9 +1,10 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { useAuth } from './features/auth/AuthProvider';
 import { LoginPage } from './pages/auth/LoginPage';
 import { InvitationAcceptPage } from './pages/auth/InvitationAcceptPage';
+import { moduleAccess, type ModuleAccessKey } from './lib/moduleAccess';
 
 const DashboardPage = lazy(() => import('./pages/dashboard/DashboardPage').then(module => ({ default: module.DashboardPage })));
 const PosPage = lazy(() => import('./pages/pos/PosPage').then(module => ({ default: module.PosPage })));
@@ -27,6 +28,35 @@ function RouteFallback() {
   return <div className="app-loading">Preparing your workspace…</div>;
 }
 
+function RequireModuleAccess({ access, children }: { access: ModuleAccessKey; children: ReactNode }) {
+  const { activeBusiness, canAny } = useAuth();
+  const permissions = moduleAccess[access];
+
+  if (!activeBusiness) {
+    return (
+      <main className="management-page">
+        <section className="panel management-state">
+          <strong>No active workspace</strong>
+          <span>Select or join an active business before opening this module.</span>
+        </section>
+      </main>
+    );
+  }
+
+  if (permissions.length > 0 && !canAny([...permissions])) {
+    return (
+      <main className="management-page">
+        <section className="panel management-state">
+          <strong>Access required</strong>
+          <span>Your current business role does not include access to this module.</span>
+        </section>
+      </main>
+    );
+  }
+
+  return children;
+}
+
 export default function App() {
   const { user, loading, activeBusiness, activeLocation } = useAuth();
 
@@ -35,26 +65,26 @@ export default function App() {
 
   return <Suspense fallback={<RouteFallback />}>
     <Routes>
-      <Route path="/invoices/:invoiceId/print" element={<InvoicePrintPage />} />
-      <Route path="/invoices/:invoiceId/receipt/:paper" element={<FiscalReceiptPage />} />
-      <Route path="/invoice-credit-notes/:creditNoteId/print" element={<CreditNotePrintPage />} />
-      <Route path="/invoice-credit-notes/:creditNoteId/receipt/:paper" element={<FiscalReceiptPage />} />
+      <Route path="/invoices/:invoiceId/print" element={<RequireModuleAccess access="invoices"><InvoicePrintPage /></RequireModuleAccess>} />
+      <Route path="/invoices/:invoiceId/receipt/:paper" element={<RequireModuleAccess access="invoices"><FiscalReceiptPage /></RequireModuleAccess>} />
+      <Route path="/invoice-credit-notes/:creditNoteId/print" element={<RequireModuleAccess access="invoices"><CreditNotePrintPage /></RequireModuleAccess>} />
+      <Route path="/invoice-credit-notes/:creditNoteId/receipt/:paper" element={<RequireModuleAccess access="invoices"><FiscalReceiptPage /></RequireModuleAccess>} />
       <Route path="/join/:token" element={<InvitationAcceptPage />} />
       <Route element={<AppShell key={`${activeBusiness?.id??'business'}:${activeLocation?.id??'location'}`} />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/pos" element={<PosPage />} />
-        <Route path="/cash-register" element={<CashRegisterPage />} />
-        <Route path="/bar" element={<BarQueuePage />} />
-        <Route path="/products" element={<ProductsPage />} />
-        <Route path="/inventory" element={<InventoryPage />} />
-        <Route path="/finance" element={<FinancePage />} />
-        <Route path="/invoices" element={<InvoicesPage />} />
-        <Route path="/staff" element={<StaffPage />} />
-        <Route path="/venue-setup" element={<VenueSetupPage />} />
-        <Route path="/purchasing" element={<PurchasingPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/pos" element={<RequireModuleAccess access="pos"><PosPage /></RequireModuleAccess>} />
+        <Route path="/cash-register" element={<RequireModuleAccess access="cashRegister"><CashRegisterPage /></RequireModuleAccess>} />
+        <Route path="/bar" element={<RequireModuleAccess access="barQueue"><BarQueuePage /></RequireModuleAccess>} />
+        <Route path="/products" element={<RequireModuleAccess access="products"><ProductsPage /></RequireModuleAccess>} />
+        <Route path="/inventory" element={<RequireModuleAccess access="inventory"><InventoryPage /></RequireModuleAccess>} />
+        <Route path="/finance" element={<RequireModuleAccess access="finance"><FinancePage /></RequireModuleAccess>} />
+        <Route path="/invoices" element={<RequireModuleAccess access="invoices"><InvoicesPage /></RequireModuleAccess>} />
+        <Route path="/staff" element={<RequireModuleAccess access="staff"><StaffPage /></RequireModuleAccess>} />
+        <Route path="/venue-setup" element={<RequireModuleAccess access="venueSetup"><VenueSetupPage /></RequireModuleAccess>} />
+        <Route path="/purchasing" element={<RequireModuleAccess access="purchasing"><PurchasingPage /></RequireModuleAccess>} />
+        <Route path="/reports" element={<RequireModuleAccess access="reports"><ReportsPage /></RequireModuleAccess>} />
+        <Route path="/settings" element={<RequireModuleAccess access="settings"><SettingsPage /></RequireModuleAccess>} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>
