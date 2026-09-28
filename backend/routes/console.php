@@ -163,6 +163,7 @@ Artisan::command('demo:check', function (): int {
     $this->line('  Password: '.DemoWorkspaceSeeder::OWNER_PASSWORD);
     $this->line('  Business: '.$business->name);
     $this->line('  Full permissions: '.($ownerOk ? 'YES' : 'NO'));
+    $this->line('  Demo invite: http://localhost:8080/join/'.DemoWorkspaceSeeder::INVITATION_TOKEN);
     $this->newLine();
 
     $redisRows = [];
