@@ -408,9 +408,9 @@ final class DemoWorkspaceSeeder extends Seeder
             'type' => 'table',
             'status' => 'paid',
             'currency' => $this->business->currency,
-            'subtotal' => '21.0000',
-            'discount_total' => '1.0000',
-            'tax_total' => '3.3333',
+            'subtotal' => '18.2500',
+            'discount_total' => '1.9000',
+            'tax_total' => '3.6500',
             'grand_total' => '20.0000',
             'discount_reason' => 'Demo loyalty discount',
             'discount_applied_by_user_id' => $this->users['manager']->id,
@@ -442,11 +442,54 @@ final class DemoWorkspaceSeeder extends Seeder
             'paid_at' => now()->subDay()->setTime(19, 0),
         ]);
 
+        $refundOrder = $this->upsertUlid('orders', [
+            'business_id' => $this->business->getKey(),
+            'number' => 'DEMO-ORD-005',
+        ], [
+            'location_id' => $this->locations['main']->id,
+            'venue_table_id' => null,
+            'opened_by_user_id' => $this->users['waiter']->id,
+            'idempotency_key' => 'demo-order-005',
+            'request_snapshot' => json_encode(['demo' => true], JSON_THROW_ON_ERROR),
+            'type' => 'counter',
+            'status' => 'partially_refunded',
+            'currency' => $this->business->currency,
+            'subtotal' => '6.9167',
+            'discount_total' => '0.0000',
+            'tax_total' => '1.3833',
+            'grand_total' => '8.3000',
+            'opened_at' => now()->subHours(6),
+            'closed_at' => now()->subHours(5),
+        ]);
+
+        $this->seedOrderItem($refundOrder->id, $this->products['water']->id, 'Sparkling Water', 'DEMO-WATER', '1.0000', '3.5000', 'bar', 'served', 'demo-item-refund-water', now()->subHours(6)->addMinutes(2));
+        $this->seedOrderItem($refundOrder->id, $this->products['juice']->id, 'Orange Juice', 'DEMO-JUICE', '1.0000', '4.8000', 'bar', 'served', 'demo-item-refund-juice', now()->subHours(6)->addMinutes(2));
+
+        $refundPayment = $this->upsertUlid('payments', [
+            'business_id' => $this->business->getKey(),
+            'idempotency_key' => 'demo-payment-refund-source',
+        ], [
+            'order_id' => $refundOrder->id,
+            'cash_session_id' => $closedSession->id,
+            'collected_by_user_id' => $this->users['cashier']->id,
+            'method' => 'card',
+            'status' => 'completed',
+            'amount' => '8.3000',
+            'amount_base' => '8.3000',
+            'currency' => $this->business->currency,
+            'base_currency' => $this->business->currency,
+            'exchange_rate' => '1.0000000000',
+            'tendered_amount' => null,
+            'change_amount' => null,
+            'exchange_rate_snapshot' => json_encode(['rate' => 1, 'demo' => true], JSON_THROW_ON_ERROR),
+            'paid_at' => now()->subHours(5),
+        ]);
+
         $this->upsertUlid('payment_refunds', [
             'business_id' => $this->business->getKey(),
             'idempotency_key' => 'demo-refund-001',
         ], [
-            'payment_id' => $payment->id,
+            'payment_id' => $refundPayment->id,
             'cash_session_id' => $closedSession->id,
             'refunded_by_user_id' => $this->users['cashier']->id,
             'amount' => '2.0000',
@@ -456,7 +499,7 @@ final class DemoWorkspaceSeeder extends Seeder
             'exchange_rate' => '1.0000000000',
             'reason' => 'Demo partial refund',
             'status' => 'completed',
-            'refunded_at' => now()->subDay()->setTime(19, 15),
+            'refunded_at' => now()->subHours(4),
         ]);
 
         $openOrder = $this->upsertUlid('orders', [
@@ -590,8 +633,8 @@ final class DemoWorkspaceSeeder extends Seeder
             'status' => 'issued',
             'fiscalization_status' => 'not_fiscalized',
             'currency' => $this->business->currency,
-            'subtotal' => '21.0000',
-            'discount_total' => '1.0000',
+            'subtotal' => '16.6667',
+            'discount_total' => '1.9000',
             'tax_total' => '3.3333',
             'grand_total' => '20.0000',
             'customer_name' => 'Demo Guest GmbH',
@@ -600,11 +643,11 @@ final class DemoWorkspaceSeeder extends Seeder
         ]);
 
         $lines = [
-            [1, 'House Burger', 'DEMO-BURGER', '1.0000', '13.5000', '20.0000', '13.5000', '2.2500', '13.5000'],
-            [2, 'Cappuccino', 'DEMO-CAP', '2.0000', '4.2000', '20.0000', '8.4000', '1.4000', '8.4000'],
+            [1, 'House Burger', 'DEMO-BURGER', '1.0000', '13.5000', '8.6756', '20.0000', '10.2740', '2.0548', '12.3288'],
+            [2, 'Cappuccino', 'DEMO-CAP', '2.0000', '4.2000', '8.6762', '20.0000', '6.3927', '1.2785', '7.6712'],
         ];
 
-        foreach ($lines as [$position, $name, $sku, $qty, $unitPrice, $taxRate, $subtotal, $tax, $total]) {
+        foreach ($lines as [$position, $name, $sku, $qty, $unitPrice, $discountPercent, $taxRate, $subtotal, $tax, $total]) {
             $this->upsertUlid('invoice_lines', [
                 'invoice_id' => $invoice->id,
                 'position' => $position,
@@ -616,7 +659,7 @@ final class DemoWorkspaceSeeder extends Seeder
                 'unit_label_snapshot' => 'pcs',
                 'quantity' => $qty,
                 'unit_price' => $unitPrice,
-                'discount_percent' => '0.0000',
+                'discount_percent' => $discountPercent,
                 'tax_rate' => $taxRate,
                 'line_subtotal' => $subtotal,
                 'line_tax' => $tax,
@@ -903,8 +946,8 @@ final class DemoWorkspaceSeeder extends Seeder
         $invitation = $this->upsertUlid('staff_invitations', [
             'business_id' => $this->business->getKey(),
             'email' => 'demo.candidate@hospitality.local',
-            'status' => 'pending',
         ], [
+            'status' => 'pending',
             'role_id' => $managerRole->id,
             'invited_by_user_id' => $this->owner->id,
             'role_name_snapshot' => $managerRole->name,
@@ -920,6 +963,12 @@ final class DemoWorkspaceSeeder extends Seeder
             'token_hash' => hash('sha256', $token),
             'expires_at' => now()->addDays(7),
             'expired_at' => null,
+            'accepted_at' => null,
+            'accepted_by_user_id' => null,
+            'revoked_at' => null,
+            'revoked_by_user_id' => null,
+            'last_reissued_at' => null,
+            'last_reissued_by_user_id' => null,
             'reissue_count' => 0,
         ]);
 
