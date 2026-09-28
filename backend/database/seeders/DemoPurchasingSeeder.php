@@ -12,7 +12,7 @@ final class DemoPurchasingSeeder extends Seeder
 {
     public function run(): void
     {
-        foreach (['businesses', 'locations', 'product_categories', 'products', 'inventory_stocks', 'suppliers'] as $table) {
+        foreach (['businesses', 'locations', 'product_categories', 'products', 'inventory_stocks', 'suppliers', 'preparation_stations'] as $table) {
             if (! Schema::hasTable($table)) {
                 throw new RuntimeException("Missing table {$table}. Run php artisan migrate before this seeder.");
             }
@@ -83,6 +83,41 @@ final class DemoPurchasingSeeder extends Seeder
             $categoryIds[$category['name']] = $id;
         }
 
+        $stations = [
+            ['name' => 'Bar', 'code' => 'bar', 'sort_order' => 10],
+            ['name' => 'Kitchen', 'code' => 'kitchen', 'sort_order' => 20],
+        ];
+
+        foreach ($stations as $station) {
+            $existing = DB::table('preparation_stations')
+                ->where('business_id', $business->id)
+                ->where('code', $station['code'])
+                ->first();
+
+            if ($existing) {
+                DB::table('preparation_stations')
+                    ->where('id', $existing->id)
+                    ->update([
+                        'name' => $station['name'],
+                        'sort_order' => $station['sort_order'],
+                        'is_active' => true,
+                        'updated_at' => $now,
+                    ]);
+                continue;
+            }
+
+            DB::table('preparation_stations')->insert([
+                'id' => (string) Str::ulid(),
+                'business_id' => $business->id,
+                'name' => $station['name'],
+                'code' => $station['code'],
+                'sort_order' => $station['sort_order'],
+                'is_active' => true,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
         $products = [
             ['Coffee & Tea', 'COF-BEAN-1KG', 'Coffee Beans 1kg', 22.00, 20, 'bar', 'kg', 4],
             ['Coffee & Tea', 'MILK-1L', 'Fresh Milk 1L', 2.20, 20, 'bar', 'L', 8],
@@ -150,20 +185,33 @@ final class DemoPurchasingSeeder extends Seeder
                 ]);
             }
 
-            DB::table('inventory_stocks')->updateOrInsert(
-                [
+            $stock = DB::table('inventory_stocks')
+                ->where('business_id', $business->id)
+                ->where('location_id', $location->id)
+                ->where('product_id', $productId)
+                ->first();
+
+            if ($stock) {
+                DB::table('inventory_stocks')
+                    ->where('id', $stock->id)
+                    ->update([
+                        // Preserve the real quantity if this demo seeder is run again.
+                        'reorder_level' => number_format($reorderLevel, 4, '.', ''),
+                        'updated_at' => $now,
+                    ]);
+            } else {
+                DB::table('inventory_stocks')->insert([
+                    'id' => (string) Str::ulid(),
                     'business_id' => $business->id,
                     'location_id' => $location->id,
                     'product_id' => $productId,
-                ],
-                [
-                    // Deliberately starts at zero so receiving a PO visibly changes inventory.
+                    // Starts at zero so the first PO receipt is visible in Inventory.
                     'quantity_on_hand' => '0.0000',
                     'reorder_level' => number_format($reorderLevel, 4, '.', ''),
-                    'updated_at' => $now,
                     'created_at' => $now,
-                ],
-            );
+                    'updated_at' => $now,
+                ]);
+            }
         }
 
         $suppliers = [
