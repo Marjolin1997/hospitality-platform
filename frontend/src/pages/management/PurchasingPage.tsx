@@ -183,8 +183,11 @@ const blankPurchase = (): PurchaseDraft => ({
 export function PurchasingPage() {
   const { activeBusiness, activeLocation, can } = useAuth();
   const qc = useQueryClient();
+  const canView = can('purchasing.view');
   const canManage = can('purchasing.manage');
   const canReceive = can('inventory.receive');
+  const canPurchasingRead = canView || canManage;
+  const canOrderContext = canPurchasingRead || canReceive;
 
   const [section, setSection] = useState<'orders' | 'suppliers'>('orders');
   const [orderSearch, setOrderSearch] = useState('');
@@ -208,13 +211,13 @@ export function PurchasingPage() {
 
   const suppliersQuery = useQuery({
     queryKey: ['purchasing-suppliers', activeBusiness?.id],
-    enabled: Boolean(activeBusiness),
+    enabled: Boolean(activeBusiness && canOrderContext),
     queryFn: () => api.get<{ data: Supplier[] }>('/purchasing/suppliers').then(response => response.data.data),
   });
 
   const supplierHistoryQuery = useQuery({
     queryKey: ['supplier-events', activeBusiness?.id, supplierHistoryTarget?.id],
-    enabled: Boolean(activeBusiness && supplierHistoryTarget),
+    enabled: Boolean(activeBusiness && supplierHistoryTarget && canPurchasingRead),
     queryFn: () => api
       .get<{ data: SupplierEvent[] }>(`/purchasing/suppliers/${supplierHistoryTarget!.id}/events`)
       .then(response => response.data.data),
@@ -222,7 +225,7 @@ export function PurchasingPage() {
 
   const ordersQuery = useQuery({
     queryKey: ['purchase-orders', activeBusiness?.id, activeLocation?.id],
-    enabled: Boolean(activeBusiness && activeLocation),
+    enabled: Boolean(activeBusiness && activeLocation && canOrderContext),
     queryFn: () => api
       .get<{ data: PurchaseOrderSummary[] }>(`/purchase-orders?location_id=${activeLocation!.id}`)
       .then(response => response.data.data),
@@ -230,7 +233,7 @@ export function PurchasingPage() {
 
   const optionsQuery = useQuery({
     queryKey: ['purchasing-options', activeBusiness?.id, activeLocation?.id],
-    enabled: Boolean(activeBusiness && activeLocation),
+    enabled: Boolean(activeBusiness && activeLocation && canOrderContext),
     queryFn: () => api
       .get<{ data: PurchasingOptions }>(`/purchasing/options?location_id=${activeLocation!.id}`)
       .then(response => response.data.data),
@@ -238,7 +241,7 @@ export function PurchasingPage() {
 
   const detailQuery = useQuery({
     queryKey: ['purchase-order-detail', activeBusiness?.id, detailOrderId],
-    enabled: Boolean(activeBusiness && detailOrderId),
+    enabled: Boolean(activeBusiness && detailOrderId && canOrderContext),
     queryFn: () => api
       .get<{ data: PurchaseOrderDetail }>(`/purchase-orders/${detailOrderId}`)
       .then(response => response.data.data),
@@ -246,7 +249,7 @@ export function PurchasingPage() {
 
   const receiveDetailQuery = useQuery({
     queryKey: ['purchase-order-detail', activeBusiness?.id, receiveOrderId],
-    enabled: Boolean(activeBusiness && receiveOrderId),
+    enabled: Boolean(activeBusiness && receiveOrderId && canOrderContext),
     queryFn: () => api
       .get<{ data: PurchaseOrderDetail }>(`/purchase-orders/${receiveOrderId}`)
       .then(response => response.data.data),
@@ -254,11 +257,15 @@ export function PurchasingPage() {
 
   const historyQuery = useQuery({
     queryKey: ['purchase-order-events', activeBusiness?.id, historyTarget?.id],
-    enabled: Boolean(activeBusiness && historyTarget),
+    enabled: Boolean(activeBusiness && historyTarget && canOrderContext),
     queryFn: () => api
       .get<{ data: PurchaseOrderEvent[] }>(`/purchase-orders/${historyTarget!.id}/events`)
       .then(response => response.data.data),
   });
+
+  useEffect(() => {
+    if (section === 'suppliers' && !canPurchasingRead) setSection('orders');
+  }, [section, canPurchasingRead]);
 
   useEffect(() => {
     if (!receiveDetailQuery.data) return;
@@ -470,7 +477,7 @@ export function PurchasingPage() {
       <div>
         <span className="eyebrow">PROCUREMENT</span>
         <h1>Purchasing & Receiving</h1>
-        <p>Supplier management, immutable purchase orders, partial receiving and inventory cost history for {activeLocation.name}.</p>
+        <p>{canPurchasingRead ? 'Supplier management, immutable purchase orders, partial receiving and inventory cost history' : 'Goods receiving against authorized purchase orders'} for {activeLocation.name}.</p>
       </div>
       {section === 'orders' && canManage && (
         <button
@@ -512,9 +519,9 @@ export function PurchasingPage() {
       <button type="button" role="tab" aria-selected={section === 'orders'} className={section === 'orders' ? 'active' : ''} onClick={() => setSection('orders')}>
         <ShoppingBag size={15} /> Purchase orders
       </button>
-      <button type="button" role="tab" aria-selected={section === 'suppliers'} className={section === 'suppliers' ? 'active' : ''} onClick={() => setSection('suppliers')}>
+      {canPurchasingRead && <button type="button" role="tab" aria-selected={section === 'suppliers'} className={section === 'suppliers' ? 'active' : ''} onClick={() => setSection('suppliers')}>
         <Truck size={15} /> Suppliers
-      </button>
+      </button>}
     </div>
 
     {section === 'orders' && (
@@ -617,7 +624,7 @@ export function PurchasingPage() {
       </section>
     )}
 
-    {section === 'suppliers' && (
+    {section === 'suppliers' && canPurchasingRead && (
       <section className="panel management-panel">
         <div className="panel-heading catalog-toolbar">
           <div><h2>Supplier directory</h2><p>Supplier records are deactivated rather than deleted so purchase history keeps a stable relationship.</p></div>
