@@ -335,6 +335,51 @@ test('disabled stations drain existing order snapshots without accepting new pro
         ->and(collect($queue)->firstWhere('id', $itemId)['preparation_station'])->toBe('legacy-bar');
 });
 
+test('station and product managers can read the context required by their manage permission', function (): void {
+    $business = psmBusiness('Action Role Read Context');
+
+    $stationManager = psmUser($business, ['stations.manage']);
+    $stationHeaders = psmHeaders($stationManager, $business);
+
+    $station = $this->postJson('/api/v1/preparation-stations', [
+        'name' => 'Action Station',
+        'code' => 'action-station',
+        'sort_order' => 1,
+    ], $stationHeaders)->assertCreated()->json('data.id');
+
+    $this->getJson('/api/v1/preparation-stations', $stationHeaders)
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $station);
+
+    $this->getJson("/api/v1/preparation-stations/{$station}/events", $stationHeaders)
+        ->assertOk();
+
+    $productManager = psmUser($business, ['products.manage']);
+    $productHeaders = psmHeaders($productManager, $business);
+
+    $product = $this->postJson('/api/v1/management/products', [
+        'name' => 'Action Product',
+        'category_id' => null,
+        'sku' => 'ACTION-PRODUCT',
+        'sale_price' => '3.0000',
+        'tax_rate' => '20',
+        'unit_code' => 'C62',
+        'unit_label' => 'pcs',
+        'preparation_station' => null,
+        'tracks_stock' => false,
+        'is_active' => true,
+    ], $productHeaders)->assertCreated()->json('data.id');
+
+    $this->getJson('/api/v1/management/products', $productHeaders)
+        ->assertOk();
+
+    $this->getJson('/api/v1/management/categories', $productHeaders)
+        ->assertOk();
+
+    $this->getJson("/api/v1/management/products/{$product}/events", $productHeaders)
+        ->assertOk();
+});
+
 test('station identities permissions and tenant history are isolated', function (): void {
     $a = psmBusiness('Station Tenant A');
     $b = psmBusiness('Station Tenant B');
