@@ -258,6 +258,98 @@ test('draft purchase orders can be edited atomically and become immutable after 
         ->and((string) DB::table('purchase_orders')->where('id', $po)->value('total_cost'))->toBe('22.0000');
 });
 
+test('draft update is no-op safe and becomes immutable after placement', function (): void {
+    $business = pcmBusiness('PO Draft Edit');
+    $location = pcmLocation($business);
+    $manager = pcmUser($business, ['purchasing.view', 'purchasing.manage']);
+    $headers = pcmHeaders($manager, $business);
+    $supplier = pcmSupplier($this, $headers);
+    $product = pcmProduct($business, 'Draft Product');
+
+    $po = pcmOrder($this, $headers, $location->id, $supplier, [[
+        'product_id' => $product,
+        'quantity_ordered' => '4',
+        'unit_cost' => '2',
+    ]]);
+
+    $detail = $this->getJson("/api/v1/purchase-orders/{$po}", $headers)->assertOk()->json('data');
+    $createdEvents = DB::table('purchase_order_events')->where('purchase_order_id', $po)->count();
+
+    $payload = [
+        'location_id' => $location->id,
+        'supplier_id' => $supplier,
+        'notes' => 'Weekly replenishment',
+        'items' => collect($detail['items'])->map(fn (array $item): array => [
+            'product_id' => $item['product_id'],
+            'quantity_ordered' => $item['quantity_ordered'],
+            'unit_cost' => $item['unit_cost'],
+        ])->all(),
+    ];
+
+    $this->putJson("/api/v1/purchase-orders/{$po}", $payload, $headers)
+        ->assertOk()
+        ->assertJsonPath('data.status', 'draft');
+
+    expect(DB::table('purchase_order_events')->where('purchase_order_id', $po)->count())->toBe($createdEvents);
+
+    $this->putJson("/api/v1/purchase-orders/{$po}", [
+        ...$payload,
+        'items' => [[
+            'product_id' => $product,
+            'quantity_ordered' => '5',
+            'unit_cost' => '2.5000',
+        ]],
+    ], $headers)->assertOk();
+
+    expect(DB::table('purchase_order_events')
+        ->where('purchase_order_id', $po)
+        ->where('event', 'draft_updated')
+        ->count())->toBe(1)
+        ->and((string) DB::table('purchase_orders')->where('id', $po)->value('total_cost'))->toBe('12.5000');
+
+    $this->postJson("/api/v1/purchase-orders/{$po}/place", [], $headers)->assertOk();
+
+    $beforeItems = DB::table('purchase_order_items')
+        ->where('purchase_order_id', $po)
+        ->orderBy('product_id')
+        ->get()
+        ->map(fn (object $row): array => [
+            'id' => $row->id,
+            'product_id' => $row->product_id,
+            'quantity_ordered' => $row->quantity_ordered,
+            'unit_cost' => $row->unit_cost,
+        ])
+        ->all();
+
+    $this->putJson("/api/v1/purchase-orders/{$po}", [
+        ...$payload,
+        'items' => [[
+            'product_id' => $product,
+            'quantity_ordered' => '99',
+            'unit_cost' => '99',
+        ]],
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('purchase_order');
+
+    $afterItems = DB::table('purchase_order_items')
+        ->where('purchase_order_id', $po)
+        ->orderBy('product_id')
+        ->get()
+        ->map(fn (object $row): array => [
+            'id' => $row->id,
+            'product_id' => $row->product_id,
+            'quantity_ordered' => $row->quantity_ordered,
+            'unit_cost' => $row->unit_cost,
+        ])
+        ->all();
+
+    expect($afterItems)->toBe($beforeItems)
+        ->and(DB::table('purchase_order_events')
+            ->where('purchase_order_id', $po)
+            ->where('event', 'draft_updated')
+            ->count())->toBe(1);
+});
+
 test('place and cancel transitions are retry safe without duplicate lifecycle events', function (): void {
     $business = pcmBusiness('PO Transition Retry');
     $location = pcmLocation($business);
