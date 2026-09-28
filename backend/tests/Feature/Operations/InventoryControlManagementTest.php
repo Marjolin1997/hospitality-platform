@@ -211,6 +211,7 @@ test('stock tracking cannot be disabled while physical stock or a draft count st
     ], $headers)->assertOk();
 
     $countId = $this->postJson('/api/v1/inventory/counts', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id,
     ], $headers)->assertCreated()->json('data.id');
 
@@ -364,6 +365,7 @@ test('stock count draft can be saved and posted into exact audited variances', f
     icmStock($business, $location, $milk, '5.0000');
 
     $created = $this->postJson('/api/v1/inventory/counts', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id,
         'note' => 'Month-end count',
     ], $headers)->assertCreated()
@@ -372,6 +374,7 @@ test('stock count draft can be saved and posted into exact audited variances', f
     $countId = $created->json('data.id');
 
     $this->postJson('/api/v1/inventory/counts', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id,
     ], $headers)->assertStatus(422)
         ->assertJsonValidationErrors('count');
@@ -434,6 +437,7 @@ test('stock count posting is blocked when stock changed after the snapshot', fun
     icmStock($business, $location, $product, '5.0000');
 
     $countId = $this->postJson('/api/v1/inventory/counts', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id,
     ], $headers)->assertCreated()->json('data.id');
 
@@ -469,6 +473,7 @@ test('draft count can be cancelled and blocks location disable until closed', fu
     icmProduct($business, 'Counted Product');
 
     $countId = $this->postJson('/api/v1/inventory/counts', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $location->id,
     ], $headers)->assertCreated()->json('data.id');
 
@@ -528,11 +533,13 @@ test('inventory control permissions and tenant boundaries are enforced', functio
 
     $transferHeaders = icmHeaders($transferUser, $a);
     $this->postJson('/api/v1/inventory/counts', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $a1->id,
     ], $transferHeaders)->assertForbidden();
 
     $adjustHeaders = icmHeaders($adjustUser, $a);
     $countId = $this->postJson('/api/v1/inventory/counts', [
+        'idempotency_key' => (string) Str::uuid(),
         'location_id' => $a1->id,
     ], $adjustHeaders)->assertCreated()->json('data.id');
 
