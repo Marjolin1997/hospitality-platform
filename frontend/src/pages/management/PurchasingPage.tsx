@@ -201,6 +201,7 @@ export function PurchasingPage() {
   const [receiveQuantities, setReceiveQuantities] = useState<Record<string, string>>({});
   const [receiveNote, setReceiveNote] = useState('');
   const [receiveIdempotencyKey, setReceiveIdempotencyKey] = useState('');
+  const [placeTarget, setPlaceTarget] = useState<PurchaseOrderSummary | null>(null);
   const [cancelTarget, setCancelTarget] = useState<PurchaseOrderSummary | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [historyTarget, setHistoryTarget] = useState<PurchaseOrderSummary | null>(null);
@@ -359,6 +360,7 @@ export function PurchasingPage() {
   const placePurchase = useMutation({
     mutationFn: (order: PurchaseOrderSummary) => api.post(`/purchase-orders/${order.id}/place`),
     onSuccess: async (_response, order) => {
+      setPlaceTarget(null);
       await refreshPurchasing();
       await qc.invalidateQueries({ queryKey: ['purchase-order-detail', activeBusiness?.id, order.id] });
       await qc.invalidateQueries({ queryKey: ['purchase-order-events', activeBusiness?.id, order.id] });
@@ -594,7 +596,7 @@ export function PurchasingPage() {
                     <td><div className="inline-actions purchasing-actions">
                       <button type="button" className="secondary-button" onClick={() => setDetailOrderId(order.id)}>View</button>
                       {canManage && order.status === 'draft' && <button type="button" className="secondary-button" disabled={editDraftPurchase.isPending} onClick={() => editDraftPurchase.mutate(order)}><Pencil size={14} /> Edit</button>}
-                      {canManage && order.status === 'draft' && <button type="button" className="secondary-button" disabled={placePurchase.isPending || editDraftPurchase.isPending} onClick={() => placePurchase.mutate(order)}><CheckCircle2 size={14} /> Place</button>}
+                      {canManage && order.status === 'draft' && <button type="button" className="secondary-button" disabled={placePurchase.isPending || editDraftPurchase.isPending} onClick={() => { placePurchase.reset(); setPlaceTarget(order); }}><CheckCircle2 size={14} /> Place</button>}
                       {canReceive && ['ordered', 'partially_received'].includes(order.status) && <button type="button" className="primary-button compact-action" onClick={() => {
                         receivePurchase.reset();
                         setReceiveIdempotencyKey(crypto.randomUUID());
@@ -783,6 +785,38 @@ export function PurchasingPage() {
                 note: receiveNote,
                 idempotencyKey: receiveIdempotencyKey || crypto.randomUUID(),
               })}>{receivePurchase.isPending ? 'Posting receipt…' : 'Post goods receipt'}</button></footer>
+        </div>
+      </div>
+    )}
+
+    {placeTarget && (
+      <div className="modal-backdrop" role="presentation" onMouseDown={event => {
+        if (event.target === event.currentTarget && !placePurchase.isPending) setPlaceTarget(null);
+      }}>
+        <div className="modal-card compact-confirmation" role="dialog" aria-modal="true" aria-label="Place purchase order">
+          <header>
+            <div>
+              <span className="eyebrow">PLACE PURCHASE ORDER</span>
+              <h2>Place {placeTarget.number}?</h2>
+              <p>After placement, supplier, products, quantities and unit costs become immutable. Future changes must be handled through receiving or cancellation rules.</p>
+            </div>
+            <button type="button" className="icon-button" aria-label="Close purchase order placement" disabled={placePurchase.isPending} onClick={() => setPlaceTarget(null)}><X size={18} /></button>
+          </header>
+          <div className="permission-banner warning">
+            <AlertTriangle size={18} />
+            <div>
+              <strong>Review the draft before placing it</strong>
+              <span>{placeTarget.supplier_name_snapshot} · {money(placeTarget.total_cost, placeTarget.currency)} · {placeTarget.line_count} line{placeTarget.line_count === 1 ? '' : 's'}</span>
+            </div>
+          </div>
+          {placePurchase.isError && <p className="error-state">{apiMessage(placePurchase.error)}</p>}
+          <footer className="modal-actions">
+            <button type="button" className="secondary-button" disabled={placePurchase.isPending} onClick={() => setPlaceTarget(null)}>Keep draft</button>
+            <button type="button" className="primary-button" disabled={placePurchase.isPending} onClick={() => placePurchase.mutate(placeTarget)}>
+              <CheckCircle2 size={15} />
+              {placePurchase.isPending ? 'Placing…' : 'Place purchase order'}
+            </button>
+          </footer>
         </div>
       </div>
     )}
