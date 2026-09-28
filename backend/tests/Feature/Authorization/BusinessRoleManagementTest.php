@@ -219,6 +219,36 @@ test('functional permissions automatically include required view prerequisites',
         ->toBe(['purchasing.manage', 'purchasing.view']);
 });
 
+test('navigation-facing permissions expand their exact page API prerequisites', function (): void {
+    $business = brmBusiness('Navigation Dependencies');
+    $actor = brmActor($business);
+    $headers = brmHeaders($actor, $business);
+
+    $stationRole = $this->postJson('/api/v1/roles', [
+        'name' => 'Station Observer',
+        'permissions' => ['stations.view'],
+    ], $headers)->assertCreated()->json('data.id');
+
+    expect(Role::query()->findOrFail($stationRole)->permissions()->orderBy('key')->pluck('key')->all())
+        ->toBe(['products.view', 'stations.view']);
+
+    $receiverRole = $this->postJson('/api/v1/roles', [
+        'name' => 'Receiving Clerk',
+        'permissions' => ['inventory.receive'],
+    ], $headers)->assertCreated()->json('data.id');
+
+    expect(Role::query()->findOrFail($receiverRole)->permissions()->orderBy('key')->pluck('key')->all())
+        ->toBe(['inventory.receive', 'inventory.view', 'purchasing.view']);
+
+    $roleAdmin = $this->postJson('/api/v1/roles', [
+        'name' => 'Role Administrator',
+        'permissions' => ['roles.manage'],
+    ], $headers)->assertCreated()->json('data.id');
+
+    expect(Role::query()->findOrFail($roleAdmin)->permissions()->orderBy('key')->pluck('key')->all())
+        ->toBe(['roles.manage', 'users.view']);
+});
+
 test('dependency expansion still respects the actor delegation boundary', function (): void {
     $business = brmBusiness('Dependency Delegation');
     $limited = brmActor($business, ['roles.manage', 'purchasing.manage']);
