@@ -16,6 +16,8 @@ final class DemoWorkspaceSeeder extends Seeder
 {
     public const OWNER_EMAIL = 'demo.owner@hospitality.local';
     public const OWNER_PASSWORD = 'Demo#Hospitality2026!';
+    public const BUSINESS_NAME = self::BUSINESS_NAME;
+    public const BUSINESS_TAX_NUMBER = self::BUSINESS_TAX_NUMBER;
 
     private Business $business;
     private User $owner;
@@ -87,25 +89,25 @@ final class DemoWorkspaceSeeder extends Seeder
     private function seedIdentityAndAccess(): void
     {
         $this->business = Business::query()
-            ->where('tax_number', 'L12345678A')
+            ->where('tax_number', self::BUSINESS_TAX_NUMBER)
             ->orWhere('tax_number', 'DEMO-TAX-2026')
-            ->orWhere('name', 'Hospitality Demo Lab')
+            ->orWhere('name', self::BUSINESS_NAME)
             ->first();
 
         if ($this->business) {
             $this->business->forceFill([
-                'name' => 'Hospitality Demo Lab',
+                'name' => self::BUSINESS_NAME,
                 'legal_name' => 'Hospitality Demo Lab GmbH',
-                'tax_number' => 'L12345678A',
+                'tax_number' => self::BUSINESS_TAX_NUMBER,
                 'currency' => 'EUR',
                 'timezone' => 'Europe/Berlin',
                 'status' => 'active',
             ])->save();
         } else {
             $this->business = Business::query()->create([
-                'name' => 'Hospitality Demo Lab',
+                'name' => self::BUSINESS_NAME,
                 'legal_name' => 'Hospitality Demo Lab GmbH',
-                'tax_number' => 'L12345678A',
+                'tax_number' => self::BUSINESS_TAX_NUMBER,
                 'currency' => 'EUR',
                 'timezone' => 'Europe/Berlin',
                 'status' => 'active',
