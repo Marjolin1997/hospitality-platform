@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, BarChart3, Download, RefreshCw } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { api } from '../../lib/api';
 
@@ -181,6 +181,11 @@ export function ReportsPage() {
   const [toDraft, setToDraft] = useState(initial.to);
   const [range, setRange] = useState(initial);
 
+  useEffect(() => {
+    if (tab === 'operational' && !canOperational && canFinancial) setTab('financial');
+    if (tab === 'financial' && !canFinancial && canOperational) setTab('operational');
+  }, [tab, canOperational, canFinancial]);
+
   const days = rangeDays(fromDraft, toDraft);
   const invalidRange = !Number.isFinite(days) || days < 1 || days > 367;
 
@@ -229,7 +234,22 @@ export function ReportsPage() {
     };
     setFromDraft(next.from);
     setToDraft(next.to);
-    setRange(next);
+    if (next.from === range.from && next.to === range.to) {
+      if (tab === 'operational' && canOperational) void operationalQuery.refetch();
+      if (tab === 'financial' && canFinancial) void financialQuery.refetch();
+    } else {
+      setRange(next);
+    }
+  };
+
+  const applyRange = () => {
+    if (invalidRange) return;
+    if (fromDraft === range.from && toDraft === range.to) {
+      if (tab === 'operational' && canOperational) void operationalQuery.refetch();
+      if (tab === 'financial' && canFinancial) void financialQuery.refetch();
+      return;
+    }
+    setRange({ from: fromDraft, to: toDraft });
   };
 
   const exportOperational = () => {
@@ -352,10 +372,10 @@ export function ReportsPage() {
           type="button"
           className="primary-button"
           disabled={invalidRange}
-          onClick={() => setRange({ from: fromDraft, to: toDraft })}
+          onClick={applyRange}
         >
           <RefreshCw size={15} />
-          Apply range
+          Apply / refresh
         </button>
       </div>
       <div className="report-range-meta">
