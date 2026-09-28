@@ -84,6 +84,7 @@ final class DemoWorkspaceSeeder extends Seeder
             'payment_refunds',
             'cash_registers',
             'cash_sessions',
+            'cash_movements',
             'inventory_stocks',
             'inventory_movements',
             'inventory_transfers',
