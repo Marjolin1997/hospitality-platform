@@ -375,6 +375,16 @@ Artisan::command('demo:check', function (): int {
     $allOk = $allOk && $invoiceDemoOk && $staffDemoOk && $fiscalDemoOk;
 
     $this->newLine();
+    $demoInvoice = DB::table('invoices')
+        ->where('business_id', $business->id)
+        ->where('number', 'DEMO-INV-001')
+        ->first(['id', 'number']);
+
+    $demoCreditNote = DB::table('invoice_credit_notes')
+        ->where('business_id', $business->id)
+        ->where('number', 'DEMO-CN-001')
+        ->first(['id', 'number']);
+
     $this->line('Open these pages after login:');
     foreach ([
         '/dashboard',
@@ -392,6 +402,19 @@ Artisan::command('demo:check', function (): int {
         '/settings#fiscal-identity',
     ] as $path) {
         $this->line('  http://localhost:8080'.$path);
+    }
+
+    if ($demoInvoice) {
+        $this->newLine();
+        $this->line('Demo fiscal document URLs:');
+        $this->line('  Invoice + QR: http://localhost:8080/invoices/'.$demoInvoice->id.'/print');
+        $this->line('  Receipt 80mm: http://localhost:8080/invoices/'.$demoInvoice->id.'/receipt/80');
+        $this->line('  Receipt 58mm: http://localhost:8080/invoices/'.$demoInvoice->id.'/receipt/58');
+    }
+
+    if ($demoCreditNote) {
+        $this->line('  Credit note + QR: http://localhost:8080/invoice-credit-notes/'.$demoCreditNote->id.'/print');
+        $this->line('  Credit receipt 80mm: http://localhost:8080/invoice-credit-notes/'.$demoCreditNote->id.'/receipt/80');
     }
 
     $this->newLine();
