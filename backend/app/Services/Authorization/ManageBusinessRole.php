@@ -25,9 +25,10 @@ final class ManageBusinessRole
         'payments.collect' => ['orders.view'],
         'payments.refund' => ['orders.view'],
         'products.manage' => ['products.view'],
+        'stations.view' => ['products.view'],
         'stations.manage' => ['stations.view'],
         'purchasing.manage' => ['purchasing.view'],
-        'inventory.receive' => ['inventory.view'],
+        'inventory.receive' => ['inventory.view', 'purchasing.view'],
         'inventory.transfer' => ['inventory.view'],
         'inventory.adjust' => ['inventory.view'],
         'expenses.create' => ['finance.view'],
@@ -40,6 +41,7 @@ final class ManageBusinessRole
         'fiscalization.issue' => ['invoices.view'],
         'fiscalization.retry' => ['invoices.view'],
         'users.manage' => ['users.view'],
+        'roles.manage' => ['users.view'],
     ];
 
     public function __construct(private readonly RoleDelegationPolicy $delegation) {}
