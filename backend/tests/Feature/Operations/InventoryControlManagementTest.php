@@ -593,8 +593,9 @@ test('inventory control permissions and tenant boundaries are enforced', functio
     $b2 = icmLocation($b, 'B2');
 
     $viewer = icmUser($a, ['inventory.view']);
-    $transferUser = icmUser($a, ['inventory.view', 'inventory.transfer']);
-    $adjustUser = icmUser($a, ['inventory.view', 'inventory.adjust']);
+    $transferUser = icmUser($a, ['inventory.transfer']);
+    $adjustUser = icmUser($a, ['inventory.adjust']);
+    $receiver = icmUser($a, ['inventory.receive']);
     $foreign = icmUser($b, ['inventory.view', 'inventory.transfer', 'inventory.adjust']);
 
     $productA = icmProduct($a, 'A Product');
@@ -613,12 +614,27 @@ test('inventory control permissions and tenant boundaries are enforced', functio
     ], $viewerHeaders)->assertForbidden();
 
     $transferHeaders = icmHeaders($transferUser, $a);
+    $this->getJson('/api/v1/inventory?location_id='.$a1->id, $transferHeaders)->assertOk();
+    $this->getJson('/api/v1/inventory/movements?location_id='.$a1->id, $transferHeaders)->assertOk();
+    $this->getJson('/api/v1/inventory/transfers?location_id='.$a1->id, $transferHeaders)->assertOk();
+    $this->getJson('/api/v1/inventory/counts?location_id='.$a1->id, $transferHeaders)->assertForbidden();
     $this->postJson('/api/v1/inventory/counts', [
         'idempotency_key' => (string) Str::uuid(),
         'location_id' => $a1->id,
     ], $transferHeaders)->assertForbidden();
 
     $adjustHeaders = icmHeaders($adjustUser, $a);
+    $this->getJson('/api/v1/inventory?location_id='.$a1->id, $adjustHeaders)->assertOk();
+    $this->getJson('/api/v1/inventory/movements?location_id='.$a1->id, $adjustHeaders)->assertOk();
+    $this->getJson('/api/v1/inventory/counts?location_id='.$a1->id, $adjustHeaders)->assertOk();
+    $this->getJson('/api/v1/inventory/transfers?location_id='.$a1->id, $adjustHeaders)->assertForbidden();
+
+    $receiverHeaders = icmHeaders($receiver, $a);
+    $this->getJson('/api/v1/inventory?location_id='.$a1->id, $receiverHeaders)->assertOk();
+    $this->getJson('/api/v1/inventory/movements?location_id='.$a1->id, $receiverHeaders)->assertOk();
+    $this->getJson('/api/v1/inventory/transfers?location_id='.$a1->id, $receiverHeaders)->assertForbidden();
+    $this->getJson('/api/v1/inventory/counts?location_id='.$a1->id, $receiverHeaders)->assertForbidden();
+
     $countId = $this->postJson('/api/v1/inventory/counts', [
         'idempotency_key' => (string) Str::uuid(),
         'location_id' => $a1->id,
