@@ -703,6 +703,52 @@ test('financial report nets reversals and keeps unallocated expenses separate', 
         ->and($categories['Supplies']['net_amount'])->toBe('0.0000');
 });
 
+test('inactive locations remain available for historical reporting without becoming operational locations', function (): void {
+    $business = rpmBusiness('Historical Report Location');
+    $active = rpmLocation($business, 'Active');
+    $inactive = rpmLocation($business, 'Closed Branch');
+    $inactive->update(['is_active' => false]);
+
+    $user = rpmUser($business, ['reports.operational.view']);
+    $headers = rpmHeaders($user, $business);
+    $date = now($business->timezone)->toDateString();
+
+    $order = rpmOrder($business, $inactive, $user, 'ORD-HISTORICAL', 'paid', '25.0000');
+    DB::table('payments')->insert([
+        'id' => (string) Str::ulid(),
+        'business_id' => $business->id,
+        'order_id' => $order,
+        'cash_session_id' => null,
+        'collected_by_user_id' => $user->id,
+        'method' => 'cash',
+        'status' => 'completed',
+        'amount' => '25.0000',
+        'amount_base' => '25.0000',
+        'currency' => 'EUR',
+        'base_currency' => 'EUR',
+        'exchange_rate' => '1.0000000000',
+        'idempotency_key' => 'historical-location-payment',
+        'paid_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $locations = $this->getJson('/api/v1/reports/locations', $headers)
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($locations)->pluck('id')->all())
+        ->toContain($active->id, $inactive->id)
+        ->and(collect($locations)->firstWhere('id', $inactive->id)['is_active'])->toBeFalse();
+
+    $this->getJson(
+        "/api/v1/reports/operational?location_id={$inactive->id}&from={$date}&to={$date}",
+        $headers,
+    )->assertOk()
+        ->assertJsonPath('data.scope.location_id', $inactive->id)
+        ->assertJsonPath('data.summary.gross_sales', '25.0000');
+});
+
 test('report permissions date limits and tenant location boundaries are enforced', function (): void {
     $business = rpmBusiness('Report RBAC');
     $location = rpmLocation($business, 'Main');
