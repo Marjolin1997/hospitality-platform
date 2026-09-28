@@ -562,12 +562,22 @@ export function InventoryPage() {
           <button
             type="button"
             className="primary-button"
-            disabled={createCount.isPending || Boolean(draftCount)}
-            title={draftCount ? `Complete ${draftCount.number} before starting another count.` : undefined}
-            onClick={() => createCount.mutate()}
+            disabled={createCount.isPending || Boolean(draftCount) || stockQuery.isLoading || stocks.length === 0}
+            title={
+              draftCount
+                ? `Complete ${draftCount.number} before starting another count.`
+                : stocks.length === 0
+                  ? 'No stock-tracked products are available for this location.'
+                  : undefined
+            }
+            onClick={() => {
+              createCount.reset();
+              setCountProductSearch('');
+              setCountCreator(newCount());
+            }}
           >
             <ClipboardCheck size={16} />
-            {createCount.isPending ? 'Starting…' : 'Start stock count'}
+            Start stock count
           </button>
         )}
       </div>
