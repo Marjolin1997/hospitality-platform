@@ -86,16 +86,31 @@ final class DemoWorkspaceSeeder extends Seeder
 
     private function seedIdentityAndAccess(): void
     {
-        $this->business = Business::query()->updateOrCreate(
-            ['tax_number' => 'DEMO-TAX-2026'],
-            [
+        $this->business = Business::query()
+            ->where('tax_number', 'L12345678A')
+            ->orWhere('tax_number', 'DEMO-TAX-2026')
+            ->orWhere('name', 'Hospitality Demo Lab')
+            ->first();
+
+        if ($this->business) {
+            $this->business->forceFill([
                 'name' => 'Hospitality Demo Lab',
                 'legal_name' => 'Hospitality Demo Lab GmbH',
+                'tax_number' => 'L12345678A',
                 'currency' => 'EUR',
                 'timezone' => 'Europe/Berlin',
                 'status' => 'active',
-            ],
-        );
+            ])->save();
+        } else {
+            $this->business = Business::query()->create([
+                'name' => 'Hospitality Demo Lab',
+                'legal_name' => 'Hospitality Demo Lab GmbH',
+                'tax_number' => 'L12345678A',
+                'currency' => 'EUR',
+                'timezone' => 'Europe/Berlin',
+                'status' => 'active',
+            ]);
+        }
 
         $this->roles = app(ProvisionBusinessRoles::class)
             ->handle($this->business)
@@ -134,7 +149,16 @@ final class DemoWorkspaceSeeder extends Seeder
                 $this->filtered('business_user', [
                     'role_id' => $role->getKey(),
                     'status' => 'active',
-                    'fiscal_operator_code' => 'DEMO-'.strtoupper(substr($roleSlug, 0, 6)).'-'.$user->getKey(),
+                    'fiscal_operator_code' => match ($key) {
+                        'owner' => 'dm101op001',
+                        'manager' => 'dm102op002',
+                        'waiter' => 'dm103op003',
+                        'bartender' => 'dm104op004',
+                        'cashier' => 'dm105op005',
+                        'inventory' => 'dm106op006',
+                        'finance' => 'dm107op007',
+                        default => 'dm199op999',
+                    },
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]),
@@ -155,7 +179,7 @@ final class DemoWorkspaceSeeder extends Seeder
             'name' => 'Alexanderplatz Café',
             'type' => 'bar_cafe',
             'address' => 'Alexanderplatz 1, Berlin',
-            'fiscal_business_unit_code' => 'DEMO-BU-MAIN',
+            'fiscal_business_unit_code' => 'dm001bu001',
             'is_active' => true,
         ]);
 
@@ -166,7 +190,7 @@ final class DemoWorkspaceSeeder extends Seeder
             'name' => 'Rooftop Bar',
             'type' => 'bar',
             'address' => 'Demo Terrace, Berlin',
-            'fiscal_business_unit_code' => 'DEMO-BU-ROOF',
+            'fiscal_business_unit_code' => 'dm002bu002',
             'is_active' => true,
         ]);
 
@@ -287,7 +311,7 @@ final class DemoWorkspaceSeeder extends Seeder
         ], [
             'location_id' => $this->locations['main']->id,
             'name' => 'Main Till',
-            'fiscal_tcr_code' => 'DEMO-TCR-MAIN',
+            'fiscal_tcr_code' => 'dm011tc001',
             'is_active' => true,
         ]);
 
@@ -297,7 +321,7 @@ final class DemoWorkspaceSeeder extends Seeder
         ], [
             'location_id' => $this->locations['main']->id,
             'name' => 'Bar Till',
-            'fiscal_tcr_code' => 'DEMO-TCR-BAR',
+            'fiscal_tcr_code' => 'dm012tc002',
             'is_active' => true,
         ]);
 
@@ -307,7 +331,7 @@ final class DemoWorkspaceSeeder extends Seeder
         ], [
             'location_id' => $this->locations['rooftop']->id,
             'name' => 'Rooftop Till',
-            'fiscal_tcr_code' => 'DEMO-TCR-ROOF',
+            'fiscal_tcr_code' => 'dm013tc003',
             'is_active' => true,
         ]);
     }
@@ -631,7 +655,20 @@ final class DemoWorkspaceSeeder extends Seeder
             'location_name_snapshot' => $this->locations['main']->name,
             'location_address_snapshot' => $this->locations['main']->address,
             'status' => 'issued',
-            'fiscalization_status' => 'not_fiscalized',
+            'fiscalization_status' => 'fiscalized',
+            'fiscal_invoice_type' => 'CASH',
+            'fiscal_invoice_number' => 'DM-2026-000001',
+            'fiscal_ordinal_number' => 1,
+            'fiscal_operator_code_snapshot' => 'dm107op007',
+            'fiscal_business_unit_code_snapshot' => 'dm001bu001',
+            'fiscal_tcr_code_snapshot' => 'dm011tc001',
+            'nslf' => 'DEMO-NSLF-2026-000001-LOCAL-ONLY',
+            'nivf' => 'DEMO-NIVF-2026-000001-LOCAL-ONLY',
+            'verification_url' => null,
+            'qr_payload' => 'DEMO|LOCAL_ONLY|INVOICE=DM-2026-000001|NIPT=L12345678A|NSLF=DEMO-NSLF-2026-000001-LOCAL-ONLY|NIVF=DEMO-NIVF-2026-000001-LOCAL-ONLY|TOTAL=20.00|CURRENCY=EUR',
+            'fiscalized_at' => now()->subDay()->setTime(19, 6),
+            'fiscalization_attempts' => 1,
+            'fiscalization_error' => null,
             'currency' => $this->business->currency,
             'subtotal' => '16.6667',
             'discount_total' => '1.9000',
@@ -1025,10 +1062,16 @@ final class DemoWorkspaceSeeder extends Seeder
         ], [
             'provider' => 'direct_dpt',
             'environment' => 'test',
-            'status' => 'unconfigured',
-            'software_code' => 'DEMO-SOFTWARE',
-            'endpoint' => null,
+            'status' => 'configured',
+            'software_code' => 'dm999sw001',
+            'certificate_secret_ref' => 'secret:demo-fiscal-certificate.p12',
+            'certificate_password_secret_ref' => 'env:DEMO_FISCAL_CERT_PASSWORD',
+            'endpoint' => 'https://example.test/demo-dpt',
             'is_issuer_in_vat' => true,
+            'last_verified_at' => null,
+            'last_test_verified_at' => null,
+            'preflight_checked_at' => null,
+            'preflight_status' => null,
         ]);
     }
 
