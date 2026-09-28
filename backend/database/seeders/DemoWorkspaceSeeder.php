@@ -59,7 +59,20 @@ final class DemoWorkspaceSeeder extends Seeder
         $this->command?->line('Login password: '.self::OWNER_PASSWORD);
         $this->command?->line('Business: '.$this->business->name);
         $this->command?->line('Primary location: '.$this->locations['main']->name);
-        $this->command?->warn('Local/test credentials only. Never use this demo password in production.');
+
+        $requestedInvoice = DB::table('invoices')
+            ->where('business_id', $this->business->getKey())
+            ->where('number', 'INV-20260928-0001')
+            ->first(['id', 'number', 'grand_total']);
+
+        if ($requestedInvoice) {
+            $this->command?->line('Requested invoice: '.$requestedInvoice->number.' · '.$requestedInvoice->grand_total);
+            $this->command?->line('Invoice + QR: http://localhost:8080/invoices/'.$requestedInvoice->id.'/print');
+            $this->command?->line('Receipt 80mm + QR: http://localhost:8080/invoices/'.$requestedInvoice->id.'/receipt/80');
+            $this->command?->line('Receipt 58mm + QR: http://localhost:8080/invoices/'.$requestedInvoice->id.'/receipt/58');
+        }
+
+        $this->command?->warn('Local/test credentials only. Never use this demo password or DEMO fiscal identity in production.');
     }
 
     private function assertSchemaReady(): void
@@ -834,6 +847,128 @@ final class DemoWorkspaceSeeder extends Seeder
             'completed_at' => now()->subDay()->setTime(19, 6)->addSeconds(1),
         ]);
 
+        $requestedIssuedAt = CarbonImmutable::parse(
+            '2026-09-28 17:00:00',
+            $this->business->timezone,
+        )->utc();
+
+        $requestedInvoice = $this->upsertUlid('invoices', [
+            'business_id' => $this->business->getKey(),
+            'number' => 'INV-20260928-0001',
+        ], [
+            'location_id' => $this->locations['main']->id,
+            'order_id' => null,
+            'created_by_user_id' => $this->users['finance']->id,
+            'order_number_snapshot' => 'DEMO-MANUAL-20260928-0001',
+            'business_name_snapshot' => $this->business->name,
+            'business_legal_name_snapshot' => $this->business->legal_name,
+            'business_tax_number_snapshot' => $this->business->tax_number,
+            'location_name_snapshot' => $this->locations['main']->name,
+            'location_address_snapshot' => $this->locations['main']->address,
+            'status' => 'issued',
+            'fiscalization_status' => 'fiscalized',
+            'fiscal_invoice_type' => 'CASH',
+            'fiscal_invoice_number' => 'DM-2026-000025',
+            'fiscal_ordinal_number' => 25,
+            'fiscal_operator_code_snapshot' => 'dm107op007',
+            'fiscal_business_unit_code_snapshot' => 'dm001bu001',
+            'fiscal_tcr_code_snapshot' => 'dm011tc001',
+            'nslf' => 'DEMO-NSLF-INV-20260928-0001-LOCAL-ONLY',
+            'nivf' => 'DEMO-NIVF-INV-20260928-0001-LOCAL-ONLY',
+            'verification_url' => null,
+            'qr_payload' => 'DEMO|LOCAL_ONLY|INVOICE=INV-20260928-0001|NIPT='.self::BUSINESS_TAX_NUMBER.'|NSLF=DEMO-NSLF-INV-20260928-0001-LOCAL-ONLY|NIVF=DEMO-NIVF-INV-20260928-0001-LOCAL-ONLY|TOTAL=25.0000|CURRENCY='.$this->business->currency,
+            'fiscalized_at' => $requestedIssuedAt->addSeconds(2),
+            'fiscalization_attempts' => 1,
+            'fiscalization_error' => null,
+            'currency' => $this->business->currency,
+            'subtotal' => '20.8333',
+            'discount_total' => '0.0000',
+            'tax_total' => '4.1667',
+            'grand_total' => '25.0000',
+            'customer_name' => 'Demo Walk-in Customer',
+            'customer_tax_number' => null,
+            'issued_at' => $requestedIssuedAt,
+        ]);
+
+        foreach ([
+            [
+                1,
+                'Demo Coffee Service',
+                'DEMO-COFFEE-SERVICE',
+                '1.0000',
+                '10.0000',
+                '8.3333',
+                '1.6667',
+                '10.0000',
+            ],
+            [
+                2,
+                'Demo Food Service',
+                'DEMO-FOOD-SERVICE',
+                '1.0000',
+                '15.0000',
+                '12.5000',
+                '2.5000',
+                '15.0000',
+            ],
+        ] as [$position, $name, $sku, $qty, $unitPrice, $subtotal, $tax, $total]) {
+            $this->upsertUlid('invoice_lines', [
+                'invoice_id' => $requestedInvoice->id,
+                'position' => $position,
+            ], [
+                'business_id' => $this->business->getKey(),
+                'product_name_snapshot' => $name,
+                'sku_snapshot' => $sku,
+                'unit_code_snapshot' => 'C62',
+                'unit_label_snapshot' => 'service',
+                'quantity' => $qty,
+                'unit_price' => $unitPrice,
+                'discount_percent' => '0.0000',
+                'tax_rate' => '20.0000',
+                'line_subtotal' => $subtotal,
+                'line_tax' => $tax,
+                'line_total' => $total,
+            ]);
+        }
+
+        $this->upsertUlid('invoice_payment_snapshots', [
+            'invoice_id' => $requestedInvoice->id,
+            'position' => 1,
+        ], [
+            'business_id' => $this->business->getKey(),
+            'method' => 'cash',
+            'method_label' => 'Cash',
+            'amount' => '25.0000',
+            'currency' => $this->business->currency,
+            'amount_base' => '25.0000',
+            'base_currency' => $this->business->currency,
+            'exchange_rate' => '1.0000000000',
+            'external_reference' => 'DEMO-CASH-INV-20260928-0001',
+        ]);
+
+        $this->upsertUlid('invoice_fiscalization_attempts', [
+            'invoice_id' => $requestedInvoice->id,
+            'attempt_no' => 1,
+        ], [
+            'business_id' => $this->business->getKey(),
+            'provider' => 'direct_dpt',
+            'environment' => 'test',
+            'status' => 'succeeded',
+            'retryable' => false,
+            'http_status' => 200,
+            'request_id' => 'DEMO-REQ-INV-20260928-0001',
+            'payload_hash' => hash('sha256', 'demo-invoice-20260928-0001'),
+            'nslf' => 'DEMO-NSLF-INV-20260928-0001-LOCAL-ONLY',
+            'nivf' => 'DEMO-NIVF-INV-20260928-0001-LOCAL-ONLY',
+            'metadata' => json_encode([
+                'demo' => true,
+                'local_only' => true,
+                'grand_total' => '25.0000',
+            ], JSON_THROW_ON_ERROR),
+            'started_at' => $requestedIssuedAt,
+            'completed_at' => $requestedIssuedAt->addSeconds(2),
+        ]);
+
         $pendingInvoice = $this->upsertUlid('invoices', [
             'business_id' => $this->business->getKey(),
             'number' => 'DEMO-INV-002',
@@ -1398,16 +1533,16 @@ final class DemoWorkspaceSeeder extends Seeder
         ], [
             'provider' => 'direct_dpt',
             'environment' => 'test',
-            'status' => 'configured',
+            'status' => 'active',
             'software_code' => 'dm999sw001',
             'certificate_secret_ref' => 'secret:demo-fiscal-certificate.p12',
             'certificate_password_secret_ref' => 'env:DEMO_FISCAL_CERT_PASSWORD',
             'endpoint' => 'https://example.test/demo-dpt',
             'is_issuer_in_vat' => true,
-            'last_verified_at' => null,
-            'last_test_verified_at' => null,
-            'preflight_checked_at' => null,
-            'preflight_status' => null,
+            'last_verified_at' => now(),
+            'last_test_verified_at' => now(),
+            'preflight_checked_at' => now(),
+            'preflight_status' => 'ready',
         ]);
     }
 
