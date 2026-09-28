@@ -245,8 +245,8 @@ export function StaffAccessPage() {
   const { activeBusiness, can, refreshUser } = useAuth();
   const qc = useQueryClient();
   const canViewStaff = can('users.view');
-  const canManageStaff = canManageStaff;
-  const canManageRoles = canManageRoles;
+  const canManageStaff = can('users.manage');
+  const canManageRoles = can('roles.manage');
 
   const [section, setSection] = useState<'team' | 'invitations' | 'roles'>(
     canViewStaff ? 'team' : canManageRoles ? 'roles' : 'invitations',
