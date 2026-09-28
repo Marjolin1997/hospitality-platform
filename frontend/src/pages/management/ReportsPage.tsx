@@ -71,6 +71,7 @@ type FinancialReport = {
     invoice_total: string;
     credit_note_count: number;
     credit_note_total: string;
+    net_invoiced_total: string;
     goods_receipt_count: number;
     goods_received_cost: string;
   };
@@ -148,7 +149,8 @@ function number(value: string | number): string {
 
 function safeCsvCell(value: unknown): string {
   let text = value === null || value === undefined ? '' : String(value);
-  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  text = text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+  if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
   return `"${text.replaceAll('"', '""')}"`;
 }
 
@@ -363,6 +365,7 @@ export function ReportsPage() {
             ['Invoice total', financial.summary.invoice_total, currency],
             ['Credit note count', financial.summary.credit_note_count, ''],
             ['Credit note total', financial.summary.credit_note_total, currency],
+            ['Net invoiced total', financial.summary.net_invoiced_total, currency],
             ['Goods receipt count', financial.summary.goods_receipt_count, ''],
             ['Goods received cost', financial.summary.goods_received_cost, currency],
           ],
@@ -523,6 +526,7 @@ export function ReportsPage() {
             <div className="report-stat-list">
               <div><span>Invoices</span><strong>{financial.summary.invoice_count} · {money(financial.summary.invoice_total, currency)}</strong></div>
               <div><span>Credit notes</span><strong>{financial.summary.credit_note_count} · {money(financial.summary.credit_note_total, currency)}</strong></div>
+              <div><span>Net invoiced</span><strong>{money(financial.summary.net_invoiced_total, currency)}</strong></div>
             </div>
           </section>
 
