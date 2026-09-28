@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Facades\Schema;
 
@@ -164,6 +165,45 @@ Artisan::command('demo:check', function (): int {
     $this->line('  Full permissions: '.($ownerOk ? 'YES' : 'NO'));
     $this->newLine();
 
+    $redisRows = [];
+    $redisOk = true;
+    $redisConnections = [
+        'Queue' => (string) config('queue.connections.redis.connection', 'default'),
+        'Cache' => (string) config('cache.stores.redis.connection', 'cache'),
+        'Session' => (string) (config('session.connection') ?: 'default'),
+    ];
+
+    foreach ($redisConnections as $purpose => $connection) {
+        try {
+            $database = config("database.redis.{$connection}.database");
+            $size = (int) Redis::connection($connection)->command('dbsize');
+            $ping = Redis::connection($connection)->command('ping');
+            $healthy = is_string($ping)
+                ? strtoupper($ping) === 'PONG'
+                : (string) $ping === '1';
+
+            $redisRows[] = [
+                $purpose,
+                $connection,
+                $database === null ? '—' : (string) $database,
+                (string) $size,
+                $healthy ? 'OK' : 'CHECK',
+            ];
+
+            if (! $healthy) {
+                $redisOk = false;
+            }
+        } catch (Throwable $error) {
+            $redisRows[] = [$purpose, $connection, '—', 'ERROR', 'CHECK'];
+            $redisOk = false;
+        }
+    }
+
+    $this->line('Redis runtime');
+    $this->table(['Purpose', 'Connection', 'DB', 'Keys', 'Status'], $redisRows);
+    $this->line('  Note: 0 keys is valid for an idle cache/session database; it is not a Redis failure.');
+    $this->newLine();
+
     $routeUris = collect(Route::getRoutes()->getRoutes())
         ->map(fn ($route) => $route->uri())
         ->unique()
@@ -238,7 +278,7 @@ Artisan::command('demo:check', function (): int {
     ];
 
     $rows = [];
-    $allOk = $pending->isEmpty() && $ownerOk;
+    $allOk = $pending->isEmpty() && $ownerOk && $redisOk;
 
     foreach ($modules as $module => $definition) {
         $missingRoutes = collect($definition['routes'])
