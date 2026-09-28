@@ -5,6 +5,7 @@ use App\Models\Location;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -252,6 +253,142 @@ test('operational report uses transaction timestamps and tenant location scope',
         ->and($data['product_mix'][0]['quantity'])->toBe('2.0000')
         ->and($data['staff_activity'][0]['orders_opened'])->toBe(2)
         ->and($data['staff_activity'][0]['cancelled_orders'])->toBe(1);
+});
+
+test('refunds from older payments reduce net sales without distorting current-period average ticket', function (): void {
+    $business = rpmBusiness('Report Refund Denominator');
+    $location = rpmLocation($business, 'Main');
+    $user = rpmUser($business, ['reports.operational.view']);
+    $headers = rpmHeaders($user, $business);
+    $today = CarbonImmutable::now($business->timezone)->startOfDay();
+    $date = $today->toDateString();
+
+    $oldOrder = rpmOrder($business, $location, $user, 'ORD-OLD', 'partially_refunded', '80.0000');
+    $oldPayment = (string) Str::ulid();
+    DB::table('payments')->insert([
+        'id' => $oldPayment,
+        'business_id' => $business->id,
+        'order_id' => $oldOrder,
+        'cash_session_id' => null,
+        'collected_by_user_id' => $user->id,
+        'method' => 'card',
+        'status' => 'completed',
+        'amount' => '80.0000',
+        'amount_base' => '80.0000',
+        'currency' => 'EUR',
+        'base_currency' => 'EUR',
+        'exchange_rate' => '1.0000000000',
+        'idempotency_key' => 'old-report-payment',
+        'paid_at' => $today->subDay()->addHours(12)->utc(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    DB::table('payment_refunds')->insert([
+        'id' => (string) Str::ulid(),
+        'business_id' => $business->id,
+        'payment_id' => $oldPayment,
+        'invoice_credit_note_id' => null,
+        'cash_session_id' => null,
+        'refunded_by_user_id' => $user->id,
+        'amount' => '30.0000',
+        'amount_base' => '30.0000',
+        'currency' => 'EUR',
+        'base_currency' => 'EUR',
+        'exchange_rate' => '1.0000000000',
+        'reason' => 'Refund old order today',
+        'idempotency_key' => 'old-report-refund',
+        'status' => 'completed',
+        'refunded_at' => $today->addHours(10)->utc(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $todayOrder = rpmOrder($business, $location, $user, 'ORD-TODAY', 'paid', '100.0000');
+    DB::table('payments')->insert([
+        'id' => (string) Str::ulid(),
+        'business_id' => $business->id,
+        'order_id' => $todayOrder,
+        'cash_session_id' => null,
+        'collected_by_user_id' => $user->id,
+        'method' => 'cash',
+        'status' => 'completed',
+        'amount' => '100.0000',
+        'amount_base' => '100.0000',
+        'currency' => 'EUR',
+        'base_currency' => 'EUR',
+        'exchange_rate' => '1.0000000000',
+        'idempotency_key' => 'today-report-payment',
+        'paid_at' => $today->addHours(11)->utc(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->getJson(
+        "/api/v1/reports/operational?location_id={$location->id}&from={$date}&to={$date}",
+        $headers,
+    )->assertOk()
+        ->assertJsonPath('data.summary.gross_sales', '100.0000')
+        ->assertJsonPath('data.summary.refunds', '30.0000')
+        ->assertJsonPath('data.summary.net_sales', '70.0000')
+        ->assertJsonPath('data.summary.paid_order_count', 1)
+        ->assertJsonPath('data.summary.average_ticket', '100.0000');
+});
+
+test('report day boundaries use the business timezone across DST transitions', function (): void {
+    $business = rpmBusiness('Report DST Boundary');
+    $location = rpmLocation($business, 'Main');
+    $user = rpmUser($business, ['reports.operational.view']);
+    $headers = rpmHeaders($user, $business);
+    $date = '2026-10-25';
+
+    $includedOrder = rpmOrder($business, $location, $user, 'ORD-DST-IN', 'paid', '10.0000');
+    DB::table('payments')->insert([
+        'id' => (string) Str::ulid(),
+        'business_id' => $business->id,
+        'order_id' => $includedOrder,
+        'cash_session_id' => null,
+        'collected_by_user_id' => $user->id,
+        'method' => 'cash',
+        'status' => 'completed',
+        'amount' => '10.0000',
+        'amount_base' => '10.0000',
+        'currency' => 'EUR',
+        'base_currency' => 'EUR',
+        'exchange_rate' => '1.0000000000',
+        'idempotency_key' => 'dst-in-payment',
+        'paid_at' => CarbonImmutable::parse('2026-10-25 00:30:00', 'Europe/Berlin')->utc(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $excludedOrder = rpmOrder($business, $location, $user, 'ORD-DST-OUT', 'paid', '50.0000');
+    DB::table('payments')->insert([
+        'id' => (string) Str::ulid(),
+        'business_id' => $business->id,
+        'order_id' => $excludedOrder,
+        'cash_session_id' => null,
+        'collected_by_user_id' => $user->id,
+        'method' => 'card',
+        'status' => 'completed',
+        'amount' => '50.0000',
+        'amount_base' => '50.0000',
+        'currency' => 'EUR',
+        'base_currency' => 'EUR',
+        'exchange_rate' => '1.0000000000',
+        'idempotency_key' => 'dst-out-payment',
+        'paid_at' => CarbonImmutable::parse('2026-10-26 00:30:00', 'Europe/Berlin')->utc(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->getJson(
+        "/api/v1/reports/operational?location_id={$location->id}&from={$date}&to={$date}",
+        $headers,
+    )->assertOk()
+        ->assertJsonPath('data.summary.gross_sales', '10.0000')
+        ->assertJsonPath('data.summary.paid_order_count', 1)
+        ->assertJsonPath('data.summary.average_ticket', '10.0000');
 });
 
 test('financial report nets reversals and keeps unallocated expenses separate', function (): void {
