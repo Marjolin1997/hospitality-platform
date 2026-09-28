@@ -105,11 +105,18 @@ function dateInTimeZone(date: Date, timeZone: string): string {
   return `${value.year}-${value.month}-${value.day}`;
 }
 
+function shiftIsoDate(isoDate: string, days: number): string {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const value = new Date(Date.UTC(year, month - 1, day));
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
 function defaultRange(timeZone: string): { from: string; to: string } {
-  const now = new Date();
+  const today = dateInTimeZone(new Date(), timeZone);
   return {
-    from: dateInTimeZone(new Date(now.getTime() - 29 * 86_400_000), timeZone),
-    to: dateInTimeZone(now, timeZone),
+    from: shiftIsoDate(today, -29),
+    to: today,
   };
 }
 
@@ -215,10 +222,10 @@ export function ReportsPage() {
   }
 
   const applyPreset = (daysBack: number) => {
-    const now = new Date();
+    const today = dateInTimeZone(new Date(), timeZone);
     const next = {
-      from: dateInTimeZone(new Date(now.getTime() - (daysBack - 1) * 86_400_000), timeZone),
-      to: dateInTimeZone(now, timeZone),
+      from: shiftIsoDate(today, -(daysBack - 1)),
+      to: today,
     };
     setFromDraft(next.from);
     setToDraft(next.to);
@@ -371,7 +378,7 @@ export function ReportsPage() {
           <div className="metric-card"><span>Gross sales</span><strong>{money(operational.summary.gross_sales, currency)}</strong><small>Completed payments</small></div>
           <div className="metric-card"><span>Refunds</span><strong>{money(operational.summary.refunds, currency)}</strong><small>Completed refund transactions</small></div>
           <div className="metric-card"><span>Net sales</span><strong>{money(operational.summary.net_sales, currency)}</strong><small>Gross payments less refunds</small></div>
-          <div className="metric-card"><span>Average ticket</span><strong>{money(operational.summary.average_ticket, currency)}</strong><small>{operational.summary.paid_order_count} paid order{operational.summary.paid_order_count === 1 ? '' : 's'}</small></div>
+          <div className="metric-card"><span>Average ticket</span><strong>{money(operational.summary.average_ticket, currency)}</strong><small>Gross payments · {operational.summary.paid_order_count} paid order{operational.summary.paid_order_count === 1 ? '' : 's'}</small></div>
         </div>
 
         <div className="metric-grid management-metrics report-secondary-metrics">
