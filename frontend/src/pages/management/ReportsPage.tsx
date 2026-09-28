@@ -152,6 +152,16 @@ function safeCsvCell(value: unknown): string {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
+function safeFilenameSegment(value: string): string {
+  const normalized = value
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+
+  return normalized || 'location';
+}
+
 function exportCsv(filename: string, sections: Array<{ title: string; rows: unknown[][] }>): void {
   const lines: string[] = [];
 
@@ -271,8 +281,18 @@ export function ReportsPage() {
   const exportOperational = () => {
     if (!operational) return;
     exportCsv(
-      `operational-report-${operational.scope.location_name}-${operational.scope.from}-${operational.scope.to}.csv`,
+      `operational-report-${safeFilenameSegment(operational.scope.location_name)}-${operational.scope.from}-${operational.scope.to}.csv`,
       [
+        {
+          title: 'Report scope',
+          rows: [
+            ['Location', operational.scope.location_name],
+            ['From', operational.scope.from],
+            ['To', operational.scope.to],
+            ['Timezone', operational.scope.timezone],
+            ['Currency', operational.scope.currency],
+          ],
+        },
         {
           title: 'Operational summary',
           rows: [
@@ -317,8 +337,18 @@ export function ReportsPage() {
   const exportFinancial = () => {
     if (!financial) return;
     exportCsv(
-      `financial-report-${financial.scope.location_name}-${financial.scope.from}-${financial.scope.to}.csv`,
+      `financial-report-${safeFilenameSegment(financial.scope.location_name)}-${financial.scope.from}-${financial.scope.to}.csv`,
       [
+        {
+          title: 'Report scope',
+          rows: [
+            ['Location', financial.scope.location_name],
+            ['From', financial.scope.from],
+            ['To', financial.scope.to],
+            ['Timezone', financial.scope.timezone],
+            ['Currency', financial.scope.currency],
+          ],
+        },
         {
           title: 'Financial summary',
           rows: [
