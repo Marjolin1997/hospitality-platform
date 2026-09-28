@@ -101,9 +101,9 @@ test('demo owner can load the base API contract behind every visible workspace m
 
     $invoiceResponse = $this->getJson("/api/v1/invoices/{$invoice->id}", $headers)
         ->assertOk()
-        ->assertJsonPath('data.invoice.number', 'DEMO-INV-001');
+        ->assertJsonPath('data.number', 'DEMO-INV-001');
 
-    expect($invoiceResponse->json('data.invoice.qr_payload'))
+    expect($invoiceResponse->json('data.qr_payload'))
         ->toStartWith('DEMO|LOCAL_ONLY|');
 
     $creditNote = DB::table('invoice_credit_notes')
@@ -113,8 +113,8 @@ test('demo owner can load the base API contract behind every visible workspace m
 
     $creditResponse = $this->getJson("/api/v1/invoice-credit-notes/{$creditNote->id}", $headers)
         ->assertOk()
-        ->assertJsonPath('data.credit_note.number', 'DEMO-CN-001');
+        ->assertJsonPath('data.number', 'DEMO-CN-001');
 
-    expect($creditResponse->json('data.credit_note.qr_payload'))
+    expect($creditResponse->json('data.qr_payload'))
         ->toStartWith('DEMO|LOCAL_ONLY|');
 });
