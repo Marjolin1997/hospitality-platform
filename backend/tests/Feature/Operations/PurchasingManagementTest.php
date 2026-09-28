@@ -211,6 +211,33 @@ test('draft purchase orders can be edited atomically and become immutable after 
         ->and($event->previous_status)->toBe('draft')
         ->and($event->new_status)->toBe('draft');
 
+    $lineIdsBeforeRetry = DB::table('purchase_order_items')
+        ->where('purchase_order_id', $po)
+        ->orderBy('product_id')
+        ->pluck('id')
+        ->all();
+
+    $this->putJson("/api/v1/purchase-orders/{$po}", [
+        'location_id' => $location->id,
+        'supplier_id' => $supplierB,
+        'notes' => 'Updated draft',
+        'items' => [
+            ['product_id' => $coffee, 'quantity_ordered' => '3.0000', 'unit_cost' => '4.0000'],
+            ['product_id' => $tea, 'quantity_ordered' => '5.0000', 'unit_cost' => '2.0000'],
+        ],
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.status', 'draft');
+
+    expect(DB::table('purchase_order_events')
+        ->where('purchase_order_id', $po)
+        ->where('event', 'draft_updated')
+        ->count())->toBe(1)
+        ->and(DB::table('purchase_order_items')
+            ->where('purchase_order_id', $po)
+            ->orderBy('product_id')
+            ->pluck('id')
+            ->all())->toBe($lineIdsBeforeRetry);
+
     $this->postJson("/api/v1/purchase-orders/{$po}/place", [], $headers)
         ->assertOk()
         ->assertJsonPath('data.status', 'ordered');
