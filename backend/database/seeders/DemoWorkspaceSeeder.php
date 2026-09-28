@@ -16,8 +16,8 @@ final class DemoWorkspaceSeeder extends Seeder
 {
     public const OWNER_EMAIL = 'demo.owner@hospitality.local';
     public const OWNER_PASSWORD = 'Demo#Hospitality2026!';
-    public const BUSINESS_NAME = self::BUSINESS_NAME;
-    public const BUSINESS_TAX_NUMBER = self::BUSINESS_TAX_NUMBER;
+    public const BUSINESS_NAME = 'Hospitality Demo Lab';
+    public const BUSINESS_TAX_NUMBER = 'L12345678A';
 
     private Business $business;
     private User $owner;
