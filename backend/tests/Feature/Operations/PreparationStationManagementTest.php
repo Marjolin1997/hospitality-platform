@@ -235,6 +235,106 @@ test('station disable and product reactivation respect routing dependencies', fu
         ->assertJsonPath('data.preparation_station', null);
 });
 
+test('disabled stations drain existing order snapshots without accepting new product routing', function (): void {
+    $business = psmBusiness('Station Drain Mode');
+    $location = psmLocation($business);
+    $user = psmUser($business, [
+        'stations.view',
+        'stations.manage',
+        'products.view',
+        'products.manage',
+        'orders.view',
+        'orders.send_to_station',
+    ]);
+    $headers = psmHeaders($user, $business);
+
+    $station = $this->postJson('/api/v1/preparation-stations', [
+        'name' => 'Legacy Bar',
+        'code' => 'legacy-bar',
+        'sort_order' => 10,
+    ], $headers)->assertCreated()->json('data.id');
+
+    $product = $this->postJson('/api/v1/management/products', [
+        'name' => 'Legacy Cocktail',
+        'category_id' => null,
+        'sku' => 'LEGACY-COCKTAIL',
+        'sale_price' => '8.0000',
+        'tax_rate' => '20',
+        'unit_code' => 'C62',
+        'unit_label' => 'pcs',
+        'preparation_station' => 'legacy-bar',
+        'tracks_stock' => false,
+        'is_active' => true,
+    ], $headers)->assertCreated()->json('data.id');
+
+    $orderId = (string) Str::ulid();
+    DB::table('orders')->insert([
+        'id' => $orderId,
+        'business_id' => $business->id,
+        'location_id' => $location->id,
+        'venue_table_id' => null,
+        'opened_by_user_id' => $user->id,
+        'number' => 'STATION-DRAIN-1',
+        'type' => 'counter',
+        'status' => 'open',
+        'currency' => 'EUR',
+        'subtotal' => '8.0000',
+        'discount_total' => '0.0000',
+        'tax_total' => '1.6000',
+        'grand_total' => '9.6000',
+        'opened_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $itemId = (string) Str::ulid();
+    DB::table('order_items')->insert([
+        'id' => $itemId,
+        'business_id' => $business->id,
+        'order_id' => $orderId,
+        'product_id' => $product,
+        'product_name_snapshot' => 'Legacy Cocktail',
+        'sku_snapshot' => 'LEGACY-COCKTAIL',
+        'quantity' => '1.0000',
+        'unit_price' => '8.0000',
+        'tax_rate' => '20.0000',
+        'line_subtotal' => '8.0000',
+        'line_tax' => '1.6000',
+        'line_total' => '9.6000',
+        'preparation_station' => 'legacy-bar',
+        'preparation_status' => 'pending',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->patchJson("/api/v1/management/products/{$product}/status", [
+        'is_active' => false,
+    ], $headers)->assertOk();
+
+    $this->patchJson("/api/v1/preparation-stations/{$station}/status", [
+        'is_active' => false,
+    ], $headers)->assertOk()
+        ->assertJsonPath('data.is_active', false);
+
+    $stations = $this->getJson('/api/v1/preparation-stations', $headers)
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($stations)->firstWhere('id', $station)['open_ticket_count'])->toBe(1);
+
+    $this->postJson("/api/v1/orders/{$orderId}/send", [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.items.0.preparation_status', 'sent')
+        ->assertJsonPath('data.items.0.preparation_station', 'legacy-bar');
+
+    $queue = $this->getJson("/api/v1/bar-queue?location_id={$location->id}", $headers)
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($queue)->pluck('id')->all())->toContain($itemId)
+        ->and(collect($queue)->firstWhere('id', $itemId)['preparation_station'])->toBe('legacy-bar');
+});
+
 test('station identities permissions and tenant history are isolated', function (): void {
     $a = psmBusiness('Station Tenant A');
     $b = psmBusiness('Station Tenant B');
