@@ -58,3 +58,43 @@ The platform gives each business a secure workspace for daily operations: POS an
 ## Status
 
 Greenfield foundation. Architecture and implementation are being built incrementally with production-quality boundaries from the start.
+
+## Local demo workspace
+
+The repository includes an idempotent, local/testing-only demo workspace that exercises the operational menus with realistic data without contacting a real fiscal provider.
+
+Prepare it from the project root:
+
+```bash
+docker compose up -d
+docker compose exec backend php artisan demo:prepare
+```
+
+`demo:prepare` runs pending migrations, seeds the demo workspace, clears cached framework state, creates the public storage link when needed, and finishes with `demo:check`.
+
+Demo owner credentials:
+
+- Email: `demo.owner@hospitality.local`
+- Password: `Demo#Hospitality2026!`
+- Business: `Hospitality Demo Lab`
+- Primary location: `Alexanderplatz Café`
+
+The demo includes staff/roles/invitations, multiple locations, products and preparation stations, venue tables, cash registers and shifts, inventory, transfers and counts, suppliers and purchase orders, expenses, reports, and invoices in several fiscal states.
+
+The seeded fiscal documents are **local test fixtures only**. QR payloads are prefixed with `DEMO|LOCAL_ONLY`; they are rendered by the invoice/receipt UI so print and QR layouts can be reviewed without sending anything to DPT.
+
+Useful diagnostics:
+
+```bash
+docker compose exec backend php artisan migrate:status
+docker compose exec backend php artisan demo:check
+docker compose exec backend php artisan test
+docker compose exec frontend npm run build
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run test
+```
+
+`demo:check` reports pending migrations, owner permission coverage, Redis queue/cache/session connections and DB sizes, menu API/data prerequisites, invoice QR/fiscal-state coverage, staff onboarding data, and fiscal identity readiness. An empty Redis cache or session DB is valid when that database is idle.
+
+After login, the main review URLs include `/dashboard`, `/pos`, `/cash-register`, `/bar`, `/products`, `/inventory`, `/purchasing`, `/finance`, `/reports`, `/invoices`, `/venue-setup`, `/staff`, and `/settings#fiscal-identity`.
+
