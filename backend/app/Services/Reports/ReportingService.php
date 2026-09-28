@@ -310,6 +310,7 @@ final class ReportingService
         $invoiceStats = DB::table('invoices')
             ->where('business_id', $business->getKey())
             ->where('location_id', $locationId)
+            ->where('status', 'issued')
             ->whereNotNull('issued_at')
             ->where('issued_at', '>=', $fromUtc)
             ->where('issued_at', '<', $toUtcExclusive)
@@ -323,6 +324,7 @@ final class ReportingService
             })
             ->where('cn.business_id', $business->getKey())
             ->where('i.location_id', $locationId)
+            ->whereIn('cn.status', ['issued', 'partially_refunded', 'refunded'])
             ->where('cn.issued_at', '>=', $fromUtc)
             ->where('cn.issued_at', '<', $toUtcExclusive)
             ->selectRaw('COUNT(*) as credit_note_count, COALESCE(SUM(cn.grand_total), 0) as credit_note_total')
@@ -340,6 +342,9 @@ final class ReportingService
             ->selectRaw('COUNT(DISTINCT gr.id) as receipt_count, COALESCE(SUM(gri.line_total), 0) as received_cost')
             ->first();
 
+        $invoiceTotal = BigDecimal::of((string) ($invoiceStats->invoice_total ?? '0'));
+        $creditNoteTotal = BigDecimal::of((string) ($creditNoteStats->credit_note_total ?? '0'));
+        $netInvoicedTotal = $invoiceTotal->minus($creditNoteTotal);
         $netAfterLocationExpenses = $netSales->minus($locationExpenses);
 
         return [
@@ -352,9 +357,10 @@ final class ReportingService
                 'unallocated_business_expenses' => $this->decimal($unallocatedExpenses),
                 'net_after_location_expenses' => $this->decimal($netAfterLocationExpenses),
                 'invoice_count' => (int) ($invoiceStats->invoice_count ?? 0),
-                'invoice_total' => $this->decimal($invoiceStats->invoice_total ?? '0'),
+                'invoice_total' => $this->decimal($invoiceTotal),
                 'credit_note_count' => (int) ($creditNoteStats->credit_note_count ?? 0),
-                'credit_note_total' => $this->decimal($creditNoteStats->credit_note_total ?? '0'),
+                'credit_note_total' => $this->decimal($creditNoteTotal),
+                'net_invoiced_total' => $this->decimal($netInvoicedTotal),
                 'goods_receipt_count' => (int) ($purchaseReceiptStats->receipt_count ?? 0),
                 'goods_received_cost' => $this->decimal($purchaseReceiptStats->received_cost ?? '0'),
             ],
@@ -368,6 +374,7 @@ final class ReportingService
             'definitions' => [
                 'net_after_location_expenses' => 'Net completed payments less completed refunds and expenses explicitly assigned to this location in the selected period.',
                 'unallocated_business_expenses' => 'Business-wide expenses without a location are shown separately and are not deducted from this location result.',
+                'invoicing' => 'Invoice total is the gross value of issued invoices in the period. Credit-note total is shown separately; net invoiced total is issued invoices less issued credit notes.',
                 'goods_received_cost' => 'Cost of goods physically received in the selected period. It is a procurement metric and is not automatically treated as an expense or cost of goods sold.',
             ],
         ];
