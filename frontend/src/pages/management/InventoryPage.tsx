@@ -196,8 +196,12 @@ const newCount = (): CountCreateDraft => ({
 export function InventoryPage() {
   const { activeBusiness, activeLocation, can } = useAuth();
   const qc = useQueryClient();
+  const canView = can('inventory.view');
   const canAdjust = can('inventory.adjust');
   const canTransfer = can('inventory.transfer');
+  const canReceive = can('inventory.receive');
+  const canSeeTransfers = canView || canTransfer;
+  const canSeeCounts = canView || canAdjust;
 
   const [section, setSection] = useState<'stock' | 'ledger' | 'transfers' | 'counts'>('stock');
   const [stockSearch, setStockSearch] = useState('');
@@ -238,7 +242,7 @@ export function InventoryPage() {
 
   const reorderHistoryQuery = useQuery({
     queryKey: ['inventory-reorder-events', activeBusiness?.id, activeLocation?.id, reorderHistoryTarget?.id],
-    enabled: Boolean(activeBusiness && activeLocation && reorderHistoryTarget),
+    enabled: Boolean(activeBusiness && activeLocation && reorderHistoryTarget && (canView || canAdjust)),
     queryFn: () => api
       .get<{ data: ReorderEvent[] }>(`/inventory/products/${reorderHistoryTarget!.id}/reorder-level/events?location_id=${activeLocation!.id}`)
       .then(response => response.data.data),
@@ -262,7 +266,7 @@ export function InventoryPage() {
 
   const transfersQuery = useQuery({
     queryKey: ['inventory-transfers', activeBusiness?.id, activeLocation?.id],
-    enabled: Boolean(activeBusiness && activeLocation),
+    enabled: Boolean(activeBusiness && activeLocation && canSeeTransfers),
     queryFn: () => api
       .get<{ data: TransferSummary[] }>(`/inventory/transfers?location_id=${activeLocation!.id}`)
       .then(response => response.data.data),
@@ -270,7 +274,7 @@ export function InventoryPage() {
 
   const transferDetailQuery = useQuery({
     queryKey: ['inventory-transfer-detail', activeBusiness?.id, transferDetailId],
-    enabled: Boolean(activeBusiness && transferDetailId),
+    enabled: Boolean(activeBusiness && transferDetailId && canSeeTransfers),
     queryFn: () => api
       .get<{ data: TransferDetail }>(`/inventory/transfers/${transferDetailId}`)
       .then(response => response.data.data),
@@ -278,7 +282,7 @@ export function InventoryPage() {
 
   const countsQuery = useQuery({
     queryKey: ['inventory-counts', activeBusiness?.id, activeLocation?.id],
-    enabled: Boolean(activeBusiness && activeLocation),
+    enabled: Boolean(activeBusiness && activeLocation && canSeeCounts),
     queryFn: () => api
       .get<{ data: CountSummary[] }>(`/inventory/counts?location_id=${activeLocation!.id}`)
       .then(response => response.data.data),
@@ -286,7 +290,7 @@ export function InventoryPage() {
 
   const countDetailQuery = useQuery({
     queryKey: ['inventory-count-detail', activeBusiness?.id, countDetailId],
-    enabled: Boolean(activeBusiness && countDetailId),
+    enabled: Boolean(activeBusiness && countDetailId && canSeeCounts),
     queryFn: () => api
       .get<{ data: CountDetail }>(`/inventory/counts/${countDetailId}`)
       .then(response => response.data.data),
@@ -294,11 +298,16 @@ export function InventoryPage() {
 
   const countEventsQuery = useQuery({
     queryKey: ['inventory-count-events', activeBusiness?.id, countDetailId],
-    enabled: Boolean(activeBusiness && countDetailId),
+    enabled: Boolean(activeBusiness && countDetailId && canSeeCounts),
     queryFn: () => api
       .get<{ data: CountEvent[] }>(`/inventory/counts/${countDetailId}/events`)
       .then(response => response.data.data),
   });
+
+  useEffect(() => {
+    if (section === 'transfers' && !canSeeTransfers) setSection('stock');
+    if (section === 'counts' && !canSeeCounts) setSection('stock');
+  }, [section, canSeeTransfers, canSeeCounts]);
 
   useEffect(() => {
     if (!countDetailQuery.data) return;
@@ -597,8 +606,8 @@ export function InventoryPage() {
     <div className="management-tabs inventory-tabs" role="tablist" aria-label="Inventory views">
       <button type="button" role="tab" aria-selected={section === 'stock'} className={section === 'stock' ? 'active' : ''} onClick={() => setSection('stock')}><Boxes size={15} /> Stock</button>
       <button type="button" role="tab" aria-selected={section === 'ledger'} className={section === 'ledger' ? 'active' : ''} onClick={() => setSection('ledger')}><History size={15} /> Ledger</button>
-      <button type="button" role="tab" aria-selected={section === 'transfers'} className={section === 'transfers' ? 'active' : ''} onClick={() => setSection('transfers')}><ArrowLeftRight size={15} /> Transfers</button>
-      <button type="button" role="tab" aria-selected={section === 'counts'} className={section === 'counts' ? 'active' : ''} onClick={() => setSection('counts')}><ClipboardCheck size={15} /> Counts</button>
+      {canSeeTransfers && <button type="button" role="tab" aria-selected={section === 'transfers'} className={section === 'transfers' ? 'active' : ''} onClick={() => setSection('transfers')}><ArrowLeftRight size={15} /> Transfers</button>}
+      {canSeeCounts && <button type="button" role="tab" aria-selected={section === 'counts'} className={section === 'counts' ? 'active' : ''} onClick={() => setSection('counts')}><ClipboardCheck size={15} /> Counts</button>}
     </div>
 
     {section === 'stock' && (
@@ -612,14 +621,14 @@ export function InventoryPage() {
           </div>
         </div>
 
-        {!canAdjust && <div className="permission-banner"><div><strong>Read-only stock balance</strong><span>Your role can inspect inventory but cannot create manual ledger adjustments or stock counts.</span></div></div>}
+        {!canAdjust && <div className="permission-banner"><div><strong>{canReceive ? 'Receiving context' : canTransfer ? 'Transfer context' : 'Read-only stock balance'}</strong><span>{canReceive ? 'You can inspect stock here and post goods receipts from Purchasing, but cannot create manual adjustments or counts.' : canTransfer ? 'You can inspect stock and transfer inventory, but cannot create manual adjustments or counts.' : 'Your role can inspect inventory but cannot create manual ledger adjustments or stock counts.'}</span></div></div>}
         {stockQuery.isLoading ? <div className="management-state">Loading stock position…</div> : stockQuery.isError ? (
           <div className="management-state error"><AlertTriangle size={18} /><div><strong>Stock unavailable</strong><span>{apiMessage(stockQuery.error)}</span></div><button type="button" className="secondary-button" onClick={() => stockQuery.refetch()}>Try again</button></div>
         ) : filteredStocks.length === 0 ? <Empty>{stocks.length ? 'No inventory items match the current filters.' : 'No stock-tracked products are configured.'}</Empty> : (
           <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Item</th><th>SKU</th><th>On hand</th><th>Reorder</th><th>Health</th><th>Action</th></tr></thead><tbody>{filteredStocks.map(stock => {
             const isLow = Number(stock.quantity_on_hand) <= Number(stock.reorder_level);
             const isOut = Number(stock.quantity_on_hand) <= 0;
-            return <tr key={stock.id}><td><strong>{stock.name}</strong></td><td>{stock.sku ?? '—'}</td><td><strong>{qty(stock.quantity_on_hand)}</strong></td><td>{qty(stock.reorder_level)}</td><td><span className={`status-badge ${isOut ? 'danger' : isLow ? 'warning' : 'success'}`}>{isOut ? 'Out of stock' : isLow ? 'Low stock' : 'Healthy'}</span></td><td><div className="inline-actions inventory-stock-actions">{canAdjust && <button type="button" className="secondary-button" onClick={() => { adjust.reset(); setAdjusting(stock); setAdjustmentDelta('1'); setAdjustmentNote(''); setAdjustmentIdempotencyKey(crypto.randomUUID()); }}><PackagePlus size={15} /> Adjust</button>}{canAdjust && <button type="button" className="secondary-button" onClick={() => { saveReorderLevel.reset(); setReorderTarget(stock); setReorderLevelValue(stock.reorder_level); }}><Settings2 size={15} /> Reorder level</button>}<button type="button" className="secondary-button" onClick={() => setReorderHistoryTarget(stock)}><History size={15} /> History</button></div></td></tr>;
+            return <tr key={stock.id}><td><strong>{stock.name}</strong></td><td>{stock.sku ?? '—'}</td><td><strong>{qty(stock.quantity_on_hand)}</strong></td><td>{qty(stock.reorder_level)}</td><td><span className={`status-badge ${isOut ? 'danger' : isLow ? 'warning' : 'success'}`}>{isOut ? 'Out of stock' : isLow ? 'Low stock' : 'Healthy'}</span></td><td><div className="inline-actions inventory-stock-actions">{canAdjust && <button type="button" className="secondary-button" onClick={() => { adjust.reset(); setAdjusting(stock); setAdjustmentDelta('1'); setAdjustmentNote(''); setAdjustmentIdempotencyKey(crypto.randomUUID()); }}><PackagePlus size={15} /> Adjust</button>}{canAdjust && <button type="button" className="secondary-button" onClick={() => { saveReorderLevel.reset(); setReorderTarget(stock); setReorderLevelValue(stock.reorder_level); }}><Settings2 size={15} /> Reorder level</button>}{(canView || canAdjust) && <button type="button" className="secondary-button" onClick={() => setReorderHistoryTarget(stock)}><History size={15} /> History</button>}</div></td></tr>;
           })}</tbody></table></div>
         )}
       </section>
