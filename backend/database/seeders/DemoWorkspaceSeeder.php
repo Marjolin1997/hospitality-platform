@@ -63,25 +63,102 @@ final class DemoWorkspaceSeeder extends Seeder
 
     private function assertSchemaReady(): void
     {
-        $required = [
+        $requiredTables = [
+            'businesses',
+            'locations',
+            'roles',
+            'permissions',
+            'business_user',
             'business_role_audits',
             'business_location_audits',
-            'staff_invitations',
-            'staff_invitation_events',
+            'business_membership_audits',
             'business_configuration_audits',
+            'product_categories',
+            'products',
+            'preparation_stations',
+            'venue_areas',
+            'venue_tables',
+            'orders',
+            'order_items',
+            'payments',
+            'payment_refunds',
+            'cash_registers',
+            'cash_sessions',
+            'inventory_stocks',
+            'inventory_movements',
+            'inventory_transfers',
+            'inventory_transfer_items',
+            'inventory_counts',
+            'inventory_count_items',
+            'inventory_count_events',
+            'expenses',
+            'invoices',
+            'invoice_lines',
+            'invoice_payment_snapshots',
+            'invoice_fiscalization_attempts',
+            'invoice_credit_notes',
+            'invoice_credit_note_lines',
+            'credit_note_fiscalization_attempts',
+            'fiscalization_profiles',
             'suppliers',
             'purchase_orders',
+            'purchase_order_items',
+            'purchase_order_events',
             'goods_receipts',
-            'inventory_transfers',
-            'inventory_counts',
-            'preparation_stations',
+            'goods_receipt_items',
+            'staff_invitations',
+            'staff_invitation_events',
+            'business_settings',
         ];
 
-        $missing = collect($required)->reject(fn (string $table): bool => Schema::hasTable($table))->values();
+        $missingTables = collect($requiredTables)
+            ->reject(fn (string $table): bool => Schema::hasTable($table))
+            ->values();
 
-        if ($missing->isNotEmpty()) {
+        $requiredColumns = [
+            'orders' => ['idempotency_key', 'request_snapshot'],
+            'order_items' => ['idempotency_key', 'request_snapshot', 'preparing_at', 'served_at', 'voided_at'],
+            'cash_sessions' => ['open_idempotency_key', 'open_request_snapshot', 'close_idempotency_key', 'close_request_snapshot'],
+            'cash_movements' => ['idempotency_key', 'request_snapshot'],
+            'inventory_movements' => ['idempotency_key', 'request_snapshot'],
+            'expenses' => ['idempotency_key', 'request_snapshot'],
+            'purchase_orders' => ['idempotency_key', 'request_snapshot'],
+            'goods_receipts' => ['idempotency_key', 'request_snapshot'],
+            'inventory_counts' => ['idempotency_key', 'request_snapshot'],
+            'staff_invitations' => ['expired_at', 'reissue_count', 'last_reissued_at', 'last_reissued_by_user_id'],
+            'locations' => ['fiscal_business_unit_code'],
+            'cash_registers' => ['fiscal_tcr_code'],
+            'business_user' => ['fiscal_operator_code'],
+            'invoices' => ['fiscalization_status', 'nslf', 'nivf', 'qr_payload'],
+            'invoice_credit_notes' => ['fiscalization_status', 'nslf', 'nivf', 'qr_payload'],
+        ];
+
+        $missingColumns = collect($requiredColumns)
+            ->flatMap(function (array $columns, string $table) use ($missingTables): array {
+                if ($missingTables->contains($table)) {
+                    return [];
+                }
+
+                return collect($columns)
+                    ->reject(fn (string $column): bool => Schema::hasColumn($table, $column))
+                    ->map(fn (string $column): string => $table.'.'.$column)
+                    ->all();
+            })
+            ->values();
+
+        if ($missingTables->isNotEmpty() || $missingColumns->isNotEmpty()) {
+            $parts = [];
+
+            if ($missingTables->isNotEmpty()) {
+                $parts[] = 'missing tables: '.$missingTables->join(', ');
+            }
+
+            if ($missingColumns->isNotEmpty()) {
+                $parts[] = 'missing columns: '.$missingColumns->join(', ');
+            }
+
             throw new RuntimeException(
-                'Demo schema is not ready. Run php artisan migrate first. Missing tables: '.$missing->join(', ')
+                'Demo schema is not ready. Run php artisan demo:prepare. '.implode(' | ', $parts)
             );
         }
     }
