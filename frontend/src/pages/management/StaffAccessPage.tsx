@@ -95,9 +95,10 @@ const permissionDependencies: Record<string, string[]> = {
   'orders.split': ['orders.view'],
   'orders.merge': ['orders.view'],
   'products.manage': ['products.view'],
+  'stations.view': ['products.view'],
   'stations.manage': ['stations.view'],
   'purchasing.manage': ['purchasing.view'],
-  'inventory.receive': ['inventory.view'],
+  'inventory.receive': ['inventory.view', 'purchasing.view'],
   'inventory.transfer': ['inventory.view'],
   'inventory.adjust': ['inventory.view'],
   'expenses.create': ['finance.view'],
@@ -106,6 +107,7 @@ const permissionDependencies: Record<string, string[]> = {
   'invoices.issue': ['invoices.view'],
   'invoices.correct': ['invoices.view'],
   'users.manage': ['users.view'],
+  'roles.manage': ['users.view'],
 };
 
 function expandPermissionDependencies(keys: string[]): string[] {
