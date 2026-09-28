@@ -675,13 +675,217 @@ export function InventoryPage() {
         </div>
 
         {!canAdjust && <div className="permission-banner"><div><strong>Count history only</strong><span>Your role can inspect counts but cannot start, edit, post or cancel them.</span></div></div>}
-        {createCount.isError && <p className="error-state">{apiMessage(createCount.error)}</p>}
+        {createCount.isError && !countCreator && <p className="error-state">{apiMessage(createCount.error)}</p>}
         {countsQuery.isLoading ? <div className="management-state">Loading stock counts…</div> : countsQuery.isError ? (
           <div className="management-state error"><AlertTriangle size={18} /><div><strong>Stock counts unavailable</strong><span>{apiMessage(countsQuery.error)}</span></div><button type="button" className="secondary-button" onClick={() => countsQuery.refetch()}>Try again</button></div>
         ) : filteredCounts.length === 0 ? <Empty>{counts.length ? 'No counts match the current filters.' : 'No stock counts recorded yet.'}</Empty> : (
           <div className="data-table-wrap"><table className="data-table inventory-count-table"><thead><tr><th>Count</th><th>Progress</th><th>Variances</th><th>Status</th><th>Started by</th><th>Action</th></tr></thead><tbody>{filteredCounts.map(count => <tr key={count.id}><td><strong>{count.number}</strong><small className="cell-note">{new Date(count.started_at).toLocaleString()}</small></td><td>{count.counted_line_count}/{count.line_count}</td><td>{count.status === 'posted' ? count.variance_line_count : '—'}</td><td><span className={`status-badge ${countStatusClass(count.status)}`}>{count.status}</span></td><td>{count.created_by_name}</td><td><div className="inline-actions"><button type="button" className="secondary-button" onClick={() => { saveCount.reset(); postCount.reset(); setCountDetailId(count.id); }}>{count.status === 'draft' && canAdjust ? 'Count items' : 'View'}</button>{count.status === 'draft' && canAdjust && <button type="button" className="secondary-button subtle-danger" onClick={() => { cancelCount.reset(); setCancelCountReason(''); setCancelCountTarget(count); }}>Cancel</button>}</div></td></tr>)}</tbody></table></div>
         )}
       </section>
+    )}
+
+    {countCreator && (
+      <div
+        className="modal-backdrop"
+        role="presentation"
+        onMouseDown={event => {
+          if (event.target === event.currentTarget && !createCount.isPending) {
+            setCountCreator(null);
+            setCountProductSearch('');
+          }
+        }}
+      >
+        <form
+          className="modal-card management-modal inventory-count-create-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Start stock count"
+          onSubmit={event => {
+            event.preventDefault();
+            if (countCreateValid) createCount.mutate(countCreator);
+          }}
+        >
+          <header>
+            <div>
+              <span className="eyebrow">NEW STOCK COUNT</span>
+              <h2>Define the count scope</h2>
+              <p>
+                Starting the count snapshots current on-hand quantities. Posting will be blocked if any included stock changes afterwards.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Close stock count setup"
+              disabled={createCount.isPending}
+              onClick={() => {
+                setCountCreator(null);
+                setCountProductSearch('');
+              }}
+            >
+              <X size={18} />
+            </button>
+          </header>
+
+          <fieldset className="count-scope-options" disabled={createCount.isPending}>
+            <legend>Count scope</legend>
+            <label className={countCreator.scope === 'all' ? 'active' : ''}>
+              <input
+                type="radio"
+                name="count-scope"
+                value="all"
+                checked={countCreator.scope === 'all'}
+                onChange={() => setCountCreator({ ...countCreator, scope: 'all' })}
+              />
+              <span>
+                <strong>All stock-tracked products</strong>
+                <small>{stocks.length} product{stocks.length === 1 ? '' : 's'} in this location</small>
+              </span>
+            </label>
+            <label className={countCreator.scope === 'selected' ? 'active' : ''}>
+              <input
+                type="radio"
+                name="count-scope"
+                value="selected"
+                checked={countCreator.scope === 'selected'}
+                onChange={() => setCountCreator({ ...countCreator, scope: 'selected' })}
+              />
+              <span>
+                <strong>Selected products only</strong>
+                <small>Use for cycle counts or targeted verification</small>
+              </span>
+            </label>
+          </fieldset>
+
+          {countCreator.scope === 'selected' && (
+            <section className="count-product-picker">
+              <div className="count-product-picker-toolbar">
+                <label className="search-box compact-search">
+                  <Search size={16} />
+                  <input
+                    aria-label="Search products for stock count"
+                    value={countProductSearch}
+                    onChange={event => setCountProductSearch(event.target.value)}
+                    placeholder="Search product or SKU…"
+                  />
+                  {countProductSearch && (
+                    <button
+                      type="button"
+                      className="search-clear"
+                      aria-label="Clear count product search"
+                      onClick={() => setCountProductSearch('')}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </label>
+                <div className="inline-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={createCount.isPending || countProductOptions.length === 0 || countCreator.product_ids.length >= 500}
+                    onClick={() => {
+                      const next = Array.from(new Set([
+                        ...countCreator.product_ids,
+                        ...countProductOptions.map(product => product.id),
+                      ])).slice(0, 500);
+                      setCountCreator({ ...countCreator, product_ids: next });
+                    }}
+                  >
+                    Select visible
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={createCount.isPending || countCreator.product_ids.length === 0}
+                    onClick={() => setCountCreator({ ...countCreator, product_ids: [] })}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <div className="count-product-selection-meta">
+                <span>{countCreator.product_ids.length} selected</span>
+                <small>Maximum 500 products in a targeted count</small>
+              </div>
+
+              <div className="count-product-list">
+                {countProductOptions.length === 0 ? (
+                  <Empty>No stock-tracked products match this search.</Empty>
+                ) : countProductOptions.map(product => {
+                  const checked = countCreator.product_ids.includes(product.id);
+                  const selectionLimitReached = !checked && countCreator.product_ids.length >= 500;
+
+                  return (
+                    <label className={checked ? 'selected' : ''} key={product.id}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={createCount.isPending || selectionLimitReached}
+                        onChange={event => {
+                          const productIds = event.target.checked
+                            ? [...countCreator.product_ids, product.id]
+                            : countCreator.product_ids.filter(id => id !== product.id);
+                          setCountCreator({ ...countCreator, product_ids: productIds });
+                        }}
+                      />
+                      <span>
+                        <strong>{product.name}</strong>
+                        <small>{product.sku ?? 'No SKU'} · on hand {qty(product.quantity_on_hand)}</small>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {countCreator.product_ids.length === 0 && (
+                <p className="field-hint error">Select at least one product for a targeted stock count.</p>
+              )}
+            </section>
+          )}
+
+          <label className="inventory-reason-field count-note-field">
+            <span>Count note</span>
+            <textarea
+              maxLength={1000}
+              value={countCreator.note}
+              disabled={createCount.isPending}
+              onChange={event => setCountCreator({ ...countCreator, note: event.target.value })}
+              placeholder="Optional: month-end count, bar close verification, high-value items…"
+            />
+          </label>
+
+          <div className="permission-banner warning count-snapshot-warning">
+            <AlertTriangle size={18} />
+            <div>
+              <strong>Snapshot consistency applies after creation</strong>
+              <span>
+                Do not receive, transfer or manually adjust included stock while counting. If stock changes, posting will be rejected and the count must be restarted.
+              </span>
+            </div>
+          </div>
+
+          {createCount.isError && <p className="error-state">{apiMessage(createCount.error)}</p>}
+
+          <footer className="modal-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={createCount.isPending}
+              onClick={() => {
+                setCountCreator(null);
+                setCountProductSearch('');
+              }}
+            >
+              Cancel
+            </button>
+            <button className="primary-button" disabled={!countCreateValid || createCount.isPending}>
+              {createCount.isPending ? 'Starting count…' : 'Start count & lock snapshot'}
+            </button>
+          </footer>
+        </form>
+      </div>
     )}
 
     {adjusting && (
