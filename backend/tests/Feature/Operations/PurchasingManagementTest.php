@@ -624,8 +624,8 @@ test('purchasing permissions separate order management receiving and view access
     $business = pcmBusiness('PO RBAC');
     $location = pcmLocation($business);
     $viewer = pcmUser($business, ['purchasing.view']);
-    $manager = pcmUser($business, ['purchasing.view', 'purchasing.manage']);
-    $receiver = pcmUser($business, ['purchasing.view', 'inventory.receive']);
+    $manager = pcmUser($business, ['purchasing.manage']);
+    $receiver = pcmUser($business, ['inventory.receive']);
 
     $viewerHeaders = pcmHeaders($viewer, $business);
     $this->getJson('/api/v1/purchasing/suppliers', $viewerHeaders)->assertOk();
@@ -633,6 +633,10 @@ test('purchasing permissions separate order management receiving and view access
     $this->postJson('/api/v1/purchasing/suppliers', ['name' => 'Blocked'], $viewerHeaders)->assertForbidden();
 
     $managerHeaders = pcmHeaders($manager, $business);
+    $this->getJson('/api/v1/purchasing/suppliers', $managerHeaders)->assertOk();
+    $this->getJson('/api/v1/purchasing/options?location_id='.$location->id, $managerHeaders)->assertOk();
+    $this->getJson('/api/v1/purchase-orders?location_id='.$location->id, $managerHeaders)->assertOk();
+
     $supplier = pcmSupplier($this, $managerHeaders);
     $product = pcmProduct($business, 'RBAC Product');
     $po = pcmOrder($this, $managerHeaders, $location->id, $supplier, [[
@@ -640,6 +644,10 @@ test('purchasing permissions separate order management receiving and view access
         'quantity_ordered' => '2',
         'unit_cost' => '1',
     ]]);
+    $this->getJson("/api/v1/purchase-orders/{$po}", $managerHeaders)->assertOk();
+    $this->getJson("/api/v1/purchase-orders/{$po}/events", $managerHeaders)->assertOk();
+    $this->getJson("/api/v1/purchasing/suppliers/{$supplier}/events", $managerHeaders)->assertOk();
+
     $this->postJson("/api/v1/purchase-orders/{$po}/place", [], $managerHeaders)->assertOk();
 
     $line = DB::table('purchase_order_items')->where('purchase_order_id', $po)->firstOrFail();
@@ -650,6 +658,13 @@ test('purchasing permissions separate order management receiving and view access
     ], $managerHeaders)->assertForbidden();
 
     $receiverHeaders = pcmHeaders($receiver, $business);
+    $this->getJson('/api/v1/purchasing/suppliers', $receiverHeaders)->assertOk();
+    $this->getJson('/api/v1/purchasing/options?location_id='.$location->id, $receiverHeaders)->assertOk();
+    $this->getJson('/api/v1/purchase-orders?location_id='.$location->id, $receiverHeaders)->assertOk();
+    $this->getJson("/api/v1/purchase-orders/{$po}", $receiverHeaders)->assertOk();
+    $this->getJson("/api/v1/purchase-orders/{$po}/events", $receiverHeaders)->assertOk();
+    $this->getJson("/api/v1/purchasing/suppliers/{$supplier}/events", $receiverHeaders)->assertForbidden();
+
     $this->postJson("/api/v1/purchase-orders/{$po}/receipts", [
         'idempotency_key' => (string) Str::uuid(),
         'items' => [['purchase_order_item_id' => $line->id, 'quantity_received' => '1']],
