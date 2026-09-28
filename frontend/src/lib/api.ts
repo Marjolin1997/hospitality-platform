@@ -15,8 +15,25 @@ api.interceptors.request.use(config => {
 
 api.interceptors.response.use(
   response => response,
-  error => {
-    if (error?.response?.status === 401) {
+  async error => {
+    const status = error?.response?.status;
+    const requestConfig = error?.config as (
+      NonNullable<typeof error.config> & { __csrfRetried?: boolean }
+    ) | undefined;
+
+    if (status === 419 && requestConfig && !requestConfig.__csrfRetried) {
+      requestConfig.__csrfRetried = true;
+
+      try {
+        await initializeCsrf();
+        return await api.request(requestConfig);
+      } catch {
+        // Fall through to the original request error. A single retry avoids loops
+        // while recovering the normal stale-CSRF-cookie case.
+      }
+    }
+
+    if (status === 401) {
       clearWorkspaceContext();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event(authExpiredEvent));
