@@ -156,6 +156,7 @@ test('functional permissions automatically include required view prerequisites',
             'stations.manage',
             'purchasing.manage',
             'inventory.receive',
+            'roles.manage',
             'inventory.transfer',
             'inventory.adjust',
             'expenses.create',
@@ -206,6 +207,7 @@ test('functional permissions automatically include required view prerequisites',
         'fiscalization.retry',
         'users.manage',
         'users.view',
+        'roles.manage',
     );
 
     $this->putJson("/api/v1/roles/{$roleId}", [
