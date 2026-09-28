@@ -39,6 +39,7 @@ export function FiscalReceiptPage(){
   const original=isCredit?(doc as CreditReceipt).original_invoice:doc as InvoiceReceipt;
   const negative=isCredit?-1:1;
   const qr=doc.verification_url||doc.qr_payload||'';
+  const demoQr=Boolean(doc.qr_payload?.startsWith('DEMO|LOCAL_ONLY'));
 
   return <main className={`thermal-receipt-shell paper-${width}`} data-path={location.pathname}>
     <div className="receipt-screen-toolbar"><button type="button" className="primary-button" onClick={()=>window.print()}><Printer size={16}/> Print {width}mm</button></div>
@@ -72,7 +73,7 @@ export function FiscalReceiptPage(){
       <section className="receipt-payments"><strong>Pagesa</strong>{doc.payments.map(p=><div key={p.id}><span>{p.method_label}</span><span>{fixed(negative*Math.abs(Number(p.currency===doc.currency?p.amount:p.amount_base)))}</span></div>)}</section>
       <div className="receipt-rule"/>
       <section className="receipt-fiscal"><span>NSLF</span><code>{doc.nslf||'PENDING'}</code><span>NIVF</span><code>{doc.nivf||'PENDING'}</code>{isCredit&&<><span>NSLF origjinal</span><code>{(doc as CreditReceipt).original_invoice_nslf_snapshot||'—'}</code></>}</section>
-      <div className="receipt-qr">{qr?<QRCodeSVG value={qr} size={width==='58'?140:180} level="M" marginSize={1}/>:<div className="receipt-qr-pending">QR pas fiskalizimit</div>}</div>
+      <div className="receipt-qr">{qr?<QRCodeSVG value={qr} size={width==='58'?140:180} level="M" marginSize={1}/>:<div className="receipt-qr-pending">QR pas fiskalizimit</div>}{demoQr&&<small>DEMO QR · local/test only</small>}</div>
       <footer>Faleminderit!</footer>
     </article>
   </main>;
