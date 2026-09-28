@@ -158,6 +158,20 @@ final class OperationsController extends Controller
         return response()->json(['data'=>$this->operations->financeOverview(app(Business::class))]);
     }
 
+    public function expenses(): JsonResponse
+    {
+        $business = app(Business::class);
+
+        return response()->json([
+            'data' => DB::table('expenses')
+                ->where('business_id', $business->getKey())
+                ->orderByDesc('expense_date')
+                ->orderByDesc('created_at')
+                ->limit(100)
+                ->get(),
+        ]);
+    }
+
     public function createExpense(StoreExpenseRequest $request): JsonResponse
     {
         $expense = $this->operations->createExpense(app(Business::class), $request->validated(), $request->user()->id);
