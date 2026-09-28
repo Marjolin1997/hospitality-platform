@@ -369,12 +369,16 @@ export function InventoryPage() {
   });
 
   const createCount = useMutation({
-    mutationFn: () => api.post('/inventory/counts', {
+    mutationFn: (draft: CountCreateDraft) => api.post('/inventory/counts', {
+      idempotency_key: draft.idempotency_key,
       location_id: activeLocation!.id,
-      note: null,
+      note: draft.note.trim() || null,
+      product_ids: draft.scope === 'selected' ? draft.product_ids : undefined,
     }),
     onSuccess: async response => {
       const id = response.data.data.id as string;
+      setCountCreator(null);
+      setCountProductSearch('');
       await invalidateInventory();
       setCountDetailId(id);
       setSection('counts');
@@ -429,6 +433,18 @@ export function InventoryPage() {
   const lowStocks = stocks.filter(stock => Number(stock.quantity_on_hand) <= Number(stock.reorder_level));
   const outStocks = stocks.filter(stock => Number(stock.quantity_on_hand) <= 0);
   const draftCount = counts.find(count => count.status === 'draft') ?? null;
+  const countProductTerm = countProductSearch.trim().toLowerCase();
+  const countProductOptions = stocks.filter(stock =>
+    !countProductTerm || `${stock.name} ${stock.sku ?? ''}`.toLowerCase().includes(countProductTerm)
+  );
+  const countCreateValid = Boolean(
+    countCreator
+    && stocks.length > 0
+    && (
+      countCreator.scope === 'all'
+      || (countCreator.product_ids.length > 0 && countCreator.product_ids.length <= 500)
+    )
+  );
 
   const filteredStocks = useMemo(() => {
     const term = stockSearch.trim().toLowerCase();
