@@ -313,7 +313,7 @@ export function PurchasingPage() {
   });
 
   const savePurchase = useMutation({
-    mutationFn: (draft: PurchaseDraft) => {
+    mutationFn: async (draft: PurchaseDraft): Promise<void> => {
       const payload = {
         location_id: activeLocation!.id,
         supplier_id: draft.supplier_id,
@@ -325,12 +325,15 @@ export function PurchasingPage() {
         })),
       };
 
-      return draft.id
-        ? api.put(`/purchase-orders/${draft.id}`, payload)
-        : api.post('/purchase-orders', {
-            ...payload,
-            idempotency_key: draft.idempotency_key ?? crypto.randomUUID(),
-          });
+      if (draft.id) {
+        await api.put(`/purchase-orders/${draft.id}`, payload);
+        return;
+      }
+
+      await api.post('/purchase-orders', {
+        ...payload,
+        idempotency_key: draft.idempotency_key ?? crypto.randomUUID(),
+      });
     },
     onSuccess: async (_response, draft) => {
       setPurchaseEditor(null);
