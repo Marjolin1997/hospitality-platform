@@ -303,3 +303,29 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .station-history-modal{width:min(700px,100%)}
 @media(max-width:900px){.station-toolbar{width:100%;max-width:none;min-width:0}}
 @media(max-width:680px){.station-toolbar{align-items:stretch;flex-direction:column}.station-toolbar>select{width:100%}.station-actions{min-width:0}.station-actions .secondary-button{flex:1}.station-editor-modal .form-grid{grid-template-columns:1fr}.station-editor-modal label:last-child{grid-column:auto}}
+
+
+/* Stock count creation */
+.inventory-count-create-modal{width:min(820px,100%)}
+.count-scope-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 0 0;padding:0;border:0}
+.count-scope-options legend{grid-column:1/-1;margin-bottom:1px;color:#596860;font-size:9px;font-weight:850;letter-spacing:.05em;text-transform:uppercase}
+.count-scope-options>label{display:grid;grid-template-columns:auto 1fr;gap:9px;align-items:flex-start;padding:12px;border:1px solid #dfe6e2;border-radius:12px;background:#fbfcfb;cursor:pointer}
+.count-scope-options>label.active{border-color:#a9bd72;background:#f6f9ed;box-shadow:0 0 0 2px rgba(137,161,74,.08)}
+.count-scope-options input{width:15px;height:15px;margin-top:2px}
+.count-scope-options span{display:grid;gap:3px}.count-scope-options strong{color:#31433a;font-size:10.5px}.count-scope-options small{color:#849189;font-size:8.5px;line-height:1.4}
+.count-product-picker{display:grid;gap:10px;margin-top:14px;padding:12px;border:1px solid #e0e7e3;border-radius:12px;background:#fafcfb}
+.count-product-picker-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px}.count-product-picker-toolbar .search-box{flex:1;max-width:420px}
+.count-product-selection-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 2px}.count-product-selection-meta span{color:#405047;font-size:9.5px;font-weight:850}.count-product-selection-meta small{color:#87938c;font-size:8.5px}
+.count-product-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-height:300px;overflow:auto;padding-right:3px}
+.count-product-list>label{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:flex-start;padding:9px 10px;border:1px solid #e4e9e6;border-radius:10px;background:#fff;cursor:pointer}
+.count-product-list>label.selected{border-color:#b6c98b;background:#f7faef}.count-product-list input{width:15px;height:15px;margin-top:2px}
+.count-product-list span{display:grid;gap:2px;min-width:0}.count-product-list strong{overflow:hidden;text-overflow:ellipsis;color:#33453b;font-size:9.5px;white-space:nowrap}.count-product-list small{overflow:hidden;text-overflow:ellipsis;color:#88948d;font-size:8.5px;white-space:nowrap}
+.count-note-field{margin-top:14px}.count-note-field textarea{width:100%;min-height:78px;border:1px solid #dce4df;border-radius:10px;padding:9px 10px;background:#fff;color:#293b31;outline:none;resize:vertical}.count-note-field textarea:focus{border-color:#789640;box-shadow:0 0 0 3px rgba(118,150,61,.11)}
+.count-snapshot-warning{margin-top:14px}
+
+@media(max-width:680px){
+  .count-scope-options,.count-product-list{grid-template-columns:1fr}
+  .count-product-picker-toolbar,.count-product-selection-meta{align-items:stretch;flex-direction:column}
+  .count-product-picker-toolbar .search-box{max-width:none;width:100%}
+  .count-product-picker-toolbar .inline-actions{width:100%}.count-product-picker-toolbar .inline-actions button{flex:1}
+}
