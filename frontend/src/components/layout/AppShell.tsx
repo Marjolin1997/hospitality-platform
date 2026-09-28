@@ -1,6 +1,7 @@
 import { BarChart3, Boxes, Coffee, FileText, LayoutDashboard, LayoutGrid, LogOut, Menu, ReceiptText, Settings, ShoppingCart, Truck, Users, WalletCards, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { WorkspaceErrorBoundary } from '../errors/WorkspaceErrorBoundary';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { moduleAccess } from '../../lib/moduleAccess';
 
@@ -95,7 +96,14 @@ export function AppShell(){
           <button type="button" className="icon-button" title="Sign out" aria-label="Sign out" onClick={()=>logout()}><LogOut size={18}/></button>
         </div>
       </header>
-      <div className="page-container" id="workspace-content"><Outlet/></div>
+      <div className="page-container" id="workspace-content">
+        <WorkspaceErrorBoundary
+          key={`${activeBusiness?.id??'business'}:${activeLocation?.id??'location'}:${location.pathname}`}
+          onDashboard={()=>navigate('/dashboard')}
+        >
+          <Outlet/>
+        </WorkspaceErrorBoundary>
+      </div>
     </main>
   </div>;
 }
