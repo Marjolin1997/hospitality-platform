@@ -34,6 +34,13 @@ final class PreparationStationController extends Controller
                     ->whereColumn('products.preparation_station', 'ps.code')
                     ->where('products.is_active', true);
             }, 'active_product_count')
+            ->selectSub(function ($query): void {
+                $query->from('order_items')
+                    ->selectRaw('COUNT(*)')
+                    ->whereColumn('order_items.business_id', 'ps.business_id')
+                    ->whereColumn('order_items.preparation_station', 'ps.code')
+                    ->whereIn('order_items.preparation_status', ['pending', 'sent', 'preparing', 'ready']);
+            }, 'open_ticket_count')
             ->orderByDesc('ps.is_active')
             ->orderBy('ps.sort_order')
             ->orderBy('ps.name')
@@ -43,6 +50,7 @@ final class PreparationStationController extends Controller
                 $row->is_active = (bool) $row->is_active;
                 $row->product_count = (int) $row->product_count;
                 $row->active_product_count = (int) $row->active_product_count;
+                $row->open_ticket_count = (int) $row->open_ticket_count;
                 return $row;
             });
 
