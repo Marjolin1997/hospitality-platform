@@ -64,6 +64,7 @@ export function InvoicePrintPage(){
     ?'Fatura e parave të gatshme'
     :invoice.fiscal_invoice_type==='NONCASH'?'Faturë pa para në dorë':'Në pritje të klasifikimit fiskal';
   const qrValue=invoice.verification_url||invoice.qr_payload||'';
+  const demoQr=Boolean(invoice.qr_payload?.startsWith('DEMO|LOCAL_ONLY'));
   const seller=invoice.business_legal_name_snapshot||invoice.business_name_snapshot||'—';
 
   return <main className="fiscal-invoice-shell">
@@ -143,6 +144,7 @@ export function InvoicePrintPage(){
         <div className="invoice-qr">
           {qrValue?<QRCodeSVG value={qrValue} size={170} level="M" marginSize={2}/>:<div className="invoice-qr-pending">QR<br/><small>gjenerohet pas fiskalizimit</small></div>}
           {invoice.verification_url&&<small>Skano për verifikim në sistemin tatimor</small>}
+          {demoQr&&<small>DEMO QR · vetëm local/test</small>}
         </div>
       </section>
 
