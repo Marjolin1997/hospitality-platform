@@ -427,6 +427,87 @@ test('stock count draft can be saved and posted into exact audited variances', f
         ->assertJsonValidationErrors('count');
 });
 
+test('stock count creation is exactly once for the same idempotent request', function (): void {
+    $business = icmBusiness('Count Create Idempotency');
+    $location = icmLocation($business, 'Main');
+    $user = icmUser($business, ['inventory.view', 'inventory.adjust']);
+    $headers = icmHeaders($user, $business);
+    $productA = icmProduct($business, 'Coffee');
+    $productB = icmProduct($business, 'Milk');
+
+    $key = (string) Str::uuid();
+    $payload = [
+        'idempotency_key' => $key,
+        'location_id' => $location->id,
+        'note' => 'Cycle count',
+        'product_ids' => [$productA, $productB],
+    ];
+
+    $first = $this->postJson('/api/v1/inventory/counts', $payload, $headers)
+        ->assertCreated();
+
+    $second = $this->postJson('/api/v1/inventory/counts', [
+        ...$payload,
+        'product_ids' => [$productB, $productA],
+    ], $headers)->assertCreated();
+
+    expect($second->json('data.id'))->toBe($first->json('data.id'))
+        ->and(DB::table('inventory_counts')->count())->toBe(1)
+        ->and(DB::table('inventory_count_items')->count())->toBe(2)
+        ->and(DB::table('inventory_count_events')->where('event', 'created')->count())->toBe(1);
+
+    $this->postJson('/api/v1/inventory/counts', [
+        ...$payload,
+        'note' => 'Different request',
+    ], $headers)->assertStatus(422)
+        ->assertJsonValidationErrors('idempotency_key');
+
+    expect(DB::table('inventory_counts')->count())->toBe(1);
+});
+
+test('repeated identical count draft saves do not create audit noise', function (): void {
+    $business = icmBusiness('Count Draft Noop');
+    $location = icmLocation($business, 'Main');
+    $user = icmUser($business, ['inventory.view', 'inventory.adjust']);
+    $headers = icmHeaders($user, $business);
+    icmProduct($business, 'Coffee');
+
+    $countId = $this->postJson('/api/v1/inventory/counts', [
+        'idempotency_key' => (string) Str::uuid(),
+        'location_id' => $location->id,
+    ], $headers)->assertCreated()->json('data.id');
+
+    $line = DB::table('inventory_count_items')
+        ->where('inventory_count_id', $countId)
+        ->firstOrFail();
+
+    $payload = [
+        'items' => [[
+            'inventory_count_item_id' => $line->id,
+            'counted_quantity' => '4',
+        ]],
+    ];
+
+    $this->putJson("/api/v1/inventory/counts/{$countId}", $payload, $headers)
+        ->assertOk();
+
+    $updatedAt = DB::table('inventory_count_items')->where('id', $line->id)->value('updated_at');
+
+    $this->putJson("/api/v1/inventory/counts/{$countId}", [
+        'items' => [[
+            'inventory_count_item_id' => $line->id,
+            'counted_quantity' => '4.0000',
+        ]],
+    ], $headers)->assertOk();
+
+    expect(DB::table('inventory_count_events')
+        ->where('inventory_count_id', $countId)
+        ->where('event', 'draft_updated')
+        ->count())->toBe(1)
+        ->and(DB::table('inventory_count_items')->where('id', $line->id)->value('updated_at'))
+        ->toEqual($updatedAt);
+});
+
 test('stock count posting is blocked when stock changed after the snapshot', function (): void {
     $business = icmBusiness('Count Stale');
     $location = icmLocation($business, 'Main');
