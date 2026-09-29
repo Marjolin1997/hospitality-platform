@@ -248,12 +248,10 @@ final class FiscalCreditNoteSubmissionFactory
 
                 $amount = BigDecimal::of((string) $payment->amount_base);
                 $paymentTotal = $paymentTotal->plus($amount);
-                $fiscalAmount = $isForeignCurrency
-                    ? $amount->dividedBy((string) $credit->exchange_rate, 10, RoundingMode::HALF_UP)
-                    : $amount;
+                // DPT PayMethod.Amt remains expressed in ALL even when Invoice.Currency is foreign.
                 $fiscalPayments[] = [
                     'type' => $mapping['code'],
-                    'amount' => $this->negativeMoney($fiscalAmount),
+                    'amount' => $this->negativeMoney($amount),
                 ];
             }
 
@@ -262,23 +260,6 @@ final class FiscalCreditNoteSubmissionFactory
                 throw ValidationException::withMessages([
                     'payment' => 'Corrective payment snapshots do not reconcile with the document total.',
                 ]);
-            }
-
-            if ($isForeignCurrency && $fiscalPayments !== []) {
-                $fiscalPaymentTotal = array_reduce(
-                    $fiscalPayments,
-                    fn (BigDecimal $sum, array $payment): BigDecimal => $sum->plus($payment['amount']),
-                    BigDecimal::zero(),
-                )->toScale(self::MONEY_SCALE, RoundingMode::HALF_UP);
-                $expectedFiscalTotal = BigDecimal::of($totalPrice)->toScale(self::MONEY_SCALE, RoundingMode::HALF_UP);
-                $difference = $expectedFiscalTotal->minus($fiscalPaymentTotal);
-
-                if (! $difference->isZero()) {
-                    $last = array_key_last($fiscalPayments);
-                    $fiscalPayments[$last]['amount'] = $this->money(
-                        BigDecimal::of($fiscalPayments[$last]['amount'])->plus($difference),
-                    );
-                }
             }
 
             $seller = [
