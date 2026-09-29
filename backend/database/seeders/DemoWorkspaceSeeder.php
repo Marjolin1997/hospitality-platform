@@ -148,11 +148,11 @@ final class DemoWorkspaceSeeder extends Seeder
             'cash_registers' => ['fiscal_tcr_code'],
             'business_user' => ['fiscal_operator_code'],
             'fiscalization_profiles' => ['certificate_password_secret_ref', 'is_issuer_in_vat', 'last_test_verified_at', 'preflight_status'],
-            'invoices' => ['fiscalization_status', 'nslf', 'nivf', 'qr_payload'],
-            'invoice_lines' => ['unit_code_snapshot', 'unit_label_snapshot', 'discount_percent'],
+            'invoices' => ['fiscalization_status', 'nslf', 'nivf', 'qr_payload', 'invoice_currency', 'exchange_rate', 'grand_total_foreign'],
+            'invoice_lines' => ['unit_code_snapshot', 'unit_label_snapshot', 'discount_percent', 'unit_price_foreign', 'line_total_foreign'],
             'invoice_fiscalization_attempts' => ['retryable', 'next_retry_at', 'http_status', 'payload_hash'],
-            'invoice_credit_notes' => ['fiscalization_status', 'fiscal_invoice_type', 'nslf', 'nivf', 'qr_payload', 'original_invoice_issued_at_snapshot'],
-            'invoice_credit_note_lines' => ['unit_code_snapshot', 'unit_label_snapshot', 'discount_percent'],
+            'invoice_credit_notes' => ['fiscalization_status', 'fiscal_invoice_type', 'nslf', 'nivf', 'qr_payload', 'original_invoice_issued_at_snapshot', 'invoice_currency', 'exchange_rate', 'grand_total_foreign'],
+            'invoice_credit_note_lines' => ['unit_code_snapshot', 'unit_label_snapshot', 'discount_percent', 'unit_price_foreign', 'line_total_foreign'],
             'credit_note_fiscalization_attempts' => ['retryable', 'next_retry_at', 'http_status', 'payload_hash'],
         ];
 
