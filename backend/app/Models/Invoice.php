@@ -21,6 +21,12 @@ final class Invoice extends Model
             'discount_total' => 'decimal:4',
             'tax_total' => 'decimal:4',
             'grand_total' => 'decimal:4',
+            'exchange_rate' => 'decimal:10',
+            'subtotal_foreign' => 'decimal:4',
+            'discount_total_foreign' => 'decimal:4',
+            'tax_total_foreign' => 'decimal:4',
+            'grand_total_foreign' => 'decimal:4',
+            'exchange_rate_effective_at' => 'datetime',
             'issued_at' => 'datetime',
         ];
     }
