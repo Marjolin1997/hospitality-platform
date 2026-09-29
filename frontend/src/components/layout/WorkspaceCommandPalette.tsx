@@ -27,6 +27,7 @@ export function WorkspaceCommandPalette({
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -42,6 +43,9 @@ export function WorkspaceCommandPalette({
   useEffect(() => {
     if (!open) return;
 
+    returnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     setQuery('');
     setActiveIndex(0);
     const previousOverflow = document.body.style.overflow;
@@ -52,6 +56,10 @@ export function WorkspaceCommandPalette({
     return () => {
       window.clearTimeout(focusTimer);
       document.body.style.overflow = previousOverflow;
+      const previousFocus = returnFocusRef.current;
+      window.setTimeout(() => {
+        if (previousFocus?.isConnected) previousFocus.focus();
+      }, 0);
     };
   }, [open]);
 
