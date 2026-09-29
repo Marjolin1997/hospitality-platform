@@ -5,14 +5,22 @@ namespace App\Services\Invoicing;
 use App\Models\Business;
 use App\Models\User;
 use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Carbon\CarbonImmutable;
 use App\Services\Fiscalization\FiscalPaymentMapper;
+use App\Services\Finance\CurrencyConverter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 final class IssueInvoice
 {
-    public function __construct(private readonly FiscalPaymentMapper $paymentMapper, private readonly InvoiceLineAllocator $lineAllocator) {}
+    private const MONEY_SCALE = 4;
+
+    public function __construct(
+        private readonly FiscalPaymentMapper $paymentMapper,
+        private readonly InvoiceLineAllocator $lineAllocator,
+        private readonly CurrencyConverter $converter,
+    ) {}
 
     public function execute(Business $business, User $user, array $payload): object
     {
@@ -179,6 +187,7 @@ final class IssueInvoice
                 ]);
             }
 
+            $currencySnapshot = $this->currencySnapshot($business, $order, $allocation, $payload);
             $businessNow = CarbonImmutable::now($business->timezone);
             $invoiceId = (string) \Illuminate\Support\Str::ulid();
 
@@ -201,10 +210,18 @@ final class IssueInvoice
                 'status' => 'issued',
                 'fiscal_invoice_type' => $fiscalInvoiceType,
                 'currency' => $order->currency,
+                'invoice_currency' => $currencySnapshot['invoice_currency'],
+                'exchange_rate' => $currencySnapshot['exchange_rate'],
+                'exchange_rate_source' => $currencySnapshot['exchange_rate_source'],
+                'exchange_rate_effective_at' => $currencySnapshot['exchange_rate_effective_at'],
                 'subtotal' => $allocation['subtotal'],
                 'discount_total' => $allocation['discount_total'],
                 'tax_total' => $allocation['tax_total'],
                 'grand_total' => $allocation['grand_total'],
+                'subtotal_foreign' => $currencySnapshot['subtotal_foreign'],
+                'discount_total_foreign' => $currencySnapshot['discount_total_foreign'],
+                'tax_total_foreign' => $currencySnapshot['tax_total_foreign'],
+                'grand_total_foreign' => $currencySnapshot['grand_total_foreign'],
                 'customer_name' => $payload['customer_name'] ?? null,
                 'customer_tax_number' => $payload['customer_tax_number'] ?? null,
                 'issued_at' => $businessNow->utc(),
@@ -224,11 +241,15 @@ final class IssueInvoice
                     'unit_label_snapshot' => $line['unit_label_snapshot'],
                     'quantity' => $line['quantity'],
                     'unit_price' => $line['unit_price'],
+                    'unit_price_foreign' => $this->foreignAmount($line['unit_price'], $currencySnapshot['exchange_rate']),
                     'discount_percent' => $line['discount_percent'],
                     'tax_rate' => $line['tax_rate'],
                     'line_subtotal' => $line['line_subtotal'],
                     'line_tax' => $line['line_tax'],
                     'line_total' => $line['line_total'],
+                    'line_subtotal_foreign' => $this->foreignAmount($line['line_subtotal'], $currencySnapshot['exchange_rate']),
+                    'line_tax_foreign' => $this->foreignAmount($line['line_tax'], $currencySnapshot['exchange_rate']),
+                    'line_total_foreign' => $this->foreignAmount($line['line_total'], $currencySnapshot['exchange_rate']),
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -257,6 +278,67 @@ final class IssueInvoice
 
             return $this->withLines($business, $invoice);
         }, attempts: 3);
+    }
+
+    private function currencySnapshot(Business $business, object $order, array $allocation, array $payload): array
+    {
+        $baseCurrency = strtoupper((string) $order->currency);
+        $invoiceCurrency = strtoupper((string) ($payload['invoice_currency'] ?? $baseCurrency));
+
+        if ($invoiceCurrency === $baseCurrency) {
+            return [
+                'invoice_currency' => $baseCurrency,
+                'exchange_rate' => null,
+                'exchange_rate_source' => null,
+                'exchange_rate_effective_at' => null,
+                'subtotal_foreign' => null,
+                'discount_total_foreign' => null,
+                'tax_total_foreign' => null,
+                'grand_total_foreign' => null,
+            ];
+        }
+
+        if ($baseCurrency !== strtoupper((string) $business->currency)) {
+            throw ValidationException::withMessages([
+                'invoice_currency' => 'Foreign-currency invoices require the order currency to match the business base currency.',
+            ]);
+        }
+
+        try {
+            $conversion = $this->converter->convert('1', $invoiceCurrency, $baseCurrency);
+        } catch (\DomainException) {
+            throw ValidationException::withMessages([
+                'invoice_currency' => "No current exchange rate is configured for {$invoiceCurrency}/{$baseCurrency}.",
+            ]);
+        }
+
+        $rate = BigDecimal::of((string) $conversion['rate']);
+        if (! $rate->isPositive()) {
+            throw ValidationException::withMessages([
+                'invoice_currency' => 'The configured exchange rate must be positive.',
+            ]);
+        }
+
+        return [
+            'invoice_currency' => $invoiceCurrency,
+            'exchange_rate' => (string) $rate->toScale(10, RoundingMode::HALF_UP),
+            'exchange_rate_source' => (string) $conversion['source'],
+            'exchange_rate_effective_at' => $conversion['effective_at'],
+            'subtotal_foreign' => $this->foreignAmount($allocation['subtotal'], (string) $rate),
+            'discount_total_foreign' => $this->foreignAmount($allocation['discount_total'], (string) $rate),
+            'tax_total_foreign' => $this->foreignAmount($allocation['tax_total'], (string) $rate),
+            'grand_total_foreign' => $this->foreignAmount($allocation['grand_total'], (string) $rate),
+        ];
+    }
+
+    private function foreignAmount(string|int|float $amount, ?string $exchangeRate): ?string
+    {
+        if ($exchangeRate === null) {
+            return null;
+        }
+
+        return (string) BigDecimal::of((string) $amount)
+            ->dividedBy($exchangeRate, self::MONEY_SCALE, RoundingMode::HALF_UP);
     }
 
     private function nextNumber(Business $business, CarbonImmutable $businessNow): string
@@ -297,7 +379,8 @@ final class IssueInvoice
     private function assertReplay(object $existing, array $payload): void
     {
         $same = (string) ($existing->customer_name ?? '') === (string) ($payload['customer_name'] ?? '')
-            && (string) ($existing->customer_tax_number ?? '') === (string) ($payload['customer_tax_number'] ?? '');
+            && (string) ($existing->customer_tax_number ?? '') === (string) ($payload['customer_tax_number'] ?? '')
+            && strtoupper((string) ($existing->invoice_currency ?? $existing->currency)) === strtoupper((string) ($payload['invoice_currency'] ?? $existing->currency));
 
         if (! empty($payload['cash_register_id'])) {
             $selectedTcr = DB::table('cash_registers')->where('id', $payload['cash_register_id'])->value('fiscal_tcr_code');
