@@ -5,10 +5,27 @@ import { useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { api } from '../../lib/api';
 
-type Line={id:string;product_name_snapshot:string;quantity:string;line_total:string;tax_rate:string};
-type Payment={id:string;method_label:string;amount:string;currency:string;amount_base:string};
-type InvoiceReceipt={id:string;number:string;fiscal_invoice_number:string|null;fiscalization_status:string;currency:string;grand_total:string;tax_total:string;business_name_snapshot:string|null;business_legal_name_snapshot:string|null;business_tax_number_snapshot:string|null;location_name_snapshot:string|null;location_address_snapshot:string|null;fiscal_operator_code_snapshot:string|null;fiscal_business_unit_code_snapshot:string|null;fiscal_tcr_code_snapshot:string|null;nslf:string|null;nivf:string|null;verification_url:string|null;qr_payload:string|null;issued_at:string|null;fiscalized_at:string|null;lines:Line[];payments:Payment[]};
-type CreditReceipt={id:string;number:string;fiscal_invoice_number:string|null;fiscalization_status:string;currency:string;grand_total:string;tax_total:string;reason:string;fiscal_operator_code_snapshot:string|null;fiscal_business_unit_code_snapshot:string|null;fiscal_tcr_code_snapshot:string|null;nslf:string|null;nivf:string|null;verification_url:string|null;qr_payload:string|null;issued_at:string|null;fiscalized_at:string|null;original_invoice_nslf_snapshot:string|null;lines:Line[];payments:Payment[];original_invoice:InvoiceReceipt};
+type Line={
+  id:string;product_name_snapshot:string;quantity:string;line_total:string;line_total_foreign:string|null;tax_rate:string
+};
+type Payment={id:string;method_label:string;amount:string;currency:string;amount_base:string;base_currency:string};
+type InvoiceReceipt={
+  id:string;number:string;fiscal_invoice_number:string|null;fiscalization_status:string;
+  currency:string;invoice_currency:string|null;exchange_rate:string|null;exchange_rate_source:string|null;
+  grand_total:string;grand_total_foreign:string|null;tax_total:string;tax_total_foreign:string|null;
+  business_name_snapshot:string|null;business_legal_name_snapshot:string|null;business_tax_number_snapshot:string|null;
+  location_name_snapshot:string|null;location_address_snapshot:string|null;fiscal_operator_code_snapshot:string|null;
+  fiscal_business_unit_code_snapshot:string|null;fiscal_tcr_code_snapshot:string|null;nslf:string|null;nivf:string|null;
+  verification_url:string|null;qr_payload:string|null;issued_at:string|null;fiscalized_at:string|null;lines:Line[];payments:Payment[]
+};
+type CreditReceipt={
+  id:string;number:string;fiscal_invoice_number:string|null;fiscalization_status:string;
+  currency:string;invoice_currency:string|null;exchange_rate:string|null;exchange_rate_source:string|null;
+  grand_total:string;grand_total_foreign:string|null;tax_total:string;tax_total_foreign:string|null;reason:string;
+  fiscal_operator_code_snapshot:string|null;fiscal_business_unit_code_snapshot:string|null;fiscal_tcr_code_snapshot:string|null;
+  nslf:string|null;nivf:string|null;verification_url:string|null;qr_payload:string|null;issued_at:string|null;fiscalized_at:string|null;
+  original_invoice_nslf_snapshot:string|null;lines:Line[];payments:Payment[];original_invoice:InvoiceReceipt
+};
 
 const fixed=(v:string|number)=>Number(v||0).toFixed(2);
 const qty=(v:string)=>Number(v||0).toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
@@ -40,6 +57,10 @@ export function FiscalReceiptPage(){
   const negative=isCredit?-1:1;
   const qr=doc.verification_url||doc.qr_payload||'';
   const demoQr=Boolean(doc.qr_payload?.startsWith('DEMO|LOCAL_ONLY'));
+  const displayCurrency=doc.invoice_currency||doc.currency;
+  const isForeign=displayCurrency!==doc.currency&&Boolean(doc.exchange_rate&&doc.grand_total_foreign);
+  const displayTotal=isForeign?doc.grand_total_foreign!:doc.grand_total;
+  const displayTax=isForeign?doc.tax_total_foreign!:doc.tax_total;
 
   return <main className={`thermal-receipt-shell paper-${width}`} data-path={location.pathname}>
     <div className="receipt-screen-toolbar"><button type="button" className="primary-button" onClick={()=>window.print()}><Printer size={16}/> Print {width}mm</button></div>
@@ -57,20 +78,23 @@ export function FiscalReceiptPage(){
         <div><span>Operator:</span><strong>{doc.fiscal_operator_code_snapshot||'—'}</strong></div>
         <div><span>Njësia:</span><strong>{doc.fiscal_business_unit_code_snapshot||'—'}</strong></div>
         <div><span>TCR:</span><strong>{doc.fiscal_tcr_code_snapshot||'—'}</strong></div>
+        <div><span>Monedha:</span><strong>{displayCurrency}</strong></div>
+        {isForeign&&<><div><span>Kursi:</span><strong>1 {displayCurrency} = {Number(doc.exchange_rate).toFixed(2)} {doc.currency}</strong></div><div><span>Burimi:</span><strong>{doc.exchange_rate_source||'—'}</strong></div></>}
         {isCredit&&<><div><span>Origjinal:</span><strong>{(doc as CreditReceipt).original_invoice.fiscal_invoice_number||(doc as CreditReceipt).original_invoice.number}</strong></div><div><span>Arsye:</span><strong>{(doc as CreditReceipt).reason}</strong></div></>}
       </section>
 
       <div className="receipt-rule"/>
       <section className="receipt-lines">
-        {doc.lines.map(line=><div className="receipt-line" key={line.id}><div><strong>{line.product_name_snapshot}</strong><span>{negative<0?'-':''}{qty(line.quantity)} × TVSH {fixed(line.tax_rate)}%</span></div><strong>{fixed(negative*Math.abs(Number(line.line_total)))}</strong></div>)}
+        {doc.lines.map(line=><div className="receipt-line" key={line.id}><div><strong>{line.product_name_snapshot}</strong><span>{negative<0?'-':''}{qty(line.quantity)} × TVSH {fixed(line.tax_rate)}%</span></div><strong>{fixed(negative*Math.abs(Number(isForeign?line.line_total_foreign:line.line_total)))} {displayCurrency}</strong></div>)}
       </section>
       <div className="receipt-rule"/>
       <section className="receipt-totals">
-        <div><span>TVSH</span><strong>{fixed(negative*Math.abs(Number(doc.tax_total)))}</strong></div>
-        <div className="receipt-grand"><span>TOTAL {doc.currency}</span><strong>{fixed(negative*Math.abs(Number(doc.grand_total)))}</strong></div>
+        <div><span>TVSH {displayCurrency}</span><strong>{fixed(negative*Math.abs(Number(displayTax)))}</strong></div>
+        <div className="receipt-grand"><span>TOTAL {displayCurrency}</span><strong>{fixed(negative*Math.abs(Number(displayTotal)))}</strong></div>
+        {isForeign&&<><div className="receipt-base-total"><span>KUNDËRVLERA {doc.currency}</span><strong>{fixed(negative*Math.abs(Number(doc.grand_total)))}</strong></div><div className="receipt-rate"><span>KURS</span><strong>1 {displayCurrency} = {Number(doc.exchange_rate).toFixed(2)} {doc.currency}</strong></div></>}
       </section>
 
-      <section className="receipt-payments"><strong>Pagesa</strong>{doc.payments.map(p=><div key={p.id}><span>{p.method_label}</span><span>{fixed(negative*Math.abs(Number(p.currency===doc.currency?p.amount:p.amount_base)))}</span></div>)}</section>
+      <section className="receipt-payments"><strong>Pagesa</strong>{doc.payments.map(p=><div key={p.id}><span>{p.method_label}</span><span>{fixed(negative*Math.abs(Number(p.amount)))} {p.currency}</span></div>)}</section>
       <div className="receipt-rule"/>
       <section className="receipt-fiscal"><span>NSLF</span><code>{doc.nslf||'PENDING'}</code><span>NIVF</span><code>{doc.nivf||'PENDING'}</code>{isCredit&&<><span>NSLF origjinal</span><code>{(doc as CreditReceipt).original_invoice_nslf_snapshot||'—'}</code></>}</section>
       <div className="receipt-qr">{qr?<QRCodeSVG value={qr} size={width==='58'?140:180} level="M" marginSize={1}/>:<div className="receipt-qr-pending">QR pas fiskalizimit</div>}{demoQr&&<small>DEMO QR · local/test only</small>}</div>
