@@ -550,6 +550,7 @@ export function PurchasingPage() {
               <option value="cancelled">Cancelled</option>
             </select>
             <span className="toolbar-result-count">{filteredOrders.length} of {orders.length}</span>
+            {(orderSearch || orderStatus !== 'all') && <button type="button" className="text-button filter-reset-button" onClick={()=>{setOrderSearch('');setOrderStatus('all')}}>Reset filters</button>}
           </div>
         </div>
 
@@ -642,6 +643,7 @@ export function PurchasingPage() {
               <option value="all">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option>
             </select>
             <span className="toolbar-result-count">{filteredSuppliers.length} of {suppliers.length}</span>
+            {(supplierSearch || supplierStatus !== 'all') && <button type="button" className="text-button filter-reset-button" onClick={()=>{setSupplierSearch('');setSupplierStatus('all')}}>Reset filters</button>}
           </div>
         </div>
 
