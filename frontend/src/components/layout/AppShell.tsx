@@ -31,6 +31,7 @@ export function AppShell(){
   const workspaceBusy=activeFetches+activeMutations>0;
   const [mobileNavOpen,setMobileNavOpen]=useState(false);
   const [commandOpen,setCommandOpen]=useState(false);
+  const [formDialogOpen,setFormDialogOpen]=useState(false);
   const {user,activeBusiness,activeLocation,selectBusiness,selectLocation,logout,canAny}=useAuth();
   const visibleNavigation=navigation.filter(item=>item.permissions.length===0||canAny([...item.permissions]));
   const canUseCashRegister=canAny(['cash_sessions.view','cash_sessions.open','cash_sessions.close','cash_movements.create','payments.collect']);
@@ -42,7 +43,7 @@ export function AppShell(){
     const handleWorkspaceKeyboard=(event:KeyboardEvent)=>{
       if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
         event.preventDefault();
-        setCommandOpen(true);
+        if(!formDialogOpen)setCommandOpen(true);
         return;
       }
 
@@ -117,7 +118,7 @@ export function AppShell(){
       window.removeEventListener('keydown',handleWorkspaceKeyboard);
       document.removeEventListener('mousedown',protectFormBackdrop,true);
     };
-  },[commandOpen]);
+  },[commandOpen,formDialogOpen]);
 
   useEffect(()=>{
     let locked=false;
@@ -125,6 +126,8 @@ export function AppShell(){
 
     const syncModalScrollLock=()=>{
       const hasModal=Boolean(document.querySelector('.modal-backdrop'));
+      const hasFormModal=Boolean(document.querySelector('.modal-backdrop form'));
+      setFormDialogOpen(hasFormModal);
       if(hasModal&&!locked){
         previousOverflow=document.body.style.overflow;
         document.body.style.overflow='hidden';
@@ -169,8 +172,8 @@ export function AppShell(){
       </div>
 
       <div className="mobile-workspace-switchers">
-        <label><span>Business</span><select aria-label="Mobile active business" value={activeBusiness?.id??''} onChange={e=>selectBusiness(e.target.value)}>{user?.businesses.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
-        <label><span>Location</span><select aria-label="Mobile active location" value={activeLocation?.id??''} onChange={e=>selectLocation(e.target.value)}>{activeBusiness?.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+        <label><span>Business</span><select aria-label="Mobile active business" value={activeBusiness?.id??''} disabled={formDialogOpen} title={formDialogOpen?'Finish or cancel the open form before switching business.':undefined} onChange={e=>selectBusiness(e.target.value)}>{user?.businesses.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+        <label><span>Location</span><select aria-label="Mobile active location" value={activeLocation?.id??''} disabled={formDialogOpen} title={formDialogOpen?'Finish or cancel the open form before switching location.':undefined} onChange={e=>selectLocation(e.target.value)}>{activeBusiness?.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
       </div>
 
       <nav className="nav-list" aria-label="Main navigation">
@@ -203,12 +206,12 @@ export function AppShell(){
         </div>
 
         <div className="workspace-switchers">
-          <label><span>Business</span><select aria-label="Active business" value={activeBusiness?.id??''} onChange={e=>selectBusiness(e.target.value)}>{user?.businesses.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
-          <label><span>Location</span><select aria-label="Active location" value={activeLocation?.id??''} onChange={e=>selectLocation(e.target.value)}>{activeBusiness?.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+          <label><span>Business</span><select aria-label="Active business" value={activeBusiness?.id??''} disabled={formDialogOpen} title={formDialogOpen?'Finish or cancel the open form before switching business.':undefined} onChange={e=>selectBusiness(e.target.value)}>{user?.businesses.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+          <label><span>Location</span><select aria-label="Active location" value={activeLocation?.id??''} disabled={formDialogOpen} title={formDialogOpen?'Finish or cancel the open form before switching location.':undefined} onChange={e=>selectLocation(e.target.value)}>{activeBusiness?.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
         </div>
 
         <div className="topbar-actions">
-          <button type="button" className="ghost-button topbar-search-button" onClick={()=>setCommandOpen(true)} aria-label="Search workspace">
+          <button type="button" className="ghost-button topbar-search-button" disabled={formDialogOpen} title={formDialogOpen?'Finish or cancel the open form before navigating away.':'Search workspace'} onClick={()=>setCommandOpen(true)} aria-label="Search workspace">
             <Search size={16}/>
             <span>Search</span>
             <kbd>Ctrl K</kbd>
