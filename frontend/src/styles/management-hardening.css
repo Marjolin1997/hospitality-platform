@@ -1146,3 +1146,29 @@ textarea:disabled{
 .refund-review-card .inline-actions{
   justify-content:flex-end;
 }
+
+
+/* Filter utility */
+.filter-reset-button{
+  min-height:32px;
+  padding:5px 7px;
+  border-radius:8px;
+  color:#67776e;
+  font-size:9px;
+  font-weight:850;
+  white-space:nowrap;
+}
+
+.filter-reset-button:hover{
+  background:#f1f5f2;
+  color:#31453a;
+}
+
+@media(max-width:680px){
+  .filter-reset-button{
+    width:100%;
+    justify-content:flex-start;
+    padding-left:2px;
+    background:transparent!important;
+  }
+}
