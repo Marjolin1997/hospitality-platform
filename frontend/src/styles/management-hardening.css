@@ -1732,3 +1732,130 @@ textarea:disabled{
     grid-column:auto;
   }
 }
+
+
+/* Invoice currency snapshots */
+.invoice-currency-total-card{
+  min-width:0;
+  display:grid;
+  gap:5px;
+  align-content:center;
+  padding:12px 14px;
+  border:1px solid #dfe7e2;
+  border-radius:12px;
+  background:linear-gradient(180deg,#fbfdfc,#f5f8f6);
+}
+.invoice-currency-total-card>span,
+.invoice-exchange-snapshot span{
+  color:#7b8881;
+  font-size:10px;
+  font-weight:750;
+  letter-spacing:.02em;
+}
+.invoice-currency-total-card>strong{
+  color:#1d2b24;
+  font-size:18px;
+  font-weight:850;
+  letter-spacing:-.02em;
+}
+.invoice-currency-total-card>small{
+  color:#74817a;
+  font-size:10px;
+  line-height:1.4;
+}
+.invoice-exchange-snapshot{
+  display:grid;
+  grid-template-columns:1.2fr .8fr 1fr;
+  gap:10px;
+  padding:13px 14px;
+  border:1px solid #d7e5cf;
+  border-radius:12px;
+  background:#f5faef;
+}
+.invoice-exchange-snapshot>div{
+  min-width:0;
+  display:grid;
+  gap:4px;
+}
+.invoice-exchange-snapshot strong{
+  overflow:hidden;
+  color:#36532d;
+  font-size:11px;
+  font-weight:800;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.invoice-dual-total{
+  display:grid;
+  gap:3px;
+}
+.invoice-dual-total strong{
+  font-size:11px;
+}
+.invoice-dual-total small{
+  color:#7f8c85;
+  font-size:9px;
+  line-height:1.35;
+}
+.invoice-exchange-box,
+.invoice-dual-total-box{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+  margin:14px 0;
+  padding:12px 14px;
+  border:1px solid #dce6df;
+  border-radius:12px;
+  background:#f8fbf9;
+}
+.invoice-exchange-box>div,
+.invoice-dual-total-box>div{
+  min-width:0;
+  display:grid;
+  gap:4px;
+}
+.invoice-exchange-box span,
+.invoice-dual-total-box span{
+  color:#74817a;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+}
+.invoice-exchange-box strong,
+.invoice-dual-total-box strong{
+  color:#233229;
+  font-size:11px;
+  overflow-wrap:anywhere;
+}
+.invoice-total-row.base-equivalent th,
+.invoice-total-row.base-equivalent td{
+  border-top:1px solid #dfe7e2;
+  background:#f7faf8;
+  color:#33463c;
+  font-weight:800;
+}
+.receipt-base-total{
+  margin-top:4px;
+  padding-top:5px;
+  border-top:1px dashed #555;
+  font-weight:700;
+}
+.receipt-rate{
+  margin-top:2px;
+  font-size:9px;
+}
+@media(max-width:720px){
+  .invoice-exchange-snapshot,
+  .invoice-exchange-box,
+  .invoice-dual-total-box{
+    grid-template-columns:1fr;
+  }
+}
+@media print{
+  .invoice-exchange-box,
+  .invoice-dual-total-box{
+    break-inside:avoid;
+    box-shadow:none;
+  }
+}
