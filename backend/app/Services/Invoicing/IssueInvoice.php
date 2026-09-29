@@ -323,7 +323,7 @@ final class IssueInvoice
             'invoice_currency' => $invoiceCurrency,
             'exchange_rate' => (string) $rate->toScale(10, RoundingMode::HALF_UP),
             'exchange_rate_source' => (string) $conversion['source'],
-            'exchange_rate_effective_at' => $conversion['effective_at'],
+            'exchange_rate_effective_at' => CarbonImmutable::parse((string) $conversion['effective_at'])->utc(),
             'subtotal_foreign' => $this->foreignAmount($allocation['subtotal'], (string) $rate),
             'discount_total_foreign' => $this->foreignAmount($allocation['discount_total'], (string) $rate),
             'tax_total_foreign' => $this->foreignAmount($allocation['tax_total'], (string) $rate),
