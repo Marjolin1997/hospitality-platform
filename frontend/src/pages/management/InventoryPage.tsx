@@ -894,7 +894,7 @@ export function InventoryPage() {
             >
               Cancel
             </button>
-            <button className="primary-button" disabled={!countCreateValid || createCount.isPending}>
+            <button type="submit" className="primary-button" disabled={!countCreateValid || createCount.isPending}>
               {createCount.isPending ? 'Starting count…' : 'Start count & lock snapshot'}
             </button>
           </footer>
@@ -916,7 +916,7 @@ export function InventoryPage() {
           <div className="form-grid"><label><span>Quantity delta</span><input autoFocus required type="number" step="0.0001" inputMode="decimal" value={adjustmentDelta} onChange={event => setAdjustmentDelta(event.target.value)} /></label><label className="span-2"><span>Adjustment reason</span><textarea required minLength={3} maxLength={500} value={adjustmentNote} onChange={event => setAdjustmentNote(event.target.value)} placeholder="Waste, correction, verified discrepancy…" /></label></div>
           {projected < 0 && <p className="field-hint error">This adjustment would produce a negative balance.</p>}
           {adjust.isError && <p className="error-state">{apiMessage(adjust.error)}</p>}
-          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={adjust.isPending} onClick={() => setAdjusting(null)}>Cancel</button><button className="primary-button" disabled={!adjustmentValid || projected < 0 || adjust.isPending}>{adjust.isPending ? 'Applying…' : 'Apply adjustment'}</button></footer>
+          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={adjust.isPending} onClick={() => setAdjusting(null)}>Cancel</button><button type="submit" className="primary-button" disabled={!adjustmentValid || projected < 0 || adjust.isPending}>{adjust.isPending ? 'Applying…' : 'Apply adjustment'}</button></footer>
         </form>
       </div>
     )}
@@ -935,7 +935,7 @@ export function InventoryPage() {
           <div className="reconciliation-summary"><span>On hand <strong>{qty(reorderTarget.quantity_on_hand)}</strong></span><span>Current threshold <strong>{qty(reorderTarget.reorder_level)}</strong></span></div>
           <label className="inventory-reason-field"><span>Reorder level</span><input autoFocus required type="number" min="0" step="0.0001" inputMode="decimal" value={reorderLevel} onChange={event => setReorderLevelValue(event.target.value)} /></label>
           {saveReorderLevel.isError && <p className="error-state">{apiMessage(saveReorderLevel.error)}</p>}
-          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={saveReorderLevel.isPending} onClick={() => setReorderTarget(null)}>Cancel</button><button className="primary-button" disabled={saveReorderLevel.isPending || reorderLevel === '' || !Number.isFinite(Number(reorderLevel)) || Number(reorderLevel) < 0}>{saveReorderLevel.isPending ? 'Saving…' : 'Save reorder level'}</button></footer>
+          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={saveReorderLevel.isPending} onClick={() => setReorderTarget(null)}>Cancel</button><button type="submit" className="primary-button" disabled={saveReorderLevel.isPending || reorderLevel === '' || !Number.isFinite(Number(reorderLevel)) || Number(reorderLevel) < 0}>{saveReorderLevel.isPending ? 'Saving…' : 'Save reorder level'}</button></footer>
         </form>
       </div>
     )}
@@ -972,7 +972,7 @@ export function InventoryPage() {
             return <div className="transfer-line" key={index}><label><span>Product</span><select required value={line.product_id} onChange={event => setTransferEditor(draft => draft ? { ...draft, items: draft.items.map((item, itemIndex) => itemIndex === index ? { ...item, product_id: event.target.value } : item) } : draft)}><option value="">Select product</option>{transferOptions?.products.map(option => <option key={option.id} value={option.id} disabled={selected.has(option.id) || Number(option.quantity_on_hand) <= 0}>{option.name}{option.sku ? ` · ${option.sku}` : ''} · on hand {qty(option.quantity_on_hand)}</option>)}</select></label><label><span>Quantity</span><input required type="number" min="0.0001" max={product?.quantity_on_hand} step="0.0001" inputMode="decimal" value={line.quantity} onChange={event => setTransferEditor(draft => draft ? { ...draft, items: draft.items.map((item, itemIndex) => itemIndex === index ? { ...item, quantity: event.target.value } : item) } : draft)} />{product && <small>Available {qty(product.quantity_on_hand)} {product.unit_label ?? ''}</small>}</label><button type="button" className="icon-button" aria-label={`Remove transfer line ${index + 1}`} disabled={transferEditor.items.length === 1} onClick={() => setTransferEditor(draft => draft ? { ...draft, items: draft.items.filter((_, itemIndex) => itemIndex !== index) } : draft)}><X size={16} /></button></div>;
           })}</div>
           {createTransfer.isError && <p className="error-state">{apiMessage(createTransfer.error)}</p>}
-          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={createTransfer.isPending} onClick={() => setTransferEditor(null)}>Cancel</button><button className="primary-button" disabled={!transferValid || createTransfer.isPending}>{createTransfer.isPending ? 'Posting transfer…' : 'Review transfer'}</button></footer>
+          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={createTransfer.isPending} onClick={() => setTransferEditor(null)}>Cancel</button><button type="submit" className="primary-button" disabled={!transferValid || createTransfer.isPending}>{createTransfer.isPending ? 'Posting transfer…' : 'Review transfer'}</button></footer>
         </form>
       </div>
     )}
