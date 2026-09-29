@@ -120,6 +120,34 @@ export function AppShell(){
   },[commandOpen]);
 
   useEffect(()=>{
+    let locked=false;
+    let previousOverflow='';
+
+    const syncModalScrollLock=()=>{
+      const hasModal=Boolean(document.querySelector('.modal-backdrop'));
+      if(hasModal&&!locked){
+        previousOverflow=document.body.style.overflow;
+        document.body.style.overflow='hidden';
+        locked=true;
+        return;
+      }
+      if(!hasModal&&locked){
+        document.body.style.overflow=previousOverflow;
+        locked=false;
+      }
+    };
+
+    const observer=new MutationObserver(syncModalScrollLock);
+    observer.observe(document.body,{childList:true,subtree:true});
+    syncModalScrollLock();
+
+    return ()=>{
+      observer.disconnect();
+      if(locked)document.body.style.overflow=previousOverflow;
+    };
+  },[]);
+
+  useEffect(()=>{
     if(!mobileNavOpen)return;
     const previousOverflow=document.body.style.overflow;
     const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==='Escape')setMobileNavOpen(false)};
