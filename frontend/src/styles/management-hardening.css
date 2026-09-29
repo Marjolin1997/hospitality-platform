@@ -977,3 +977,34 @@ textarea:disabled{
 .cash-movement-review .inline-actions{
   justify-content:flex-end;
 }
+
+
+/* Reports filter clarity */
+.report-presets .secondary-button.active,
+.report-presets .secondary-button[aria-pressed="true"]{
+  border-color:#b9c7b0;
+  background:#edf4e8;
+  color:#465c3b;
+  box-shadow:inset 0 0 0 1px rgba(105,128,88,.08);
+}
+
+.report-range-status{
+  display:grid;
+  justify-items:end;
+  gap:3px;
+  text-align:right;
+}
+
+.report-range-status strong{
+  color:#80632e;
+  font-size:8.5px;
+  font-weight:850;
+  letter-spacing:.02em;
+}
+
+@media(max-width:680px){
+  .report-range-status{
+    justify-items:start;
+    text-align:left;
+  }
+}
