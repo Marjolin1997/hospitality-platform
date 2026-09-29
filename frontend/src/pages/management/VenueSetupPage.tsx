@@ -845,7 +845,7 @@ export function VenueSetupPage() {
             {saveArea.isError && <p className="error-state">{apiMessage(saveArea.error)}</p>}
             <footer className="modal-actions">
               <button type="button" className="secondary-button" disabled={saveArea.isPending} onClick={() => setAreaEditor(null)}>Cancel</button>
-              <button className="primary-button" disabled={saveArea.isPending || !areaEditor.name.trim() || !Number.isInteger(Number(areaEditor.sort_order))}>
+              <button type="submit" className="primary-button" disabled={saveArea.isPending || !areaEditor.name.trim() || !Number.isInteger(Number(areaEditor.sort_order))}>
                 {saveArea.isPending ? 'Saving area…' : areaEditor.id ? 'Save area' : 'Create area'}
               </button>
             </footer>
@@ -910,7 +910,7 @@ export function VenueSetupPage() {
             {saveTable.isError && <p className="error-state">{apiMessage(saveTable.error)}</p>}
             <footer className="modal-actions">
               <button type="button" className="secondary-button" disabled={saveTable.isPending} onClick={() => setTableEditor(null)}>Cancel</button>
-              <button
+              <button type="submit"
                 className="primary-button"
                 disabled={
                   saveTable.isPending
@@ -967,7 +967,7 @@ export function VenueSetupPage() {
             {saveRegister.isError && <p className="error-state">{apiMessage(saveRegister.error)}</p>}
             <footer className="modal-actions">
               <button type="button" className="secondary-button" disabled={saveRegister.isPending} onClick={() => setRegisterEditor(null)}>Cancel</button>
-              <button
+              <button type="submit"
                 className="primary-button"
                 disabled={
                   saveRegister.isPending
