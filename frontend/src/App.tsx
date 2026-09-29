@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { useAuth } from './features/auth/AuthProvider';
 import { LoginPage } from './pages/auth/LoginPage';
@@ -35,9 +35,10 @@ function RequireModuleAccess({ access, children }: { access: ModuleAccessKey; ch
   if (!activeBusiness) {
     return (
       <main className="management-page">
-        <section className="panel management-state">
+        <section className="panel management-state access-state">
           <strong>No active workspace</strong>
           <span>Select or join an active business before opening this module.</span>
+          <Link className="secondary-button" to="/dashboard">Return to dashboard</Link>
         </section>
       </main>
     );
@@ -46,9 +47,10 @@ function RequireModuleAccess({ access, children }: { access: ModuleAccessKey; ch
   if (permissions.length > 0 && !canAny([...permissions])) {
     return (
       <main className="management-page">
-        <section className="panel management-state">
+        <section className="panel management-state access-state">
           <strong>Access required</strong>
           <span>Your current business role does not include access to this module.</span>
+          <Link className="secondary-button" to="/dashboard">Return to dashboard</Link>
         </section>
       </main>
     );
