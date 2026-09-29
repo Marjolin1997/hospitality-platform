@@ -25,7 +25,16 @@ const PurchasingPage = lazy(() => import('./pages/management/PurchasingPage').th
 const ReportsPage = lazy(() => import('./pages/management/ReportsPage').then(module => ({ default: module.ReportsPage })));
 
 function RouteFallback() {
-  return <div className="app-loading">Preparing your workspace…</div>;
+  return (
+    <div className="app-loading workspace-route-loading" role="status" aria-live="polite">
+      <span className="route-loading-mark" aria-hidden="true">H</span>
+      <div>
+        <strong>Preparing your workspace</strong>
+        <span>Loading the latest module and business context…</span>
+      </div>
+      <span className="route-loading-bar" aria-hidden="true"><i /></span>
+    </div>
+  );
 }
 
 function RequireModuleAccess({ access, children }: { access: ModuleAccessKey; children: ReactNode }) {
