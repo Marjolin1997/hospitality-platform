@@ -46,6 +46,31 @@ export function AppShell(){
         return;
       }
 
+      if(event.key==='Tab'&&!commandOpen){
+        const dialogs=Array.from(document.querySelectorAll<HTMLElement>('.modal-backdrop [role="dialog"]'));
+        const dialog=dialogs.at(-1);
+        if(dialog){
+          const focusable=Array.from(dialog.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+          )).filter(element=>element.offsetParent!==null);
+          if(focusable.length>0){
+            const first=focusable[0];
+            const last=focusable[focusable.length-1];
+            const active=document.activeElement as HTMLElement|null;
+            if(event.shiftKey&&(active===first||!dialog.contains(active))){
+              event.preventDefault();
+              last.focus();
+              return;
+            }
+            if(!event.shiftKey&&(active===last||!dialog.contains(active))){
+              event.preventDefault();
+              first.focus();
+              return;
+            }
+          }
+        }
+      }
+
       const target=event.target as HTMLElement|null;
       const isTyping=Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'));
 
