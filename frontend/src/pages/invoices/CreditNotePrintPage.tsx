@@ -7,8 +7,9 @@ import { api } from '../../lib/api';
 
 type CreditLine={
   id:string;position:number;product_name_snapshot:string;sku_snapshot:string|null;
-  unit_code_snapshot:string;unit_label_snapshot:string;quantity:string;unit_price:string;
+  unit_code_snapshot:string;unit_label_snapshot:string;quantity:string;unit_price:string;unit_price_foreign:string|null;
   discount_percent:string;tax_rate:string;line_subtotal:string;line_tax:string;line_total:string;
+  line_subtotal_foreign:string|null;line_tax_foreign:string|null;line_total_foreign:string|null;
 };
 type PaymentSnapshot={id:string;method:string;method_label:string;amount:string;currency:string;amount_base:string;base_currency:string};
 type OriginalInvoice={
@@ -18,7 +19,10 @@ type OriginalInvoice={
 };
 type CreditDetail={
   id:string;invoice_id:string;number:string;status:string;fiscalization_status:string;fiscal_invoice_type:string|null;
-  fiscal_invoice_number:string|null;currency:string;subtotal:string;discount_total:string;tax_total:string;grand_total:string;
+  fiscal_invoice_number:string|null;currency:string;invoice_currency:string|null;exchange_rate:string|null;
+  exchange_rate_source:string|null;exchange_rate_effective_at:string|null;
+  subtotal:string;discount_total:string;tax_total:string;grand_total:string;
+  subtotal_foreign:string|null;discount_total_foreign:string|null;tax_total_foreign:string|null;grand_total_foreign:string|null;
   invoice_number_snapshot:string;original_invoice_nslf_snapshot:string|null;original_invoice_issued_at_snapshot:string|null;
   fiscal_operator_code_snapshot:string|null;fiscal_business_unit_code_snapshot:string|null;fiscal_tcr_code_snapshot:string|null;
   customer_name_snapshot:string|null;customer_tax_number_snapshot:string|null;reason:string;issued_at:string|null;fiscalized_at:string|null;
@@ -54,9 +58,17 @@ export function CreditNotePrintPage(){
   const timeZone=activeBusiness?.timezone??'Europe/Tirane';
   const qrValue=credit.verification_url||credit.qr_payload||'';
   const seller=original.business_legal_name_snapshot||original.business_name_snapshot||'—';
+  const displayCurrency=credit.invoice_currency||credit.currency;
+  const isForeign=displayCurrency!==credit.currency&&Boolean(credit.exchange_rate&&credit.grand_total_foreign);
+  const displaySubtotal=isForeign?credit.subtotal_foreign!:credit.subtotal;
+  const displayTax=isForeign?credit.tax_total_foreign!:credit.tax_total;
+  const displayGrand=isForeign?credit.grand_total_foreign!:credit.grand_total;
+
   const vatGroups=Object.values(credit.lines.reduce<Record<string,{rate:number;base:number;tax:number}>>((acc,line)=>{
     const key=String(Number(line.tax_rate));acc[key]??={rate:Number(line.tax_rate),base:0,tax:0};
-    acc[key].base-=Math.abs(Number(line.line_subtotal));acc[key].tax-=Math.abs(Number(line.line_tax));return acc;
+    acc[key].base-=Math.abs(Number(isForeign?line.line_subtotal_foreign:line.line_subtotal));
+    acc[key].tax-=Math.abs(Number(isForeign?line.line_tax_foreign:line.line_tax));
+    return acc;
   },{})).sort((a,b)=>a.rate-b.rate);
 
   return <main className="fiscal-invoice-shell">
@@ -88,26 +100,41 @@ export function CreditNotePrintPage(){
         <span>Operatori:</span><strong>{credit.fiscal_operator_code_snapshot??'—'}</strong>
         <span>Business Unit:</span><strong>{credit.fiscal_business_unit_code_snapshot??'—'}</strong>
         <span>TCR:</span><strong>{credit.fiscal_tcr_code_snapshot??'—'}</strong>
+        <span>Monedha:</span><strong>{displayCurrency}</strong>
       </section>
+
+      {isForeign&&<section className="invoice-exchange-box">
+        <div><span>Kursi i këmbimit</span><strong>1 {displayCurrency} = {Number(credit.exchange_rate).toFixed(2)} {credit.currency}</strong></div>
+        <div><span>Burimi</span><strong>{credit.exchange_rate_source??'—'}</strong></div>
+        <div><span>Efektiv më</span><strong>{fiscalDate(credit.exchange_rate_effective_at,timeZone)}</strong></div>
+      </section>}
 
       <div className="invoice-table-wrap">
         <table className="fiscal-invoice-table invoice-items-table">
-          <thead><tr><th>Përshkrimi</th><th>Njësia</th><th>Sasia</th><th>Çmimi pa TVSH</th><th>Zbritje %</th><th>TVSH %</th><th>Baza</th><th>TVSH</th><th>Totali</th></tr></thead>
+          <thead><tr><th>Përshkrimi</th><th>Njësia</th><th>Sasia</th><th>Çmimi pa TVSH ({displayCurrency})</th><th>Zbritje %</th><th>TVSH %</th><th>Baza ({displayCurrency})</th><th>TVSH ({displayCurrency})</th><th>Totali ({displayCurrency})</th></tr></thead>
           <tbody>
             {credit.lines.map(line=>{
+              const grossUnit=Number(isForeign?line.unit_price_foreign:line.unit_price);
               const taxFactor=1+(Number(line.tax_rate)/100);
-              const unitNet=taxFactor===0?Number(line.unit_price):Number(line.unit_price)/taxFactor;
-              return <tr key={line.id}><td>{line.product_name_snapshot}</td><td>{line.unit_label_snapshot||line.unit_code_snapshot}</td><td>-{fixed(line.quantity,3)}</td><td>{neg(unitNet)}</td><td>{Number(line.discount_percent)>0?fixed(line.discount_percent):''}</td><td>{fixed(line.tax_rate)}</td><td>{neg(line.line_subtotal)}</td><td>{neg(line.line_tax)}</td><td>{neg(line.line_total)}</td></tr>;
+              const unitNet=taxFactor===0?grossUnit:grossUnit/taxFactor;
+              return <tr key={line.id}><td>{line.product_name_snapshot}</td><td>{line.unit_label_snapshot||line.unit_code_snapshot}</td><td>-{fixed(line.quantity,3)}</td><td>{neg(unitNet)}</td><td>{Number(line.discount_percent)>0?fixed(line.discount_percent):''}</td><td>{fixed(line.tax_rate)}</td><td>{neg(isForeign?line.line_subtotal_foreign!:line.line_subtotal)}</td><td>{neg(isForeign?line.line_tax_foreign!:line.line_tax)}</td><td>{neg(isForeign?line.line_total_foreign!:line.line_total)}</td></tr>;
             })}
-            <tr className="invoice-total-row"><td colSpan={6}></td><th colSpan={2}>Vlera pa TVSH</th><td>{neg(credit.subtotal)}</td></tr>
-            <tr className="invoice-total-row"><td colSpan={6}></td><th colSpan={2}>TVSH</th><td>{neg(credit.tax_total)}</td></tr>
-            <tr className="invoice-total-row grand"><td colSpan={6}></td><th colSpan={2}>Totali korrigjues ({credit.currency})</th><td>{neg(credit.grand_total)}</td></tr>
+            <tr className="invoice-total-row"><td colSpan={6}></td><th colSpan={2}>Vlera pa TVSH ({displayCurrency})</th><td>{neg(displaySubtotal)}</td></tr>
+            <tr className="invoice-total-row"><td colSpan={6}></td><th colSpan={2}>TVSH ({displayCurrency})</th><td>{neg(displayTax)}</td></tr>
+            <tr className="invoice-total-row grand"><td colSpan={6}></td><th colSpan={2}>Totali korrigjues ({displayCurrency})</th><td>{neg(displayGrand)}</td></tr>
+            {isForeign&&<tr className="invoice-total-row base-equivalent"><td colSpan={6}></td><th colSpan={2}>Kundërvlera në {credit.currency}</th><td>{neg(credit.grand_total)}</td></tr>}
           </tbody>
         </table>
       </div>
 
+      {isForeign&&<section className="invoice-dual-total-box corrective-dual-total">
+        <div><span>Totali korrigjues</span><strong>{neg(displayGrand)} {displayCurrency}</strong></div>
+        <div><span>Kundërvlera</span><strong>{neg(credit.grand_total)} {credit.currency}</strong></div>
+        <div><span>Kursi i fiksuar</span><strong>1 {displayCurrency} = {Number(credit.exchange_rate).toFixed(2)} {credit.currency}</strong></div>
+      </section>}
+
       <h2 className="invoice-section-title">Shpërndarja e TVSH-së</h2>
-      <table className="fiscal-invoice-table vat-table"><thead><tr><th>Norma</th><th>Baza ({credit.currency})</th><th>TVSH ({credit.currency})</th></tr></thead><tbody>{vatGroups.map(v=><tr key={v.rate}><td>{fixed(v.rate)}</td><td>{fixed(v.base)}</td><td>{fixed(v.tax)}</td></tr>)}</tbody></table>
+      <table className="fiscal-invoice-table vat-table"><thead><tr><th>Norma</th><th>Baza ({displayCurrency})</th><th>TVSH ({displayCurrency})</th></tr></thead><tbody>{vatGroups.map(v=><tr key={v.rate}><td>{fixed(v.rate)}</td><td>{fixed(v.base)}</td><td>{fixed(v.tax)}</td></tr>)}</tbody></table>
 
       <section className="invoice-fiscal-codes">
         <div><span>NSLF:</span><strong>{credit.nslf??'Në pritje të fiskalizimit'}</strong></div>
@@ -115,7 +142,7 @@ export function CreditNotePrintPage(){
       </section>
 
       <section className="invoice-payment-qr-grid">
-        <div><h2 className="invoice-section-title">Mënyra e pagesës së korrigjuar:</h2><table className="fiscal-invoice-table payment-table"><thead><tr><th>Lloji</th><th>Sasi ({credit.currency})</th></tr></thead><tbody>{credit.payments.map(p=><tr key={p.id}><td>{p.method_label}</td><td>{neg(p.currency===credit.currency?p.amount:p.amount_base)}</td></tr>)}</tbody></table></div>
+        <div><h2 className="invoice-section-title">Mënyra e pagesës së korrigjuar:</h2><table className="fiscal-invoice-table payment-table"><thead><tr><th>Lloji</th><th>Shuma e paguar</th><th>Kundërvlera</th></tr></thead><tbody>{credit.payments.map(p=><tr key={p.id}><td>{p.method_label}</td><td>{neg(p.amount)} {p.currency}</td><td>{neg(p.amount_base)} {p.base_currency}</td></tr>)}</tbody></table></div>
         <div className="invoice-qr">{qrValue?<QRCodeSVG value={qrValue} size={170} level="M" marginSize={2}/>:<div className="invoice-qr-pending">QR<br/><small>pas fiskalizimit</small></div>}</div>
       </section>
     </article>
