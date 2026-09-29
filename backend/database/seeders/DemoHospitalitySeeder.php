@@ -69,7 +69,7 @@ final class DemoHospitalitySeeder extends Seeder
             DB::table('locations')
                 ->where('id', $location->id)
                 ->update([
-                    'fiscal_business_unit_code' => 'BU-DEMO-001',
+                    'fiscal_business_unit_code' => 'dm001bu001',
                     'updated_at' => now(),
                 ]);
 
@@ -86,7 +86,7 @@ final class DemoHospitalitySeeder extends Seeder
             DB::table('locations')
                 ->where('id', $secondLocation->id)
                 ->update([
-                    'fiscal_business_unit_code' => 'BU-DEMO-002',
+                    'fiscal_business_unit_code' => 'dm002bu002',
                     'updated_at' => now(),
                 ]);
 
@@ -110,14 +110,14 @@ final class DemoHospitalitySeeder extends Seeder
                 $business,
                 $owner,
                 (string) $roles['owner']->id,
-                'OP-DEMO-001',
+                'dm001op001',
             );
 
-            $manager = $this->staff($business, (string) $roles['manager']->id, 'Demo Manager', 'manager@demo.local', 'OP-DEMO-002');
-            $waiter = $this->staff($business, (string) $roles['waiter']->id, 'Demo Waiter', 'waiter@demo.local', 'OP-DEMO-003');
-            $bartender = $this->staff($business, (string) $roles['bartender']->id, 'Demo Bartender', 'bartender@demo.local', 'OP-DEMO-004');
-            $cashier = $this->staff($business, (string) $roles['cashier']->id, 'Demo Cashier', 'cashier@demo.local', 'OP-DEMO-005');
-            $this->staff($business, (string) $roles['inventory']->id, 'Demo Inventory', 'inventory@demo.local', 'OP-DEMO-006');
+            $manager = $this->staff($business, (string) $roles['manager']->id, 'Demo Manager', 'manager@demo.local', 'dm002op002');
+            $waiter = $this->staff($business, (string) $roles['waiter']->id, 'Demo Waiter', 'waiter@demo.local', 'dm003op003');
+            $bartender = $this->staff($business, (string) $roles['bartender']->id, 'Demo Bartender', 'bartender@demo.local', 'dm004op004');
+            $cashier = $this->staff($business, (string) $roles['cashier']->id, 'Demo Cashier', 'cashier@demo.local', 'dm005op005');
+            $this->staff($business, (string) $roles['inventory']->id, 'Demo Inventory', 'inventory@demo.local', 'dm006op006');
 
             $this->membershipAudit($business, $waiter, $owner, $roles['waiter'], 'inactive', 'active', 'status_changed');
 
@@ -144,7 +144,7 @@ final class DemoHospitalitySeeder extends Seeder
                     'provider' => 'direct_dpt',
                     'environment' => 'test',
                     'status' => 'configured',
-                    'software_code' => 'DEMO-SW-001',
+                    'software_code' => 'dm001sw001',
                     'certificate_secret_ref' => 'local/demo/fiscal-certificate',
                     'certificate_password_secret_ref' => 'local/demo/fiscal-certificate-password',
                     'is_issuer_in_vat' => true,
@@ -236,8 +236,8 @@ final class DemoHospitalitySeeder extends Seeder
                 );
             }
 
-            $registerId = $this->register($business, (string) $location->id, 'Main Bar Till', 'TILL-01', 'TCR-DEMO-001');
-            $this->register($business, (string) $secondLocation->id, 'Rooftop Till', 'TILL-02', 'TCR-DEMO-002');
+            $registerId = $this->register($business, (string) $location->id, 'Main Bar Till', 'TILL-01', 'dm001tr001');
+            $this->register($business, (string) $secondLocation->id, 'Rooftop Till', 'TILL-02', 'dm002tr002');
 
             $sessionId = $this->existingOrNewId('cash_sessions', [
                 'business_id' => $business->id,
@@ -351,9 +351,9 @@ final class DemoHospitalitySeeder extends Seeder
                     'business_tax_number_snapshot' => $business->tax_number,
                     'location_name_snapshot' => 'Blloku Flagship',
                     'location_address_snapshot' => 'Rruga Ibrahim Rugova, Tirane · DEMO',
-                    'fiscal_operator_code_snapshot' => 'OP-DEMO-005',
-                    'fiscal_business_unit_code_snapshot' => 'BU-DEMO-001',
-                    'fiscal_tcr_code_snapshot' => 'TCR-DEMO-001',
+                    'fiscal_operator_code_snapshot' => 'dm005op005',
+                    'fiscal_business_unit_code_snapshot' => 'dm001bu001',
+                    'fiscal_tcr_code_snapshot' => 'dm001tr001',
                     'status' => 'issued',
                     'fiscalization_status' => 'fiscalized',
                     'fiscal_invoice_type' => 'CASH',
@@ -417,7 +417,7 @@ final class DemoHospitalitySeeder extends Seeder
                 'attempt_no' => 1,
                 'provider' => 'direct_dpt',
                 'environment' => 'test',
-                'status' => 'success',
+                'status' => 'succeeded',
                 'retryable' => false,
                 'request_id' => 'DEMO-REQUEST-001',
                 'payload_hash' => hash('sha256', 'demo-invoice-payload'),
