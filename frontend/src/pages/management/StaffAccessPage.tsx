@@ -723,6 +723,11 @@ export function StaffAccessPage() {
                 <option value="inactive">Inactive</option>
               </select>
               <span className="toolbar-result-count">{filteredStaff.length} of {staff.length}</span>
+              {(search || roleFilter !== 'all' || statusFilter !== 'all') && (
+                <button type="button" className="text-button filter-reset-button" onClick={()=>{setSearch('');setRoleFilter('all');setStatusFilter('all')}}>
+                  Reset filters
+                </button>
+              )}
             </div>
           </div>
 
@@ -884,6 +889,11 @@ export function StaffAccessPage() {
                 <option value="revoked">Revoked</option>
               </select>
               <span className="toolbar-result-count">{filteredInvitations.length} of {invitations.length}</span>
+              {(inviteSearch || inviteStatus !== 'all') && (
+                <button type="button" className="text-button filter-reset-button" onClick={()=>{setInviteSearch('');setInviteStatus('all')}}>
+                  Reset filters
+                </button>
+              )}
             </div>
           </div>
 
