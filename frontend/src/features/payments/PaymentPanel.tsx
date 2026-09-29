@@ -19,7 +19,7 @@ export function PaymentPanel({ orderId, grandTotal, paidTotal, baseCurrency, pay
   const [cashSessionId,setCashSessionId]=useState('');
   const [refundPaymentId,setRefundPaymentId]=useState(''); const [refundAmount,setRefundAmount]=useState(''); const [refundReason,setRefundReason]=useState(''); const [refundReview,setRefundReview]=useState(false);
   const refund=useRefundPayment(refundPaymentId);
-  useEffect(()=>{setCurrency(baseCurrency);setAmount(String(remaining));setTendered('')},[orderId,baseCurrency,remaining]);
+  useEffect(()=>{setCurrency(baseCurrency);setAmount(String(remaining));setTendered('');setRefundPaymentId('');setRefundAmount('');setRefundReason('');setRefundReview(false)},[orderId,baseCurrency,remaining]);
   useEffect(()=>{const rows=sessions.data??[];setCashSessionId(current=>rows.some(s=>s.id===current)?current:rows.length===1?rows[0].id:'')},[sessions.data]);
   const selectedSession=(sessions.data??[]).find(s=>s.id===cashSessionId);
   const numericAmount=Number(amount); const numericTendered=Number(tendered||0);
