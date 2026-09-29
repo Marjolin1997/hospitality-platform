@@ -1,3 +1,4 @@
+import { useIsFetching, useIsMutating } from '@tanstack/react-query';
 import { BarChart3, Boxes, Coffee, FileText, LayoutDashboard, LayoutGrid, LogOut, Menu, ReceiptText, Search, Settings, ShoppingCart, Truck, Users, WalletCards, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -25,6 +26,9 @@ const navigation=[
 export function AppShell(){
   const navigate=useNavigate();
   const location=useLocation();
+  const activeFetches=useIsFetching();
+  const activeMutations=useIsMutating();
+  const workspaceBusy=activeFetches+activeMutations>0;
   const [mobileNavOpen,setMobileNavOpen]=useState(false);
   const [commandOpen,setCommandOpen]=useState(false);
   const {user,activeBusiness,activeLocation,selectBusiness,selectLocation,logout,canAny}=useAuth();
@@ -107,6 +111,8 @@ export function AppShell(){
     </aside>
 
     <main className="main-content">
+      <div className={`workspace-activity-bar ${workspaceBusy?'active':''}`} aria-hidden="true"><span/></div>
+      <span className="sr-only" role="status" aria-live="polite">{workspaceBusy?'Workspace updating':'Workspace up to date'}</span>
       <header className="topbar">
         <div className="mobile-topbar-brand">
           <button type="button" className="mobile-menu-button" aria-label="Open navigation" aria-expanded={mobileNavOpen} onClick={()=>setMobileNavOpen(true)}><Menu size={20}/></button>
