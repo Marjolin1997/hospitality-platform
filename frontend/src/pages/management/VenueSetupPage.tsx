@@ -553,6 +553,12 @@ export function VenueSetupPage() {
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
+                <span className="toolbar-result-count">{filteredTables.length} of {venue.tables.length}</span>
+                {(tableSearch || tableArea !== 'all' || tableStatus !== 'all') && (
+                  <button type="button" className="text-button filter-reset-button" onClick={()=>{setTableSearch('');setTableArea('all');setTableStatus('all')}}>
+                    Reset filters
+                  </button>
+                )}
                 <button
                   type="button"
                   className="primary-button"
@@ -692,6 +698,12 @@ export function VenueSetupPage() {
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
+              <span className="toolbar-result-count">{filteredRegisters.length} of {registers.length}</span>
+              {(registerSearch || registerStatus !== 'all') && (
+                <button type="button" className="text-button filter-reset-button" onClick={()=>{setRegisterSearch('');setRegisterStatus('all')}}>
+                  Reset filters
+                </button>
+              )}
               <button type="button" className="primary-button" onClick={() => openRegisterEditor()}>
                 <Plus size={16} />
                 Add register
