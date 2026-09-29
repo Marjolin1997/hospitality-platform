@@ -562,6 +562,7 @@ export function InventoryPage() {
             type="button"
             className="primary-button"
             disabled={!transferOptions || transferOptions.destinations.length === 0}
+            title={!transferOptions ? 'Loading transfer destinations…' : transferOptions.destinations.length === 0 ? 'Create or activate another location before transferring stock.' : undefined}
             onClick={() => {
               createTransfer.reset();
               setTransferEditor(newTransfer());
