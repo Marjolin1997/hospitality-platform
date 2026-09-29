@@ -696,7 +696,7 @@ export function PurchasingPage() {
             <label className="span-2"><span>Address</span><textarea maxLength={1000} value={supplierEditor.address} onChange={event => setSupplierEditor({ ...supplierEditor, address: event.target.value })} /></label>
           </div>
           {saveSupplier.isError && <p className="error-state">{apiMessage(saveSupplier.error)}</p>}
-          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={saveSupplier.isPending} onClick={() => setSupplierEditor(null)}>Cancel</button><button className="primary-button" disabled={saveSupplier.isPending || !supplierEditor.name.trim()}>{saveSupplier.isPending ? 'Saving…' : supplierEditor.id ? 'Save supplier' : 'Create supplier'}</button></footer>
+          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={saveSupplier.isPending} onClick={() => setSupplierEditor(null)}>Cancel</button><button type="submit" className="primary-button" disabled={saveSupplier.isPending || !supplierEditor.name.trim()}>{saveSupplier.isPending ? 'Saving…' : supplierEditor.id ? 'Save supplier' : 'Create supplier'}</button></footer>
         </form>
       </div>
     )}
@@ -755,7 +755,7 @@ export function PurchasingPage() {
           </div>
           <div className="purchase-total-summary"><span>Draft total</span><strong>{money(purchaseEditor.items.reduce((sum, line) => sum + (Number(line.quantity_ordered) || 0) * (Number(line.unit_cost) || 0), 0), currency)}</strong></div>
           {savePurchase.isError && <p className="error-state">{apiMessage(savePurchase.error)}</p>}
-          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={savePurchase.isPending} onClick={() => setPurchaseEditor(null)}>Cancel</button><button className="primary-button" disabled={savePurchase.isPending || !purchaseValid}>{savePurchase.isPending ? 'Saving draft…' : purchaseEditor.id ? 'Save draft' : 'Create draft'}</button></footer>
+          <footer className="modal-actions"><button type="button" className="secondary-button" disabled={savePurchase.isPending} onClick={() => setPurchaseEditor(null)}>Cancel</button><button type="submit" className="primary-button" disabled={savePurchase.isPending || !purchaseValid}>{savePurchase.isPending ? 'Saving draft…' : purchaseEditor.id ? 'Save draft' : 'Create draft'}</button></footer>
         </form>
       </div>
     )}
