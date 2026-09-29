@@ -1172,3 +1172,38 @@ textarea:disabled{
     background:transparent!important;
   }
 }
+
+
+/* Authentication continuity */
+.auth-session-expired{
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  margin:2px 0 16px;
+  padding:11px 12px;
+  border:1px solid #dce7d4;
+  border-radius:11px;
+  background:#f5f9ef;
+  color:#44563d;
+}
+
+.auth-session-expired>svg{
+  flex:0 0 auto;
+  margin-top:1px;
+  color:#6e8a54;
+}
+
+.auth-session-expired>div{
+  display:grid;
+  gap:2px;
+}
+
+.auth-session-expired strong{
+  font-size:10.5px;
+}
+
+.auth-session-expired span{
+  color:#71806b;
+  font-size:9px;
+  line-height:1.45;
+}
