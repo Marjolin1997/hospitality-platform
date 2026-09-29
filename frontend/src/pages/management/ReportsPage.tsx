@@ -208,6 +208,7 @@ export function ReportsPage() {
 
   const days = rangeDays(fromDraft, toDraft);
   const invalidRange = !Number.isFinite(days) || days < 1 || days > 367;
+  const rangeDirty = fromDraft !== range.from || toDraft !== range.to;
 
   const reportLocationsQuery = useQuery({
     queryKey: ['report-locations', activeBusiness?.id],
@@ -240,6 +241,11 @@ export function ReportsPage() {
   const reportLocations = reportLocationsQuery.data ?? [];
   const selectedReportLocation = reportLocations.find(location => location.id === reportLocationId);
   const currency = operational?.scope.currency ?? financial?.scope.currency ?? activeBusiness?.currency ?? 'EUR';
+  const activeReportQuery = tab === 'operational' ? operationalQuery : financialQuery;
+  const today = dateInTimeZone(new Date(), timeZone);
+  const activePreset = !rangeDirty
+    ? [1, 7, 30, 90].find(value => range.from === shiftIsoDate(today, -(value - 1)) && range.to === today) ?? null
+    : null;
 
   const reportTitle = useMemo(
     () => `${selectedReportLocation?.name ?? activeLocation?.name ?? 'Location'} · ${range.from} to ${range.to}`,
@@ -428,23 +434,34 @@ export function ReportsPage() {
           <label><span>To</span><input type="date" value={toDraft} onChange={event => setToDraft(event.target.value)} /></label>
         </div>
         <div className="report-presets" role="group" aria-label="Report date presets">
-          <button type="button" className="secondary-button" onClick={() => applyPreset(7)}>7 days</button>
-          <button type="button" className="secondary-button" onClick={() => applyPreset(30)}>30 days</button>
-          <button type="button" className="secondary-button" onClick={() => applyPreset(90)}>90 days</button>
+          {[1, 7, 30, 90].map(value => (
+            <button
+              type="button"
+              key={value}
+              className={activePreset === value ? 'secondary-button active' : 'secondary-button'}
+              aria-pressed={activePreset === value}
+              onClick={() => applyPreset(value)}
+            >
+              {value === 1 ? 'Today' : `${value} days`}
+            </button>
+          ))}
         </div>
         <button
           type="button"
           className="primary-button"
-          disabled={invalidRange}
+          disabled={invalidRange || activeReportQuery.isFetching}
           onClick={applyRange}
         >
-          <RefreshCw size={15} />
-          Apply / refresh
+          <RefreshCw size={15} className={activeReportQuery.isFetching ? 'spin' : undefined} />
+          {activeReportQuery.isFetching ? 'Updating…' : rangeDirty ? 'Apply range' : 'Refresh report'}
         </button>
       </div>
       <div className="report-range-meta">
         <span>{reportTitle}</span>
-        <small>Business timezone: {timeZone} · maximum range 367 calendar days</small>
+        <div className="report-range-status">
+          {rangeDirty && !invalidRange && <strong>Filters changed · apply to update the report</strong>}
+          <small>Business timezone: {timeZone} · maximum range 367 calendar days</small>
+        </div>
       </div>
       {invalidRange && <p className="field-hint error">Choose a valid date range of no more than 367 calendar days.</p>}
       {reportLocationsQuery.isError && <p className="error-state">{apiMessage(reportLocationsQuery.error)}</p>}
