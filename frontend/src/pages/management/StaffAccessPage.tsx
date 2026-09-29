@@ -812,7 +812,7 @@ export function StaffAccessPage() {
                                 } else if (member.status !== 'active') {
                                   setReactivating(member);
                                 }
-                              }
+                              }}
                             >
                               <option value="active">Active</option>
                               <option value="inactive">Inactive</option>
