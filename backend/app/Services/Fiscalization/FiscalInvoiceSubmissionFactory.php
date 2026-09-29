@@ -39,7 +39,15 @@ final class FiscalInvoiceSubmissionFactory
             }
             if ($invoice->currency !== 'ALL') {
                 throw ValidationException::withMessages([
-                    'currency' => 'Direct DPT fiscalization currently requires an ALL invoice snapshot until foreign-currency exchange fields are implemented.',
+                    'currency' => 'Direct DPT fiscalization requires the immutable base invoice amounts to be stored in ALL.',
+                ]);
+            }
+
+            $documentCurrency = strtoupper((string) ($invoice->invoice_currency ?: $invoice->currency));
+            $isForeignCurrency = $documentCurrency !== 'ALL';
+            if ($isForeignCurrency && (! filled($invoice->exchange_rate) || ! filled($invoice->grand_total_foreign))) {
+                throw ValidationException::withMessages([
+                    'currency' => 'A foreign-currency fiscal invoice requires an immutable exchange-rate and converted total snapshot.',
                 ]);
             }
             if (! in_array($invoice->fiscal_invoice_type, ['CASH','NONCASH'], true)) {
@@ -106,7 +114,7 @@ final class FiscalInvoiceSubmissionFactory
 
             $issueDateTime = $issuedAt->format('Y-m-d\TH:i:sP');
             $sendDateTime = CarbonImmutable::now($business->timezone)->format('Y-m-d\TH:i:sP');
-            $totalPrice = $this->money($invoice->grand_total);
+            $totalPrice = $this->money($isForeignCurrency ? $invoice->grand_total_foreign : $invoice->grand_total);
 
             $iic = $this->iic->generate(
                 issuerNuis: (string) $business->tax_number,
@@ -151,11 +159,11 @@ final class FiscalInvoiceSubmissionFactory
                     throw ValidationException::withMessages(['quantity' => 'Fiscal invoice item quantity cannot be zero.']);
                 }
 
-                $grossUnitBeforeDiscount = BigDecimal::of((string) $line->unit_price);
+                $grossUnitBeforeDiscount = BigDecimal::of((string) ($isForeignCurrency ? $line->unit_price_foreign : $line->unit_price));
                 $taxFactor = BigDecimal::of('1')->plus($rate->dividedBy('100', 10, RoundingMode::HALF_UP));
                 $unitBeforeVat = $grossUnitBeforeDiscount->dividedBy($taxFactor, 10, RoundingMode::HALF_UP);
 
-                $lineGross = BigDecimal::of((string) $line->line_total);
+                $lineGross = BigDecimal::of((string) ($isForeignCurrency ? $line->line_total_foreign : $line->line_total));
                 $unitAfterVat = $lineGross->dividedBy($quantity3, 10, RoundingMode::HALF_UP);
                 $rebate = BigDecimal::of((string) $line->discount_percent);
 
@@ -166,9 +174,9 @@ final class FiscalInvoiceSubmissionFactory
                     'quantity' => $this->quantity($quantity3),
                     'unit_price_before_vat' => $this->money($unitBeforeVat),
                     'unit_price_after_vat' => $this->money($unitAfterVat),
-                    'price_before_vat' => $this->money($line->line_subtotal),
+                    'price_before_vat' => $this->money($isForeignCurrency ? $line->line_subtotal_foreign : $line->line_subtotal),
                     'vat_rate' => $this->money($rate),
-                    'vat_amount' => $this->money($line->line_tax),
+                    'vat_amount' => $this->money($isForeignCurrency ? $line->line_tax_foreign : $line->line_tax),
                     'price_after_vat' => $this->money($lineGross),
                 ];
 
@@ -180,8 +188,8 @@ final class FiscalInvoiceSubmissionFactory
                 $items[] = $item;
                 $taxGroups[$rateKey] ??= ['count'=>0,'base'=>BigDecimal::zero(),'tax'=>BigDecimal::zero(),'rate'=>$rate];
                 $taxGroups[$rateKey]['count']++;
-                $taxGroups[$rateKey]['base'] = $taxGroups[$rateKey]['base']->plus(BigDecimal::of((string) $line->line_subtotal));
-                $taxGroups[$rateKey]['tax'] = $taxGroups[$rateKey]['tax']->plus(BigDecimal::of((string) $line->line_tax));
+                $taxGroups[$rateKey]['base'] = $taxGroups[$rateKey]['base']->plus(BigDecimal::of((string) ($isForeignCurrency ? $line->line_subtotal_foreign : $line->line_subtotal)));
+                $taxGroups[$rateKey]['tax'] = $taxGroups[$rateKey]['tax']->plus(BigDecimal::of((string) ($isForeignCurrency ? $line->line_tax_foreign : $line->line_tax)));
             }
 
             $sameTaxes = array_values(array_map(fn (array $group): array => [
@@ -216,7 +224,7 @@ final class FiscalInvoiceSubmissionFactory
             }
 
             if (! $paymentTotal->toScale(self::MONEY_SCALE, RoundingMode::HALF_UP)
-                ->isEqualTo(BigDecimal::of($totalPrice))) {
+                ->isEqualTo(BigDecimal::of((string) $invoice->grand_total)->toScale(self::MONEY_SCALE, RoundingMode::HALF_UP))) {
                 throw ValidationException::withMessages([
                     'payment' => 'Fiscal payment snapshots do not reconcile with the invoice total.',
                 ]);
@@ -257,9 +265,10 @@ final class FiscalInvoiceSubmissionFactory
                 'tcrCode' => $invoice->fiscal_tcr_code_snapshot,
                 'operatorCode' => (string) $invoice->fiscal_operator_code_snapshot,
                 'softwareCode' => (string) $profile->software_code,
-                'currency' => 'ALL',
-                'totalWithoutVat' => $this->money($invoice->subtotal),
-                'totalVat' => $this->money($invoice->tax_total),
+                'currency' => $documentCurrency,
+                'exchangeRate' => $isForeignCurrency ? $this->money($invoice->exchange_rate) : null,
+                'totalWithoutVat' => $this->money($isForeignCurrency ? $invoice->subtotal_foreign : $invoice->subtotal),
+                'totalVat' => $this->money($isForeignCurrency ? $invoice->tax_total_foreign : $invoice->tax_total),
                 'totalPrice' => $totalPrice,
                 'iic' => $iic['iic'],
                 'iicSignature' => $iic['signature'],
@@ -297,6 +306,7 @@ final class FiscalInvoiceSubmissionFactory
                     operatorCode: $base['operatorCode'],
                     softwareCode: $base['softwareCode'],
                     currency: $base['currency'],
+                    exchangeRate: $base['exchangeRate'],
                     totalWithoutVat: $base['totalWithoutVat'],
                     totalVat: $base['totalVat'],
                     totalPrice: $base['totalPrice'],
