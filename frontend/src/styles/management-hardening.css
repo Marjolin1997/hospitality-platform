@@ -1528,3 +1528,111 @@ textarea:disabled{
     grid-template-columns:1fr;
   }
 }
+
+
+/* ==========================================================================
+   Global status system
+   One visual language for lifecycle, operational and fiscal states everywhere.
+   ========================================================================== */
+.status-badge{
+  --status-bg:#f3f6f4;
+  --status-border:#dde5e0;
+  --status-text:#596860;
+  --status-dot:#87958d;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  min-height:27px;
+  width:max-content;
+  max-width:100%;
+  padding:5px 10px;
+  border:1px solid var(--status-border);
+  border-radius:999px;
+  background:var(--status-bg);
+  color:var(--status-text);
+  box-shadow:0 1px 2px rgba(20,38,29,.035);
+  font-size:10px;
+  font-weight:800;
+  line-height:1;
+  letter-spacing:.015em;
+  text-transform:capitalize;
+  white-space:nowrap;
+  vertical-align:middle;
+}
+.status-badge::before{
+  content:"";
+  flex:0 0 6px;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:var(--status-dot);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--status-dot) 13%,transparent);
+}
+.status-badge.success{
+  --status-bg:#f0f8ed;
+  --status-border:#d6e8cf;
+  --status-text:#37602f;
+  --status-dot:#5b8d4a;
+}
+.status-badge.warning{
+  --status-bg:#fff8e9;
+  --status-border:#edddb3;
+  --status-text:#765719;
+  --status-dot:#d49a27;
+}
+.status-badge.danger{
+  --status-bg:#fff2ef;
+  --status-border:#efd2cc;
+  --status-text:#913b32;
+  --status-dot:#d45b4e;
+}
+.status-badge.muted{
+  --status-bg:#f4f6f5;
+  --status-border:#e0e5e2;
+  --status-text:#707d76;
+  --status-dot:#9aa59f;
+}
+.status-badge.info{
+  --status-bg:#eef6fb;
+  --status-border:#d1e4f0;
+  --status-text:#315d78;
+  --status-dot:#4d8faf;
+}
+.status-badge:empty{
+  display:none;
+}
+.data-table .status-badge{
+  min-height:26px;
+  padding:5px 9px;
+}
+.status-select{
+  min-height:36px!important;
+  border:1px solid #dce4df!important;
+  border-radius:999px!important;
+  background-color:#f8faf9!important;
+  color:#415149!important;
+  padding:6px 32px 6px 12px!important;
+  box-shadow:0 1px 2px rgba(20,38,29,.03);
+  font-size:10px!important;
+  font-weight:750!important;
+  line-height:1.2;
+  outline:none;
+  transition:border-color .15s ease,box-shadow .15s ease,background .15s ease;
+}
+.status-select:hover{
+  border-color:#c9d5ce!important;
+  background-color:#fff!important;
+}
+.status-select:focus{
+  border-color:#789640!important;
+  box-shadow:0 0 0 3px rgba(118,150,61,.11)!important;
+  background-color:#fff!important;
+}
+@media(max-width:620px){
+  .status-badge{
+    min-height:26px;
+    padding:5px 9px;
+    font-size:9.5px;
+  }
+}
