@@ -11,6 +11,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../features/auth/AuthProvider';
+import { authExpiredStorageKey } from '../../lib/api';
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -19,6 +20,11 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [sessionExpired] = useState(() => {
+    const expired = window.sessionStorage.getItem(authExpiredStorageKey) === '1';
+    if (expired) window.sessionStorage.removeItem(authExpiredStorageKey);
+    return expired;
+  });
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,6 +81,16 @@ export function LoginPage() {
             <h2>Sign in to your workspace</h2>
             <p>Enter your staff credentials to continue securely.</p>
           </div>
+
+          {sessionExpired && (
+            <div className="auth-session-expired" role="status" aria-live="polite">
+              <ShieldCheck size={16} aria-hidden="true" />
+              <div>
+                <strong>Your session expired</strong>
+                <span>Sign in again to continue securely. Your previous workspace selection was cleared.</span>
+              </div>
+            </div>
+          )}
 
           <div className="auth-fields">
             <label className="auth-field">
