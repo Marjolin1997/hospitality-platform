@@ -3,6 +3,7 @@ import axios from 'axios';
 const businessStorageKey = 'hospitality.activeBusinessId';
 const locationStorageKey = 'hospitality.activeLocationId';
 export const authExpiredEvent = 'hospitality:auth-expired';
+export const authExpiredStorageKey = 'hospitality.sessionExpired';
 
 export const api = axios.create({ baseURL: import.meta.env.VITE_API_URL ?? '/api/v1', headers: { Accept: 'application/json' }, withCredentials: true });
 export const csrf = axios.create({ baseURL: import.meta.env.VITE_BACKEND_URL ?? '', withCredentials: true, headers: { Accept: 'application/json' } });
@@ -36,6 +37,7 @@ api.interceptors.response.use(
     if (status === 401) {
       clearWorkspaceContext();
       if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem(authExpiredStorageKey, '1');
         window.dispatchEvent(new Event(authExpiredEvent));
       }
     }
