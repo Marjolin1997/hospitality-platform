@@ -487,6 +487,7 @@ export function PurchasingPage() {
           type="button"
           className="primary-button"
           disabled={!options || options.suppliers.length === 0 || options.products.length === 0}
+          title={!options ? 'Loading purchasing options…' : options.suppliers.length === 0 ? 'Add or activate a supplier before creating a purchase order.' : options.products.length === 0 ? 'At least one active stock-tracked product is required.' : undefined}
           onClick={() => {
             savePurchase.reset();
             setPurchaseEditor(blankPurchase());
