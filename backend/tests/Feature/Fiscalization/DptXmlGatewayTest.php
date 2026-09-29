@@ -43,7 +43,7 @@ function dptTestCredentials(string $commonName = 'GDT eFiskalizimi Test'): array
     ];
 }
 
-function dptSubmission(string $requestUuid = '11111111-2222-4333-8444-555555555555'): FiscalInvoiceSubmission
+function dptSubmission(string $requestUuid = '11111111-2222-4333-8444-555555555555', string $currency = 'ALL', ?string $exchangeRate = null): FiscalInvoiceSubmission
 {
     return new FiscalInvoiceSubmission(
         invoiceId: '01TESTINVOICE00000000000001',
@@ -62,7 +62,8 @@ function dptSubmission(string $requestUuid = '11111111-2222-4333-8444-5555555555
         tcrCode: 'aa123aa123',
         operatorCode: 'cc123cc123',
         softwareCode: 'dd123dd123',
-        currency: 'ALL',
+        currency: $currency,
+        exchangeRate: $exchangeRate,
         totalWithoutVat: '100.00',
         totalVat: '20.00',
         totalPrice: '120.00',
@@ -140,6 +141,33 @@ test('register invoice XML v3 is signed and preserves required fiscal facts', fu
         ->toContain('SignatureValue');
 
     app(FiscalXmlSignatureVerifier::class)->verify($xml,'Request',false);
+});
+
+test('foreign-currency invoice XML includes the mandatory currency and exchange rate', function (): void {
+    $submission = dptSubmission(
+        '11111111-2222-4333-8444-555555555556',
+        'EUR',
+        '98.50',
+    );
+
+    ['document' => $document] = app(DptRegisterInvoiceXmlBuilder::class)->build($submission);
+    $xml = $document->saveXML();
+
+    expect($xml)
+        ->toContain('Currency')
+        ->toContain('Code="EUR"')
+        ->toContain('ExRate="98.50"');
+});
+
+test('foreign-currency invoice XML refuses a missing exchange rate', function (): void {
+    $submission = dptSubmission(
+        '11111111-2222-4333-8444-555555555557',
+        'EUR',
+        null,
+    );
+
+    expect(fn () => app(DptRegisterInvoiceXmlBuilder::class)->build($submission))
+        ->toThrow(RuntimeException::class, 'Foreign-currency fiscal invoices require an exchange rate.');
 });
 
 test('direct DPT gateway accepts only a cryptographically signed matching response', function (): void {
