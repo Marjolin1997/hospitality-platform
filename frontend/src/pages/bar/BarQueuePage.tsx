@@ -32,6 +32,7 @@ export function BarQueuePage() {
         <label className="search-box compact-search"><Search size={16}/><input aria-label="Search preparation tickets" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search order, item or note…"/>{search&&<button type="button" className="search-clear" aria-label="Clear ticket search" onClick={()=>setSearch('')}><X size={14}/></button>}</label>
         <select aria-label="Filter preparation station" value={station} onChange={e=>setStation(e.target.value)}><option value="all">All stations</option>{stations.map(value=><option key={value} value={value}>{value}</option>)}</select>
         <span className="toolbar-result-count">{filtered.length} of {items.length} tickets</span>
+        {(search || station !== 'all') && <button type="button" className="text-button filter-reset-button" onClick={()=>{setSearch('');setStation('all')}}>Reset filters</button>}
       </div>
     </section>
 
