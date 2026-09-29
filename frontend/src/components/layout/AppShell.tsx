@@ -35,15 +35,35 @@ export function AppShell(){
   const ActiveIcon=activeNavigation.icon;
 
   useEffect(()=>{
-    const openCommand=(event:KeyboardEvent)=>{
+    const handleWorkspaceKeyboard=(event:KeyboardEvent)=>{
       if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
         event.preventDefault();
         setCommandOpen(true);
+        return;
+      }
+
+      if(event.key!=='Escape')return;
+
+      if(commandOpen){
+        event.preventDefault();
+        setCommandOpen(false);
+        return;
+      }
+
+      const modalCloseButtons=Array.from(
+        document.querySelectorAll<HTMLButtonElement>('.modal-backdrop button[aria-label*="Close"]'),
+      ).filter(button=>!button.disabled);
+
+      const closeButton=modalCloseButtons.at(-1);
+      if(closeButton){
+        event.preventDefault();
+        closeButton.click();
       }
     };
-    window.addEventListener('keydown',openCommand);
-    return ()=>window.removeEventListener('keydown',openCommand);
-  },[]);
+
+    window.addEventListener('keydown',handleWorkspaceKeyboard);
+    return ()=>window.removeEventListener('keydown',handleWorkspaceKeyboard);
+  },[commandOpen]);
 
   useEffect(()=>{
     if(!mobileNavOpen)return;
