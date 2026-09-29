@@ -461,6 +461,9 @@ export function StaffAccessPage() {
   const staff = data.staff;
   const assignableRoleIds = new Set(data.assignable_role_ids);
   const assignableRoles = data.roles.filter(role => assignableRoleIds.has(role.id));
+  const roleChangeRole = roleChangeTarget
+    ? assignableRoles.find(role => role.id === roleChangeTarget.roleId) ?? null
+    : null;
 
   const activeMembers = staff.filter(member => member.status === 'active').length;
   const ownerRole = data.roles.find(role => role.slug === 'owner');
@@ -1227,6 +1230,117 @@ export function StaffAccessPage() {
             <footer className="modal-actions">
               <button type="button" className="primary-button" onClick={() => setHistoryMember(null)}>
                 Done
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {roleChangeTarget && roleChangeRole && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget && !updateMembership.isPending) setRoleChangeTarget(null);
+          }}
+        >
+          <div className="modal-card compact-confirmation" role="dialog" aria-modal="true" aria-label="Confirm staff role change">
+            <header>
+              <div>
+                <span className="eyebrow">ROLE CHANGE</span>
+                <h2>Change {roleChangeTarget.member.name}'s role?</h2>
+                <p>Role changes take effect immediately across this business and are recorded in the membership audit trail.</p>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Close staff role change"
+                disabled={updateMembership.isPending}
+                onClick={() => setRoleChangeTarget(null)}
+              >
+                <X size={18} />
+              </button>
+            </header>
+            <div className="reconciliation-summary">
+              <span>Current role <strong>{roleChangeTarget.member.role_name ?? 'No role'}</strong></span>
+              <span>New role <strong>{roleChangeRole.name}</strong></span>
+              <span>Access <strong>{roleChangeTarget.member.status}</strong></span>
+            </div>
+            <div className="permission-banner warning">
+              <ShieldCheck size={18} />
+              <div>
+                <strong>Permission set will change immediately</strong>
+                <span>Confirm only if this staff member should receive the capabilities attached to {roleChangeRole.name}.</span>
+              </div>
+            </div>
+            {updateMembership.isError && <p className="error-state">{apiMessage(updateMembership.error)}</p>}
+            <footer className="modal-actions">
+              <button type="button" className="secondary-button" disabled={updateMembership.isPending} onClick={() => setRoleChangeTarget(null)}>
+                Keep current role
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={updateMembership.isPending}
+                onClick={() => updateMembership.mutate({
+                  member: roleChangeTarget.member,
+                  role_id: roleChangeTarget.roleId,
+                  status: roleChangeTarget.member.status,
+                })}
+              >
+                {updateMembership.isPending ? 'Changing role…' : 'Confirm role change'}
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {reactivating?.role_id && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget && !updateMembership.isPending) setReactivating(null);
+          }}
+        >
+          <div className="modal-card compact-confirmation" role="dialog" aria-modal="true" aria-label="Reactivate staff access">
+            <header>
+              <div>
+                <span className="eyebrow">RESTORE ACCESS</span>
+                <h2>Reactivate {reactivating.name}?</h2>
+                <p>This immediately restores workspace access using the member's current role and permissions.</p>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Close staff reactivation"
+                disabled={updateMembership.isPending}
+                onClick={() => setReactivating(null)}
+              >
+                <X size={18} />
+              </button>
+            </header>
+            <div className="reconciliation-summary">
+              <span>Role <strong>{reactivating.role_name ?? 'Assigned role'}</strong></span>
+              <span>Current <strong>Inactive</strong></span>
+              <span>After change <strong>Active</strong></span>
+            </div>
+            {updateMembership.isError && <p className="error-state">{apiMessage(updateMembership.error)}</p>}
+            <footer className="modal-actions">
+              <button type="button" className="secondary-button" disabled={updateMembership.isPending} onClick={() => setReactivating(null)}>
+                Keep inactive
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={updateMembership.isPending}
+                onClick={() => updateMembership.mutate({
+                  member: reactivating,
+                  role_id: reactivating.role_id!,
+                  status: 'active',
+                })}
+              >
+                {updateMembership.isPending ? 'Reactivating…' : 'Reactivate access'}
               </button>
             </footer>
           </div>
