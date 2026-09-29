@@ -937,3 +937,43 @@ textarea:disabled{
     transform:none;
   }
 }
+
+
+/* Cash movement confirmation */
+.cash-movement-review{
+  display:grid;
+  gap:10px;
+  margin-top:12px;
+  padding:12px;
+  border:1px solid #dfe6e2;
+  border-radius:12px;
+  background:#f8faf9;
+}
+
+.cash-movement-review>div:first-child{
+  display:grid;
+  gap:4px;
+}
+
+.cash-movement-review span{
+  color:#7d8983;
+  font-size:8.5px;
+  font-weight:850;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+
+.cash-movement-review strong{
+  color:#25372d;
+  font-size:18px;
+  letter-spacing:-.03em;
+}
+
+.cash-movement-review small{
+  color:#6e7c74;
+  line-height:1.45;
+}
+
+.cash-movement-review .inline-actions{
+  justify-content:flex-end;
+}
