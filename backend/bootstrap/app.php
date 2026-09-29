@@ -10,6 +10,13 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
+if (PHP_SAPI === 'cli'
+    && (($_SERVER['argv'][1] ?? null) === 'test')
+    && getenv('APP_ENV') !== 'testing') {
+    fwrite(STDERR, "ERROR: refusing to run Laravel tests outside APP_ENV=testing. Use ./bin/test instead.\n");
+    exit(1);
+}
+
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(web: __DIR__.'/../routes/web.php',api: __DIR__.'/../routes/api.php',commands: __DIR__.'/../routes/console.php',health: '/up')
     ->withMiddleware(function(Middleware $middleware):void{
