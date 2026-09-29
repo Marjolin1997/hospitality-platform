@@ -87,6 +87,17 @@ final class DptRegisterInvoiceXmlBuilder
         }
         $invoice->appendChild($payMethods);
 
+        if ($submission->currency !== 'ALL') {
+            if (! $submission->exchangeRate) {
+                throw new RuntimeException('Foreign-currency fiscal invoices require an exchange rate.');
+            }
+
+            $currency = $document->createElementNS(self::FISCAL_NS, 'Currency');
+            $currency->setAttribute('Code', $submission->currency);
+            $currency->setAttribute('ExRate', $submission->exchangeRate);
+            $invoice->appendChild($currency);
+        }
+
         $invoice->appendChild($this->party($document, 'Seller', $submission->seller, true));
         if ($submission->buyer !== []) {
             $invoice->appendChild($this->party($document, 'Buyer', $submission->buyer, false));
