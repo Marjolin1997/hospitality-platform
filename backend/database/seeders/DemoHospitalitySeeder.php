@@ -56,15 +56,30 @@ final class DemoHospitalitySeeder extends Seeder
                 ],
             );
 
-            $location = Location::query()->updateOrCreate(
-                ['business_id' => $business->id, 'code' => 'TIRANA-MAIN'],
-                [
+            $location = Location::query()
+                ->where('business_id', $business->id)
+                ->whereIn('code', ['TIRANA-MAIN', 'BERLIN-MAIN'])
+                ->orderByRaw("CASE WHEN code = 'TIRANA-MAIN' THEN 0 ELSE 1 END")
+                ->first();
+
+            if ($location) {
+                $location->forceFill([
                     'name' => 'Blloku Flagship',
+                    'code' => 'TIRANA-MAIN',
                     'type' => 'bar_cafe',
                     'address' => 'Rruga Ibrahim Rugova, Tirane · DEMO',
                     'is_active' => true,
-                ],
-            );
+                ])->save();
+            } else {
+                $location = Location::query()->create([
+                    'business_id' => $business->id,
+                    'name' => 'Blloku Flagship',
+                    'code' => 'TIRANA-MAIN',
+                    'type' => 'bar_cafe',
+                    'address' => 'Rruga Ibrahim Rugova, Tirane · DEMO',
+                    'is_active' => true,
+                ]);
+            }
 
             DB::table('locations')
                 ->where('id', $location->id)
@@ -236,7 +251,7 @@ final class DemoHospitalitySeeder extends Seeder
                 );
             }
 
-            $registerId = $this->register($business, (string) $location->id, 'Main Bar Till', 'TILL-01', 'dm001tr001');
+            $registerId = $this->register($business, (string) $location->id, 'Main Bar Till', 'MAIN-01', 'dm001tr001');
             $this->register($business, (string) $secondLocation->id, 'Rooftop Till', 'TILL-02', 'dm002tr002');
 
             $sessionId = $this->existingOrNewId('cash_sessions', [
