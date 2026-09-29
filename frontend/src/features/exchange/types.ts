@@ -4,12 +4,12 @@ export type ExchangeRateInfo = {
   rate: string;
   source: string;
   effective_at: string;
-  fetched_at: string;
+  inverse?: boolean;
 } | null;
 
 export type ExchangeRatesResponse = {
-  base_currency: 'ALL';
-  rates: Record<'EUR' | 'USD' | 'GBP', ExchangeRateInfo>;
+  base_currency: CurrencyCode;
+  rates: Partial<Record<CurrencyCode, ExchangeRateInfo>>;
 };
 
 export type CurrencyConversion = {
