@@ -263,6 +263,8 @@ export function StaffAccessPage() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [deactivating, setDeactivating] = useState<Staff | null>(null);
+  const [reactivating, setReactivating] = useState<Staff | null>(null);
+  const [roleChangeTarget, setRoleChangeTarget] = useState<{ member: Staff; roleId: string } | null>(null);
   const [historyMember, setHistoryMember] = useState<Staff | null>(null);
 
   const [roleEditor, setRoleEditor] = useState<RoleDraft | null>(null);
@@ -354,6 +356,8 @@ export function StaffAccessPage() {
     }) => api.patch(`/staff/${member.id}`, { role_id, status }),
     onSuccess: async (_response, variables) => {
       setDeactivating(null);
+      setReactivating(null);
+      setRoleChangeTarget(null);
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['staff', activeBusiness?.id] }),
         qc.invalidateQueries({ queryKey: ['roles', activeBusiness?.id] }),
@@ -770,12 +774,10 @@ export function StaffAccessPage() {
                               disabled={updateMembership.isPending}
                               value={member.role_id ?? ''}
                               onChange={event => {
-                                if (event.target.value) {
-                                  updateMembership.mutate({
-                                    member,
-                                    role_id: event.target.value,
-                                    status: member.status,
-                                  });
+                                const roleId = event.target.value;
+                                if (roleId && roleId !== member.role_id) {
+                                  updateMembership.reset();
+                                  setRoleChangeTarget({ member, roleId });
                                 }
                               }}
                             >
@@ -800,15 +802,14 @@ export function StaffAccessPage() {
                               className="table-select status-select"
                               disabled={updateMembership.isPending}
                               value={member.status}
-                              onChange={event => (
-                                event.target.value === 'inactive'
-                                  ? setDeactivating(member)
-                                  : updateMembership.mutate({
-                                      member,
-                                      role_id: member.role_id!,
-                                      status: 'active',
-                                    })
-                              )}
+                              onChange={event => {
+                                updateMembership.reset();
+                                if (event.target.value === 'inactive') {
+                                  setDeactivating(member);
+                                } else if (member.status !== 'active') {
+                                  setReactivating(member);
+                                }
+                              }
                             >
                               <option value="active">Active</option>
                               <option value="inactive">Inactive</option>
