@@ -1106,3 +1106,43 @@ textarea:disabled{
     transform:none;
   }
 }
+
+
+/* Financial refund review */
+.refund-review-card{
+  display:grid;
+  gap:12px;
+  margin-top:12px;
+  padding:13px;
+  border:1px solid #edd0cb;
+  border-radius:12px;
+  background:#fff8f6;
+}
+
+.refund-review-summary{
+  display:grid;
+  gap:4px;
+}
+
+.refund-review-summary>span{
+  color:#8c5c55;
+  font-size:8.5px;
+  font-weight:850;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+}
+
+.refund-review-summary>strong{
+  color:#823a32;
+  font-size:20px;
+  letter-spacing:-.03em;
+}
+
+.refund-review-summary>small{
+  color:#735e59;
+  line-height:1.45;
+}
+
+.refund-review-card .inline-actions{
+  justify-content:flex-end;
+}
