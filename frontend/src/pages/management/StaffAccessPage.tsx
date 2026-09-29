@@ -1406,7 +1406,7 @@ export function StaffAccessPage() {
                   <button type="button" className="secondary-button" disabled={createInvitation.isPending} onClick={closeInvitation}>
                     Cancel
                   </button>
-                  <button
+                  <button type="submit"
                     className="primary-button"
                     disabled={createInvitation.isPending || !inviteDraft.email.trim() || !inviteDraft.role_id}
                   >
@@ -1742,7 +1742,7 @@ export function StaffAccessPage() {
               <button type="button" className="secondary-button" disabled={saveRole.isPending} onClick={() => setRoleEditor(null)}>
                 Cancel
               </button>
-              <button
+              <button type="submit"
                 className="primary-button"
                 disabled={saveRole.isPending || !roleEditor.name.trim() || roleEditor.permissions.length === 0}
               >
