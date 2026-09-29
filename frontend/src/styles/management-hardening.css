@@ -1636,3 +1636,99 @@ textarea:disabled{
     font-size:9.5px;
   }
 }
+
+
+/* Staff access toolbar filters */
+.staff-toolbar{
+  align-items:center;
+  flex-wrap:wrap;
+}
+.staff-toolbar .staff-filter-select{
+  appearance:none;
+  -webkit-appearance:none;
+  min-width:138px;
+  height:42px;
+  border:1px solid #dce4df;
+  border-radius:11px;
+  background-color:#fff;
+  background-image:
+    linear-gradient(45deg,transparent 50%,#6f7e76 50%),
+    linear-gradient(135deg,#6f7e76 50%,transparent 50%);
+  background-position:
+    calc(100% - 16px) 17px,
+    calc(100% - 11px) 17px;
+  background-size:5px 5px,5px 5px;
+  background-repeat:no-repeat;
+  color:#33443b;
+  padding:0 34px 0 12px;
+  box-shadow:0 1px 2px rgba(20,38,29,.035);
+  font-size:11px;
+  font-weight:750;
+  line-height:1;
+  cursor:pointer;
+  outline:none;
+  transition:border-color .15s ease,box-shadow .15s ease,background-color .15s ease,color .15s ease;
+}
+.staff-toolbar .staff-role-filter{
+  min-width:145px;
+}
+.staff-toolbar .staff-access-filter{
+  min-width:140px;
+}
+.staff-toolbar .staff-filter-select:hover{
+  border-color:#c8d4cd;
+  background-color:#fbfdfc;
+}
+.staff-toolbar .staff-filter-select:focus{
+  border-color:#789640;
+  box-shadow:0 0 0 3px rgba(118,150,61,.11);
+  background-color:#fff;
+}
+.staff-toolbar .staff-access-filter.is-active{
+  border-color:#d5e6cf;
+  background-color:#f4f9f1;
+  color:#3f6636;
+}
+.staff-toolbar .staff-access-filter.is-inactive{
+  border-color:#e1e6e3;
+  background-color:#f5f7f6;
+  color:#737f79;
+}
+.staff-toolbar .toolbar-result-count{
+  min-width:max-content;
+  padding:0 2px;
+  color:#8a9690;
+  font-size:9px;
+  font-weight:750;
+}
+@media(max-width:900px){
+  .staff-toolbar{
+    display:grid;
+    grid-template-columns:minmax(220px,1fr) 145px 140px auto;
+    width:100%;
+  }
+  .staff-toolbar .compact-search{
+    min-width:0;
+  }
+}
+@media(max-width:720px){
+  .staff-toolbar{
+    grid-template-columns:1fr 1fr;
+  }
+  .staff-toolbar .compact-search{
+    grid-column:1/-1;
+    width:100%;
+  }
+  .staff-toolbar .staff-filter-select{
+    width:100%;
+    min-width:0;
+  }
+}
+@media(max-width:480px){
+  .staff-toolbar{
+    grid-template-columns:1fr;
+  }
+  .staff-toolbar .compact-search{
+    grid-column:auto;
+  }
+}
