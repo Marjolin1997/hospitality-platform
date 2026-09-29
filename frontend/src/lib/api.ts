@@ -34,7 +34,10 @@ api.interceptors.response.use(
       }
     }
 
-    if (status === 401) {
+    const requestUrl = String(requestConfig?.url ?? '');
+    const isAuthenticationProbe = requestUrl.endsWith('/auth/me') || requestUrl.endsWith('/auth/login');
+
+    if (status === 401 && !isAuthenticationProbe) {
       clearWorkspaceContext();
       if (typeof window !== 'undefined') {
         window.sessionStorage.setItem(authExpiredStorageKey, '1');
