@@ -22,6 +22,7 @@ final readonly class FiscalInvoiceSubmission
         public string $operatorCode,
         public string $softwareCode,
         public string $currency,
+        public ?string $exchangeRate,
         public string $totalWithoutVat,
         public string $totalVat,
         public string $totalPrice,
