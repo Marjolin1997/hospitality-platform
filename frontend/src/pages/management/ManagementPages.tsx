@@ -185,7 +185,14 @@ export function SettingsPage(){
  const locationHistory=useQuery({queryKey:['location-events',activeBusiness?.id,locationHistoryTarget?.id],enabled:Boolean(activeBusiness&&locationHistoryTarget),queryFn:()=>api.get<{data:StationEvent[]}>(`/management/locations/${locationHistoryTarget!.id}/events`).then(r=>r.data.data)});
  const [confirmProduction,setConfirmProduction]=useState(false); const [productionPhrase,setProductionPhrase]=useState('');
  useEffect(()=>{if(fiscalSetup.data){const next=structuredClone(fiscalSetup.data);setSetupDraft(next);setSetupBaseline(structuredClone(next))}},[fiscalSetup.data]);
- useEffect(()=>{setFiscalProfileDirty(false)},[fp?.environment,fp?.software_code,fp?.endpoint,fp?.is_issuer_in_vat,fp?.certificate_reference_configured,fp?.certificate_password_reference_configured]);
+ useEffect(()=>{setFiscalProfileDirty(false)},[
+   fiscal.data?.environment,
+   fiscal.data?.software_code,
+   fiscal.data?.endpoint,
+   fiscal.data?.is_issuer_in_vat,
+   fiscal.data?.certificate_reference_configured,
+   fiscal.data?.certificate_password_reference_configured,
+ ]);
  const save=useMutation({mutationFn:(data:any)=>api.put('/settings',data),onSuccess:async()=>{setSettingsDirty(false);await Promise.all([qc.invalidateQueries({queryKey:['settings',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['settings-events',activeBusiness?.id]})])}});
  const saveBusinessProfile=useMutation({mutationFn:(data:{name:string;legal_name:string;tax_number:string;currency:string;timezone:string})=>api.put('/settings/business-profile',{name:data.name.trim(),legal_name:data.legal_name.trim()||null,tax_number:data.tax_number.trim()||null,currency:data.currency.trim().toUpperCase(),timezone:data.timezone.trim()}),onSuccess:async()=>{setBusinessProfileEditor(null);await Promise.all([qc.invalidateQueries({queryKey:['settings',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['business-profile-events',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['fiscalization-profile',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['fiscalization-setup',activeBusiness?.id]})]);await refreshUser()}});
  const saveLocation=useMutation({mutationFn:(draft:LocationDraft)=>api.post('/management/locations',{id:draft.id,name:draft.name.trim(),code:draft.code.trim().toUpperCase(),type:draft.type,address:draft.address.trim()||null}),onSuccess:async(_response,draft)=>{setLocationEditor(null);await Promise.all([qc.invalidateQueries({queryKey:['management-locations',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['location-events',activeBusiness?.id,draft.id]}),qc.invalidateQueries({queryKey:['fiscalization-setup',activeBusiness?.id]}),qc.invalidateQueries({queryKey:['fiscalization-profile',activeBusiness?.id]})]);await refreshUser()}});
