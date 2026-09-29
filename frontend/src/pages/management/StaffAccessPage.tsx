@@ -706,6 +706,7 @@ export function StaffAccessPage() {
               </label>
               <select
                 aria-label="Filter staff role"
+                className="staff-filter-select staff-role-filter"
                 value={roleFilter}
                 onChange={event => setRoleFilter(event.target.value)}
               >
@@ -715,6 +716,7 @@ export function StaffAccessPage() {
               </select>
               <select
                 aria-label="Filter access status"
+                className={`staff-filter-select staff-access-filter ${statusFilter==='active'?'is-active':statusFilter==='inactive'?'is-inactive':''}`}
                 value={statusFilter}
                 onChange={event => setStatusFilter(event.target.value)}
               >
