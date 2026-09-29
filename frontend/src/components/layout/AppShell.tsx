@@ -1,36 +1,49 @@
-import { BarChart3, Boxes, Coffee, FileText, LayoutDashboard, LayoutGrid, LogOut, Menu, ReceiptText, Settings, ShoppingCart, Truck, Users, WalletCards, X } from 'lucide-react';
+import { BarChart3, Boxes, Coffee, FileText, LayoutDashboard, LayoutGrid, LogOut, Menu, ReceiptText, Search, Settings, ShoppingCart, Truck, Users, WalletCards, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { WorkspaceErrorBoundary } from '../errors/WorkspaceErrorBoundary';
+import { WorkspaceCommandPalette } from './WorkspaceCommandPalette';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { moduleAccess } from '../../lib/moduleAccess';
 
 const navigation=[
-  {label:'Dashboard',to:'/dashboard',icon:LayoutDashboard,permissions:moduleAccess.dashboard,section:'Overview'},
-  {label:'POS',to:'/pos',icon:ShoppingCart,permissions:moduleAccess.pos,section:'Operations'},
-  {label:'Cash Register',to:'/cash-register',icon:WalletCards,permissions:moduleAccess.cashRegister,section:'Operations'},
-  {label:'Bar Queue',to:'/bar',icon:Coffee,permissions:moduleAccess.barQueue,section:'Operations'},
-  {label:'Menu & Products',to:'/products',icon:ReceiptText,permissions:moduleAccess.products,section:'Management'},
-  {label:'Inventory',to:'/inventory',icon:Boxes,permissions:moduleAccess.inventory,section:'Management'},
-  {label:'Purchasing',to:'/purchasing',icon:Truck,permissions:moduleAccess.purchasing,section:'Management'},
-  {label:'Finance',to:'/finance',icon:BarChart3,permissions:moduleAccess.finance,section:'Management'},
-  {label:'Reports',to:'/reports',icon:BarChart3,permissions:moduleAccess.reports,section:'Management'},
-  {label:'Invoices',to:'/invoices',icon:FileText,permissions:moduleAccess.invoices,section:'Management'},
-  {label:'Venue Setup',to:'/venue-setup',icon:LayoutGrid,permissions:moduleAccess.venueSetup,section:'Management'},
-  {label:'Staff',to:'/staff',icon:Users,permissions:moduleAccess.staff,section:'Administration'},
-  {label:'Settings',to:'/settings',icon:Settings,permissions:moduleAccess.settings,section:'Administration'},
+  {label:'Dashboard',to:'/dashboard',icon:LayoutDashboard,permissions:moduleAccess.dashboard,section:'Overview',keywords:['home','overview','kpi']},
+  {label:'POS',to:'/pos',icon:ShoppingCart,permissions:moduleAccess.pos,section:'Operations',keywords:['order','sale','table','checkout']},
+  {label:'Cash Register',to:'/cash-register',icon:WalletCards,permissions:moduleAccess.cashRegister,section:'Operations',keywords:['cash','drawer','shift','till']},
+  {label:'Bar Queue',to:'/bar',icon:Coffee,permissions:moduleAccess.barQueue,section:'Operations',keywords:['preparation','kitchen','ready','served']},
+  {label:'Menu & Products',to:'/products',icon:ReceiptText,permissions:moduleAccess.products,section:'Management',keywords:['catalog','category','price','sku']},
+  {label:'Inventory',to:'/inventory',icon:Boxes,permissions:moduleAccess.inventory,section:'Management',keywords:['stock','count','transfer','warehouse']},
+  {label:'Purchasing',to:'/purchasing',icon:Truck,permissions:moduleAccess.purchasing,section:'Management',keywords:['supplier','purchase order','po','receive','goods receipt']},
+  {label:'Finance',to:'/finance',icon:BarChart3,permissions:moduleAccess.finance,section:'Management',keywords:['expense','sales','refund','net']},
+  {label:'Reports',to:'/reports',icon:BarChart3,permissions:moduleAccess.reports,section:'Management',keywords:['analytics','report','performance','export']},
+  {label:'Invoices',to:'/invoices',icon:FileText,permissions:moduleAccess.invoices,section:'Management',keywords:['invoice','receipt','fiscal','credit note','qr']},
+  {label:'Venue Setup',to:'/venue-setup',icon:LayoutGrid,permissions:moduleAccess.venueSetup,section:'Management',keywords:['area','table','cash register','layout']},
+  {label:'Staff',to:'/staff',icon:Users,permissions:moduleAccess.staff,section:'Administration',keywords:['user','role','permission','invite','access']},
+  {label:'Settings',to:'/settings',icon:Settings,permissions:moduleAccess.settings,section:'Administration',keywords:['business','location','fiscalization','profile']},
 ] as const;
 
 export function AppShell(){
   const navigate=useNavigate();
   const location=useLocation();
   const [mobileNavOpen,setMobileNavOpen]=useState(false);
+  const [commandOpen,setCommandOpen]=useState(false);
   const {user,activeBusiness,activeLocation,selectBusiness,selectLocation,logout,canAny}=useAuth();
   const visibleNavigation=navigation.filter(item=>item.permissions.length===0||canAny([...item.permissions]));
   const canUseCashRegister=canAny(['cash_sessions.view','cash_sessions.open','cash_sessions.close','cash_movements.create','payments.collect']);
   const sections=[...new Set(visibleNavigation.map(item=>item.section))];
   const activeNavigation=navigation.find(item=>location.pathname===item.to)??navigation[0];
   const ActiveIcon=activeNavigation.icon;
+
+  useEffect(()=>{
+    const openCommand=(event:KeyboardEvent)=>{
+      if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
+        event.preventDefault();
+        setCommandOpen(true);
+      }
+    };
+    window.addEventListener('keydown',openCommand);
+    return ()=>window.removeEventListener('keydown',openCommand);
+  },[]);
 
   useEffect(()=>{
     if(!mobileNavOpen)return;
@@ -91,6 +104,11 @@ export function AppShell(){
         </div>
 
         <div className="topbar-actions">
+          <button type="button" className="ghost-button topbar-search-button" onClick={()=>setCommandOpen(true)} aria-label="Search workspace">
+            <Search size={16}/>
+            <span>Search</span>
+            <kbd>Ctrl K</kbd>
+          </button>
           {canUseCashRegister&&<button type="button" className="ghost-button topbar-cash-button" onClick={()=>navigate('/cash-register')}><WalletCards size={16}/> Cash register</button>}
           <div className="account-chip"><div className="avatar">{user?.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div><div><strong>{user?.name}</strong><span>{activeBusiness?.role?.name??user?.email}</span></div></div>
           <button type="button" className="icon-button" title="Sign out" aria-label="Sign out" onClick={()=>logout()}><LogOut size={18}/></button>
@@ -105,5 +123,18 @@ export function AppShell(){
         </WorkspaceErrorBoundary>
       </div>
     </main>
+    <WorkspaceCommandPalette
+      open={commandOpen}
+      items={visibleNavigation.map(item=>({
+        label:item.label,
+        section:item.section,
+        to:item.to,
+        icon:item.icon,
+        keywords:[...item.keywords],
+      }))}
+      activePath={location.pathname}
+      onClose={()=>setCommandOpen(false)}
+      onNavigate={to=>navigate(to)}
+    />
   </div>;
 }
