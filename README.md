@@ -88,7 +88,7 @@ Useful diagnostics:
 ```bash
 docker compose exec backend php artisan migrate:status
 docker compose exec backend php artisan demo:check
-docker compose exec backend php artisan test
+docker compose exec backend ./bin/test
 docker compose exec frontend npm run build
 docker compose exec frontend npm run lint
 docker compose exec frontend npm run test
