@@ -312,7 +312,7 @@ final class IssueInvoice
             ]);
         }
 
-        $rate = BigDecimal::of((string) $conversion['rate']);
+        $rate = BigDecimal::of((string) $conversion['rate'])->toScale(2, RoundingMode::HALF_UP);
         if (! $rate->isPositive()) {
             throw ValidationException::withMessages([
                 'invoice_currency' => 'The configured exchange rate must be positive.',
