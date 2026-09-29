@@ -46,6 +46,19 @@ export function AppShell(){
         return;
       }
 
+      const target=event.target as HTMLElement|null;
+      const isTyping=Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'));
+
+      if(event.key==='/'&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!isTyping&&!commandOpen){
+        const pageSearch=document.querySelector<HTMLInputElement>('#workspace-content .search-box input:not(:disabled)');
+        if(pageSearch){
+          event.preventDefault();
+          pageSearch.focus();
+          pageSearch.select();
+          return;
+        }
+      }
+
       if(event.key!=='Escape')return;
 
       if(commandOpen){
@@ -65,8 +78,20 @@ export function AppShell(){
       }
     };
 
+    const protectFormBackdrop=(event:MouseEvent)=>{
+      const target=event.target;
+      if(!(target instanceof HTMLElement))return;
+      if(!target.classList.contains('modal-backdrop'))return;
+      if(!target.querySelector('form'))return;
+      event.stopPropagation();
+    };
+
     window.addEventListener('keydown',handleWorkspaceKeyboard);
-    return ()=>window.removeEventListener('keydown',handleWorkspaceKeyboard);
+    document.addEventListener('mousedown',protectFormBackdrop,true);
+    return ()=>{
+      window.removeEventListener('keydown',handleWorkspaceKeyboard);
+      document.removeEventListener('mousedown',protectFormBackdrop,true);
+    };
   },[commandOpen]);
 
   useEffect(()=>{
