@@ -619,6 +619,7 @@ export function InventoryPage() {
             <label className="search-box compact-search"><Search size={16} /><input aria-label="Search inventory" value={stockSearch} onChange={event => setStockSearch(event.target.value)} placeholder="Search item or SKU…" />{stockSearch && <button type="button" className="search-clear" aria-label="Clear inventory search" onClick={() => setStockSearch('')}><X size={14} /></button>}</label>
             <select aria-label="Filter stock health" value={stockFilter} onChange={event => setStockFilter(event.target.value)}><option value="all">All stock</option><option value="low">Low stock</option><option value="out">Out of stock</option><option value="healthy">Healthy</option></select>
             <span className="toolbar-result-count">{filteredStocks.length} of {stocks.length}</span>
+            {(stockSearch || stockFilter !== 'all') && <button type="button" className="text-button filter-reset-button" onClick={()=>{setStockSearch('');setStockFilter('all')}}>Reset filters</button>}
           </div>
         </div>
 
@@ -643,6 +644,7 @@ export function InventoryPage() {
             <label className="search-box compact-search"><Search size={16} /><input aria-label="Search inventory ledger" value={ledgerSearch} onChange={event => setLedgerSearch(event.target.value)} placeholder="Search product, note or reference…" />{ledgerSearch && <button type="button" className="search-clear" aria-label="Clear ledger search" onClick={() => setLedgerSearch('')}><X size={14} /></button>}</label>
             <select aria-label="Filter inventory movement type" value={ledgerType} onChange={event => setLedgerType(event.target.value)}><option value="all">All movements</option><option value="adjustment">Adjustment</option><option value="purchase_receipt">Purchase receipt</option><option value="transfer_in">Transfer in</option><option value="transfer_out">Transfer out</option><option value="stock_count">Stock count</option></select>
             <span className="toolbar-result-count">{filteredMovements.length} of {movements.length}</span>
+            {(ledgerSearch || ledgerType !== 'all') && <button type="button" className="text-button filter-reset-button" onClick={()=>{setLedgerSearch('');setLedgerType('all')}}>Reset filters</button>}
           </div>
         </div>
         {movementsQuery.isLoading ? <div className="management-state">Loading inventory ledger…</div> : movementsQuery.isError ? (
@@ -660,6 +662,7 @@ export function InventoryPage() {
           <div className="toolbar-actions inventory-transfer-toolbar">
             <label className="search-box compact-search"><Search size={16} /><input aria-label="Search stock transfers" value={transferSearch} onChange={event => setTransferSearch(event.target.value)} placeholder="Search transfer, branch or note…" />{transferSearch && <button type="button" className="search-clear" aria-label="Clear transfer search" onClick={() => setTransferSearch('')}><X size={14} /></button>}</label>
             <span className="toolbar-result-count">{filteredTransfers.length} of {transfers.length}</span>
+            {transferSearch && <button type="button" className="text-button filter-reset-button" onClick={()=>setTransferSearch('')}>Reset filters</button>}
           </div>
         </div>
 
@@ -685,6 +688,7 @@ export function InventoryPage() {
             <label className="search-box compact-search"><Search size={16} /><input aria-label="Search stock counts" value={countSearch} onChange={event => setCountSearch(event.target.value)} placeholder="Search count, operator or note…" />{countSearch && <button type="button" className="search-clear" aria-label="Clear count search" onClick={() => setCountSearch('')}><X size={14} /></button>}</label>
             <select aria-label="Filter stock count status" value={countStatus} onChange={event => setCountStatus(event.target.value)}><option value="all">All statuses</option><option value="draft">Draft</option><option value="posted">Posted</option><option value="cancelled">Cancelled</option></select>
             <span className="toolbar-result-count">{filteredCounts.length} of {counts.length}</span>
+            {(countSearch || countStatus !== 'all') && <button type="button" className="text-button filter-reset-button" onClick={()=>{setCountSearch('');setCountStatus('all')}}>Reset filters</button>}
           </div>
         </div>
 
